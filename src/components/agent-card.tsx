@@ -4,15 +4,17 @@ import { cn } from "@/lib/utils";
 const LABELS: Record<string, { title: string; subtitle: string }> = {
   orchestrator: { title: "Orchestrator", subtitle: "Writes validation contract" },
   "repo-scanner": { title: "Repo Scanner", subtitle: "Deterministic — no LLM" },
-  architecture: { title: "Architecture Analyst", subtitle: "Module boundaries, separation" },
+  architecture: { title: "Architecture Analyst", subtitle: "Module boundaries" },
   "code-quality": { title: "Code Quality", subtitle: "Naming, typing, complexity" },
-  testing: { title: "Testing & Reliability", subtitle: "Tests, CI, coverage signals" },
-  security: { title: "Security Awareness", subtitle: "Secrets, validation, eval" },
+  testing: { title: "Testing & Reliability", subtitle: "Tests, CI, coverage" },
+  security: { title: "Security Awareness", subtitle: "Secrets, validation" },
   "git-evidence": { title: "Git Evidence", subtitle: "Commit cadence + quality" },
+  documentation: { title: "Documentation", subtitle: "README specificity" },
+  authenticity: { title: "Authenticity Signals", subtitle: "Originality heuristics" },
   "interview-gen": { title: "Interview Generator", subtitle: "Questions from real code" },
-  validator: { title: "Validator", subtitle: "Fresh context — audits claims" },
-  "skill-graph": { title: "Skill Graph Builder", subtitle: "Weighted aggregation" },
-  "profile-gen": { title: "Profile Generator", subtitle: "Public credibility profile" },
+  validator: { title: "Validator", subtitle: "Fresh context audit" },
+  "skill-graph": { title: "Skill Graph", subtitle: "Weighted aggregation" },
+  "profile-gen": { title: "Profile Generator", subtitle: "Verified credibility" },
 };
 
 export function AgentCard({

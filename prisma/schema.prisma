@@ -7,19 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id             String       @id @default(cuid())
-  name           String?
-  email          String?      @unique
+model Candidate {
+  id             String          @id @default(cuid())
+  name           String
+  email          String?         @unique
   githubUsername String?
-  createdAt      DateTime     @default(now())
+  createdAt      DateTime        @default(now())
   repositories   Repository[]
+  runs           AnalysisRun[]
   profiles       PublicProfile[]
 }
 
 model Repository {
   id              String         @id @default(cuid())
-  userId          String?
+  candidateId     String?
   repoUrl         String
   repoName        String
   owner           String
@@ -27,37 +28,47 @@ model Repository {
   framework       String?
   analyzedAt      DateTime?
   createdAt       DateTime       @default(now())
-  user            User?          @relation(fields: [userId], references: [id])
+  candidate       Candidate?     @relation(fields: [candidateId], references: [id])
   runs            AnalysisRun[]
 }
 
 model AnalysisRun {
-  id                  String          @id @default(cuid())
-  repoId              String
-  targetRole          String
-  candidateLevel      String?
-  jobDescription      String?
-  status              String          @default("pending") // pending | running | completed | failed
-  overallScore        Int?
-  roleFit             String?
-  tokenEstimateRaw    Int?
-  tokenEstimateUsed   Int?
-  validationContract  String?         // JSON
-  contextPack         String?         // JSON — what we sent to LLMs
-  createdAt           DateTime        @default(now())
-  completedAt         DateTime?
-  repository          Repository      @relation(fields: [repoId], references: [id])
-  events              AgentEvent[]
-  scores              SkillScore[]
-  questions           InterviewQuestion[]
-  profiles            PublicProfile[]
+  id                   String              @id @default(cuid())
+  candidateId          String?
+  repoId               String
+  targetRole           String
+  candidateLevel       String?
+  jobDescription       String?
+  status               String              @default("pending") // pending|running|completed|failed
+  statusMessage        String?
+  overallScore         Int?
+  roleFit              String?
+  verificationLevel    String              @default("repo_only") // repo_only|repo_interview_verified
+  tokenEstimateRaw     Int?
+  tokenEstimateUsed    Int?
+  validationContract   String?             // JSON
+  contextPack          String?             // JSON
+  validationCoverage   String?             // JSON ValidationAssertionResult[]
+  authenticitySignals  String?             // JSON AuthenticityOutput
+  improvementPlan      String?             // JSON ImprovementPlan
+  employerVerifier     String?             // JSON EmployerVerifier
+  aiCollaboration      String?             // JSON AICollabEvaluation
+  profileSummary       String?             // JSON ProfileOutput
+  createdAt            DateTime            @default(now())
+  completedAt          DateTime?
+  candidate            Candidate?          @relation(fields: [candidateId], references: [id])
+  repository           Repository          @relation(fields: [repoId], references: [id])
+  events               AgentEvent[]
+  scores               SkillScore[]
+  questions            InterviewQuestion[]
+  profiles             PublicProfile[]
 }
 
 model AgentEvent {
   id          String      @id @default(cuid())
   runId       String
   agentName   String
-  status      String      // pending | running | completed | failed
+  status      String      // pending|running|completed|failed
   startedAt   DateTime?
   completedAt DateTime?
   output      String?     // JSON Handoff
@@ -72,7 +83,8 @@ model SkillScore {
   skillName       String
   score           Int
   confidence      Float       @default(0.8)
-  evidence        String      // JSON array
+  scoreSource     String      @default("llm") // llm|heuristic|mock|pending
+  evidence        String      // JSON Evidence[]
   validatorNotes  String?
   run             AnalysisRun @relation(fields: [runId], references: [id])
 }
@@ -82,20 +94,21 @@ model InterviewQuestion {
   runId           String
   question        String
   sourceFile      String?
-  expectedSignals String?           // JSON array
+  expectedSignals String?           // JSON string[]
   answer          String?
   answerScore     Int?
   feedback        String?
+  dimensionScores String?           // JSON {communication, debugging, architecture_explanation, testing_reasoning, understanding_of_own_code}
   run             AnalysisRun       @relation(fields: [runId], references: [id])
 }
 
 model PublicProfile {
   id          String      @id @default(cuid())
-  userId      String?
+  candidateId String?
   runId       String
   slug        String      @unique
   visibility  String      @default("public")
   createdAt   DateTime    @default(now())
-  user        User?       @relation(fields: [userId], references: [id])
+  candidate   Candidate?  @relation(fields: [candidateId], references: [id])
   run         AnalysisRun @relation(fields: [runId], references: [id])
 }

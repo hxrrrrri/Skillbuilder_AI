@@ -21,22 +21,29 @@ export async function POST(req: Request) {
 
   const run = await prisma.analysisRun.findUnique({
     where: { id: body.run_id },
-    include: { repository: true },
+    include: { repository: true, candidate: true },
   });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
   if (run.status !== "completed") {
     return NextResponse.json({ error: "run_incomplete", status: run.status }, { status: 409 });
   }
 
-  const baseSlug = slugify(`${body.name ?? run.repository.owner}-${run.repository.repoName}`);
-  let slug = baseSlug;
+  const baseSlug = slugify(
+    `${body.name ?? run.candidate?.name ?? run.repository.owner}-${run.repository.repoName}`
+  );
+  let slug = baseSlug || "skillproof";
   let n = 1;
   while (await prisma.publicProfile.findUnique({ where: { slug } })) {
     slug = `${baseSlug}-${n++}`;
   }
 
   const profile = await prisma.publicProfile.create({
-    data: { runId: run.id, slug, visibility: "public" },
+    data: {
+      runId: run.id,
+      candidateId: run.candidateId ?? null,
+      slug,
+      visibility: "public",
+    },
   });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp .env.example .env)",
+      "Bash(DATABASE_URL=\"file:./dev.db\" npx prisma db push --skip-generate)",
+      "Bash(npx prisma *)",
+      "Bash(npm run *)"
+    ]
+  }
+}

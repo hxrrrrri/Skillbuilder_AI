@@ -1,39 +1,61 @@
 import { extractJson, isMockMode, llmCall } from "@/lib/claude";
 import { buildContextBlock } from "./_analysis";
-import type { ArchitectureOutput, Handoff, MissionState } from "./types";
+import type {
+  ArchitectureOutput,
+  Handoff,
+  MissionState,
+  ValidationAssertionResult,
+} from "./types";
 
 const SYSTEM = `You are the Architecture Analyst agent of SkillProof AI.
-Your job: judge the architectural quality of a developer's repo using only the provided context pack.
-You must produce STRICT JSON only, no commentary. Shape:
+Judge architectural quality from the provided context pack only.
+Return STRICT JSON, no commentary:
 {
   "architecture_score": number (0-100),
   "strengths": string[],
   "weaknesses": string[],
   "evidence": [{"file": string, "line": number?, "reason": string}]
 }
-Rules:
-- Every score must be backed by at least 2 evidence items naming specific files from the snippets.
-- If snippets are insufficient, lower confidence and say so in weaknesses; do NOT fabricate file paths.
-- Reward separation of concerns, clear module boundaries, sane state management, config externalization.
-- Penalize god files, mixed UI + business logic, missing layering.`;
+Every claim must cite a file from the snippets. If snippets are insufficient, lower confidence and say so.`;
 
 function fallback(): ArchitectureOutput {
   return {
-    architecture_score: 65,
-    strengths: ["Modular folder layout detected"],
+    architecture_score: 60,
+    strengths: ["Heuristic: folder layout present"],
     weaknesses: ["LLM unavailable — heuristic score only"],
-    evidence: [{ reason: "Mock mode: deterministic score returned because ANTHROPIC_API_KEY was not set." }],
+    evidence: [{ reason: "Heuristic mode: deterministic score returned." }],
+    score_source: "heuristic",
   };
+}
+
+function deriveAssertionResults(
+  state: MissionState,
+  out: ArchitectureOutput
+): ValidationAssertionResult[] {
+  const contract = state.contract;
+  if (!contract) return [];
+  return contract.assertions
+    .filter((a) => a.dimension === "architecture")
+    .map((a) => ({
+      assertion_id: a.id,
+      dimension: a.dimension,
+      statement: a.statement,
+      status: out.architecture_score >= 60 ? "passed" : out.architecture_score >= 45 ? "partial" : "failed",
+      evidence: out.evidence.slice(0, 2),
+      responsible_agent: "architecture",
+      notes: out.architecture_score >= 60
+        ? "Architecture signals support assertion."
+        : "Architecture signals weak or missing.",
+    }) as ValidationAssertionResult);
 }
 
 export async function runArchitecture(state: MissionState): Promise<Handoff<ArchitectureOutput>> {
   if (!state.context_pack) throw new Error("architecture: context_pack missing — run repo-scanner first");
   let out: ArchitectureOutput;
-  let tin = 0,
-    tout = 0;
+  let tin = 0, tout = 0;
 
   if (isMockMode()) {
-    out = fallback();
+    out = { ...fallback(), score_source: state.mock_mode ? "mock" : "heuristic" };
   } else {
     const user = `Validation contract dimensions: ${state.contract?.evaluation_dimensions.join(", ") ?? "n/a"}
 Target role: ${state.target_role}
@@ -45,11 +67,14 @@ Return the JSON now.`;
       const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 1800 });
       tin = r.inputTokens;
       tout = r.outputTokens;
-      out = extractJson<ArchitectureOutput>(r.text) ?? fallback();
+      const parsed = extractJson<ArchitectureOutput>(r.text);
+      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(), score_source: "heuristic" };
     } catch {
-      out = fallback();
+      out = { ...fallback(), score_source: "heuristic" };
     }
   }
+
+  out.assertion_results = deriveAssertionResults(state, out);
 
   state.tokens_in += tin;
   state.tokens_out += tout;
@@ -57,9 +82,13 @@ Return the JSON now.`;
     skill: "Architecture",
     score: out.architecture_score,
     evidence: out.evidence,
+    confidence: out.score_source === "llm" ? 0.85 : out.score_source === "mock" ? 0.3 : 0.55,
+    source: out.score_source ?? "heuristic",
     strengths: out.strengths,
     weaknesses: out.weaknesses,
+    assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
+  state.assertion_results.push(...(out.assertion_results ?? []));
 
   return {
     agent: "architecture",
@@ -68,6 +97,7 @@ Return the JSON now.`;
     evidence: out.evidence,
     issues_found: out.weaknesses,
     next_recommended: "code-quality",
+    assertion_results: out.assertion_results,
     output: out,
   };
 }

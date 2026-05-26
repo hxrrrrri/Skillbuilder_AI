@@ -1,9 +1,9 @@
-// Mission runner — serial execution with parallel read-only ops where safe.
-// Each agent emits a structured Handoff; we persist every step to the DB
-// so the mission control UI can stream progress.
+// Mission runner — serial execution. Each agent emits a structured Handoff
+// persisted to DB so Mission Control can stream progress.
 
 import { prisma } from "@/lib/db";
-import type { AgentName, Handoff, MissionState, SkillGraphOutput } from "./types";
+import { isMockMode } from "@/lib/claude";
+import type { AgentName, Handoff, MissionState, ProfileOutput, SkillGraphOutput } from "./types";
 import { runOrchestrator } from "./orchestrator";
 import { runRepoScanner } from "./repo-scanner";
 import { runArchitecture } from "./architecture";
@@ -11,12 +11,14 @@ import { runCodeQuality } from "./code-quality";
 import { runTesting } from "./testing";
 import { runSecurity } from "./security";
 import { runGitEvidence } from "./git-evidence";
+import { runDocumentation } from "./documentation";
+import { runAuthenticity } from "./authenticity";
 import { runInterviewGen } from "./interview-gen";
 import { runValidator } from "./validator";
 import { runSkillGraph } from "./skill-graph";
 import { runProfileGen } from "./profile-gen";
 
-const PIPELINE: AgentName[] = [
+export const PIPELINE: AgentName[] = [
   "orchestrator",
   "repo-scanner",
   "architecture",
@@ -24,6 +26,8 @@ const PIPELINE: AgentName[] = [
   "testing",
   "security",
   "git-evidence",
+  "documentation",
+  "authenticity",
   "interview-gen",
   "validator",
   "skill-graph",
@@ -59,7 +63,6 @@ async function failEvent(eventId: string, err: unknown) {
   });
 }
 
-// Initialize 11 pending events so the UI can render the lane immediately.
 export async function preCreateEvents(runId: string) {
   await prisma.agentEvent.createMany({
     data: PIPELINE.map((agent, i) => ({
@@ -77,6 +80,8 @@ export async function runMission(opts: {
   repo: string;
   targetRole: string;
   candidateLevel: string;
+  candidateName?: string;
+  githubUsername?: string;
   jobDescription?: string;
 }) {
   const state: MissionState = {
@@ -84,20 +89,24 @@ export async function runMission(opts: {
     run_id: opts.runId,
     target_role: opts.targetRole,
     candidate_level: opts.candidateLevel,
+    candidate_name: opts.candidateName ?? null,
+    github_username: opts.githubUsername ?? null,
     contract: null,
     context_pack: null,
     scores: [],
     handoffs: [],
+    assertion_results: [],
+    authenticity: null,
     tokens_in: 0,
     tokens_out: 0,
+    mock_mode: isMockMode(),
   };
 
   await prisma.analysisRun.update({
     where: { id: opts.runId },
-    data: { status: "running" },
+    data: { status: "running", statusMessage: state.mock_mode ? "Heuristic/Mock mode active." : null },
   });
 
-  // Reset existing events to pending for re-runs; assume preCreateEvents already ran.
   const events = await prisma.agentEvent.findMany({
     where: { runId: opts.runId },
     orderBy: { order: "asc" },
@@ -122,39 +131,43 @@ export async function runMission(opts: {
   }
 
   let graph: SkillGraphOutput | null = null;
+  let profile: ProfileOutput | null = null;
   try {
     await step("orchestrator", () => runOrchestrator(state, opts.jobDescription));
     await step("repo-scanner", () => runRepoScanner(state, opts.owner, opts.repo));
 
-    // Workers (serial — they share state and the validator audits at the end).
     await step("architecture", () => runArchitecture(state));
     await step("code-quality", () => runCodeQuality(state));
     await step("testing", () => runTesting(state));
     await step("security", () => runSecurity(state));
     await step("git-evidence", () => runGitEvidence(state));
+    await step("documentation", () => runDocumentation(state));
+    await step("authenticity", () => runAuthenticity(state));
     await step("interview-gen", () => runInterviewGen(state));
 
-    // Creator-verifier separation.
-    await step("validator", () => runValidator(state));
+    const validatorHandoff = await step("validator", () => runValidator(state));
 
-    // Final aggregation.
     const graphHandoff = await step("skill-graph", async () => runSkillGraph(state));
     graph = graphHandoff.output as SkillGraphOutput;
 
-    await step("profile-gen", () => runProfileGen(state, graph!));
+    const profileHandoff = await step("profile-gen", () => runProfileGen(state, graph!));
+    profile = profileHandoff.output as ProfileOutput;
 
-    // Persist scores + interview questions + token ledger.
+    // Persist scores.
     await prisma.skillScore.deleteMany({ where: { runId: opts.runId } });
     await prisma.skillScore.createMany({
       data: graph.skill_graph.map((s) => ({
         runId: opts.runId,
         skillName: s.name,
-        score: s.score,
+        score: s.score ?? -1, // -1 sentinel for not measured (UI shows "—")
         confidence: s.confidence,
+        scoreSource: s.source,
         evidence: JSON.stringify(s.evidence),
+        validatorNotes: s.validator_notes ?? null,
       })),
     });
 
+    // Persist interview questions.
     const interviewHandoff = state.handoffs.find((h) => h.agent === "interview-gen");
     const interviewOut = interviewHandoff?.output as { questions: any[] } | undefined;
     if (interviewOut?.questions?.length) {
@@ -176,21 +189,39 @@ export async function runMission(opts: {
         completedAt: new Date(),
         overallScore: graph.overall_score,
         roleFit: graph.role_fit,
+        verificationLevel: "repo_only",
         tokenEstimateRaw: state.context_pack?.tokens.rawEstimate ?? 0,
         tokenEstimateUsed: state.context_pack?.tokens.packEstimate ?? 0,
         validationContract: JSON.stringify(state.contract ?? {}),
         contextPack: JSON.stringify({
           meta: state.context_pack?.meta,
           detected: state.context_pack?.detected,
-          filesIndex: state.context_pack?.filesIndex,
+          filesIndex: state.context_pack
+            ? {
+                total: state.context_pack.filesIndex.total,
+                important: state.context_pack.filesIndex.important,
+                config: state.context_pack.filesIndex.config,
+                tests: state.context_pack.filesIndex.tests,
+                ci: state.context_pack.filesIndex.ci,
+                readme: state.context_pack.filesIndex.readme,
+              }
+            : null,
           tokens: state.context_pack?.tokens,
         }),
+        validationCoverage: JSON.stringify(validatorHandoff.output.assertion_coverage),
+        authenticitySignals: JSON.stringify(state.authenticity ?? null),
+        improvementPlan: JSON.stringify(profile?.improvement_plan ?? null),
+        employerVerifier: JSON.stringify(profile?.employer_verifier ?? null),
+        profileSummary: JSON.stringify(profile ?? null),
       },
     });
   } catch (err) {
     await prisma.analysisRun.update({
       where: { id: opts.runId },
-      data: { status: "failed" },
+      data: {
+        status: "failed",
+        statusMessage: err instanceof Error ? err.message : String(err),
+      },
     });
     throw err;
   }

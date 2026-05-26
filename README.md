@@ -1,45 +1,69 @@
 # SkillProof AI
 
-Proof-of-work hiring for AI-native developers. Paste a GitHub repo, watch an agent mission verify real skill, get a public credibility profile employers can trust.
+**Proof-of-work hiring infrastructure for AI-native developers.**
 
-> Replace "trust my resume" with "verify my work."
+> SkillProof AI converts real GitHub work into verified hiring evidence.
+> It replaces "trust my resume" with "verify my work."
 
-## What it does
+A candidate pastes a public GitHub repo. A mission of specialist agents writes a validation
+contract, audits the code with token-efficient context, runs a fresh-context validator on every
+score, generates own-code interview questions, evaluates candidate answers, and ships an
+evidence-backed credibility profile employers can read in one minute.
 
-1. You paste a public GitHub repo URL + target role.
-2. The **Orchestrator** writes a **validation contract** (defines "good" upfront).
-3. Specialist worker agents analyze the repo serially with structured handoffs:
-   Repo Scanner → Architecture → Code Quality → Testing → Security → Git Evidence → Interview Generator → Skill Graph → Profile.
-4. A **Validator agent** with fresh context audits every score for supporting evidence and removes hallucinations.
-5. You get a skill graph, evidence-backed scoring, code-based mock interview, and a shareable public profile.
+---
 
-## Architecture — "Missions"
+## Product positioning
 
-Inspired by Factory's Missions architecture (Luke Burke, AI Agent Builder Day):
+This is **not**:
 
-| Concept | SkillProof Implementation |
-| --- | --- |
-| Orchestrator | `src/agents/orchestrator.ts` — produces evaluation plan + validation contract |
-| Workers | `src/agents/{architecture,code-quality,testing,security,git-evidence,interview-gen}.ts` — clean context per feature |
-| Validators | `src/agents/validator.ts` + `src/agents/answer-evaluator.ts` — fresh context, adversarial by design |
-| Validation contract | Written before any analysis — defines correctness independently of implementation |
-| Structured handoffs | `Handoff` type in `src/agents/types.ts` — completed/unresolved/evidence/commands |
-| Serial execution | `src/agents/mission-runner.ts` — one worker at a time, read-only ops parallelized |
-| Mission control | `src/app/mission/[id]/page.tsx` — live agent cards + token meter |
-| Droid whispering | Per-role model override via env (`MODEL_ORCHESTRATOR`, `MODEL_WORKER`, `MODEL_VALIDATOR`) |
+- a resume scorer
+- a generic GitHub analyzer
+- a vibe check on a portfolio
+
+This **is**:
+
+- a verifiable, evidence-locker–backed credibility profile
+- a validation contract written before any analysis runs
+- a creator–verifier separation with adversarial audit
+- an own-code interview that makes bluffing hard
+- authenticity signals (not plagiarism detection)
+- an employer verifier preview that says shortlist or no
+
+---
+
+## Architecture — Missions
+
+Inspired by Factory's Missions architecture.
+
+| Concept              | Implementation                                                      |
+| -------------------- | ------------------------------------------------------------------- |
+| Orchestrator         | [src/agents/orchestrator.ts](src/agents/orchestrator.ts)            |
+| Workers              | architecture, code-quality, testing, security, git-evidence, documentation, authenticity |
+| Validators           | [src/agents/validator.ts](src/agents/validator.ts) (fresh context, truth set = full repo tree) + [src/agents/answer-evaluator.ts](src/agents/answer-evaluator.ts) |
+| Validation contract  | [src/agents/types.ts](src/agents/types.ts) — written before analysis |
+| Structured handoffs  | `Handoff` in [src/agents/types.ts](src/agents/types.ts)              |
+| Serial execution     | [src/agents/mission-runner.ts](src/agents/mission-runner.ts)         |
+| Mission Control      | [src/app/mission/[id]/page.tsx](src/app/mission/%5Bid%5D/page.tsx)  |
+| Per-role models      | env: `MODEL_ORCHESTRATOR`, `MODEL_WORKER`, `MODEL_VALIDATOR`         |
+
+### Pipeline order
+
+```
+orchestrator → repo-scanner → architecture → code-quality → testing → security
+→ git-evidence → documentation → authenticity → interview-gen
+→ validator → skill-graph → profile-gen
+```
+
+---
 
 ## Token efficiency
 
-We never send the full repo. The Repo Scanner does deterministic, non-LLM analysis via the GitHub REST API and produces a small context pack: README, package/config files, folder tree, test file list, CI config, top 3–5 representative source files. The UI surfaces "tokens saved" so judges can see it.
+The Repo Scanner does deterministic, non-LLM analysis via the GitHub REST API and produces a small
+context pack: README, configs, file tree summary, top-ranked source files, sampled test files,
+commits. The validator's truth set is the **full repo tree** (`filesIndex.all`), not just snippets.
+Mission Control surfaces `tokens raw` vs `tokens used` and a saved percentage.
 
-## Tech stack
-
-- Next.js 14 (App Router) + TypeScript
-- Tailwind CSS (dark, premium feel)
-- Recharts (skill radar)
-- Anthropic Claude SDK (Opus for planning/validation, Sonnet for workers)
-- Prisma + SQLite (zero-setup local DB)
-- GitHub REST API (no clone needed)
+---
 
 ## Quick start
 
@@ -49,7 +73,8 @@ npm install
 
 # 2. Configure env
 cp .env.example .env
-# edit .env and set ANTHROPIC_API_KEY
+# edit .env — set ANTHROPIC_API_KEY for real-LLM mode,
+# or leave it unset / set SKILLPROOF_MOCK_LLM=1 for heuristic/mock mode.
 
 # 3. Init local SQLite db
 npm run db:push
@@ -57,59 +82,130 @@ npm run db:push
 # 4. Run dev server
 npm run dev
 # open http://localhost:3000
+
+# 5. (optional) Type-check and run tests
+npm run check
 ```
 
-## Demo flow
+---
 
-1. Landing — paste a public GitHub repo URL.
-2. Mission Control — watch 9 agent cards light up in order. See token saved meter.
-3. Skill Graph — radar chart with evidence-backed scoring.
-4. Evidence Panel — every score backed by file references.
-5. Interview — answer a question generated from your own code.
-6. Public Profile — shareable verified credibility page.
+## Environment variables
 
-## Project structure
+| Var                   | Purpose                                                       |
+| --------------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`        | SQLite URL, e.g. `file:./dev.db`                              |
+| `ANTHROPIC_API_KEY`   | Claude API key — leave unset to use heuristic / mock mode.    |
+| `SKILLPROOF_MOCK_LLM` | Force mock mode (`1`).                                        |
+| `GITHUB_TOKEN`        | Optional. Raises GitHub REST rate limit 60 → 5000/hr.         |
+| `MODEL_ORCHESTRATOR`  | Default `claude-opus-4-7`.                                    |
+| `MODEL_WORKER`        | Default `claude-sonnet-4-6`.                                  |
+| `MODEL_VALIDATOR`     | Default `claude-opus-4-7`.                                    |
+| `NEXT_PUBLIC_APP_URL` | Base URL used when publishing profile URLs.                   |
+
+---
+
+## Local demo mode vs mock mode
+
+- **Real LLM mode** — set `ANTHROPIC_API_KEY`. Workers + validators call Claude.
+- **Mock / heuristic mode** — no key, or `SKILLPROOF_MOCK_LLM=1`. Mission Control surfaces a
+  yellow "Mock / Heuristic mode active" banner and tags every score with a `Heuristic` or `Mock`
+  badge. Scores are deterministic and confidence is reduced. The product never pretends
+  fallback scores are fully verified.
+
+---
+
+## API routes
+
+| Method | Path                          | Purpose                                              |
+| ------ | ----------------------------- | ---------------------------------------------------- |
+| POST   | `/api/analyze`                | Start a mission. Body: `repo_url`, `candidate_name`, `github_username?`, `target_role`, `candidate_level`, `job_description?` |
+| GET    | `/api/runs/[id]`              | Poll mission status. Returns scores, events, contract, coverage, authenticity, employer verifier, plan, etc. |
+| POST   | `/api/interview/evaluate`     | Score an interview answer; persists 5 dimension scores, recomputes overall, updates verification level. |
+| POST   | `/api/challenge/evaluate`     | Score an AI Collaboration Challenge submission (`tool_used`, `proposed_diff`, `explanation`). |
+| POST   | `/api/profile/publish`        | Create a public profile slug for a completed run.    |
+| GET    | `/api/report/export?run_id=…` | Download the Markdown SkillProof Report.             |
+
+---
+
+## Scoring rubric
 
 ```
-src/
-  app/
-    page.tsx                      landing
-    mission/[id]/page.tsx         live mission control
-    profile/[slug]/page.tsx       public verified profile
-    api/                          REST endpoints
-  agents/
-    types.ts                      Handoff, ValidationContract, AgentOutput
-    mission-runner.ts             serial executor with handoffs
-    orchestrator.ts               Agent 1
-    repo-scanner.ts               Agent 2 (deterministic, no LLM)
-    architecture.ts               Agent 3
-    code-quality.ts               Agent 4
-    testing.ts                    Agent 5
-    security.ts                   Agent 6
-    git-evidence.ts               Agent 7
-    interview-gen.ts              Agent 8
-    answer-evaluator.ts           Agent 9
-    validator.ts                  Agent 10 (creator–verifier separation)
-    skill-graph.ts                Agent 11
-    profile-gen.ts                Agent 12
-  lib/
-    github.ts                     selective REST fetch
-    claude.ts                     Anthropic SDK wrapper + model router
-    db.ts                         Prisma client
-    token-meter.ts                raw vs analyzed token counter
-  components/                     UI primitives + mission control widgets
-prisma/
-  schema.prisma                   SQLite schema
+Code Quality       15
+Architecture       15
+Testing            15
+Debugging          15  (interview-driven)
+Git Workflow       10
+Documentation      10
+Security           10
+Communication       5  (interview-driven)
+AI Collaboration    5  (challenge-driven)
 ```
+
+Skills with no measurement are reported `not measured` and **excluded from the overall denominator**
+— SkillProof never silently fills in a neutral 50.
+
+---
+
+## Tests
+
+```bash
+npm run typecheck     # tsc --noEmit
+npm run test          # vitest run
+npm run check         # both
+```
+
+Covered:
+
+- `parseRepoUrl`, `slugify`, `clamp`, `safeJsonParse`
+- `estimateTokens`, `estimateBytesTokens`, `buildLedger`
+- `encodeRepoPath` (the bug-fixed GitHub contents helper)
+- Validator heuristic logic (no-evidence lowering, hallucinated-file flagging, score capping,
+  truth set drawn from full repo tree, assertion-coverage rollup)
+- Skill-graph weighted aggregation, `not_measured`, and `recomputeOverall`
+
+---
+
+## Known limitations
+
+- Mission runner is in-process. Production deploys should swap `runMission` for a queue.
+- Private repos are not supported — public repos only.
+- AI Collaboration challenge does not modify the candidate's repo; it scores a pasted diff.
+- Campus dashboard at `/campus-preview` is sample data, clearly labeled.
+- Authenticity signals are heuristics — explicitly **not** plagiarism detection.
+
+---
+
+## Future roadmap
+
+- Real queue + worker for mission execution
+- Re-verification (delta between runs over time)
+- Cryptographic signed badge embed for LinkedIn / portfolios
+- Recruiter API: pay-per-shortlist with ATS handoff (Greenhouse / Lever / Workday)
+- College / bootcamp tenant for cohort dashboard (currently preview only)
+
+---
+
+## Demo
+
+See [DEMO.md](DEMO.md) for the hackathon demo script.
 
 ## Monetization
 
 - **Free** — 1 public verified profile
-- **Student Pro** — ₹299/mo: unlimited analyses, growth tracking, re-verification
-- **College / Bootcamp SaaS** — placement dashboard, bulk student ranking, recruiter export
-- **Recruiter API** — pay-per-verified-shortlist, ATS integration (Greenhouse / Lever / Workday)
+- **Student Pro** — unlimited analyses, growth tracking, re-verification
+- **College / Bootcamp SaaS** — placement dashboard, recruiter export
+- **Recruiter API** — pay-per-verified-shortlist, ATS integration
 - **Verified Badge Embed** — cryptographic signature on LinkedIn / portfolio sites
 
-## Status
+---
 
-MVP scaffold. Repo Scanner does real GitHub API fetch; other agents return structured outputs via the Claude SDK or deterministic stubs when `SKILLPROOF_MOCK_LLM=1`. Validator audits every claim against evidence.
+## Screenshots
+
+_Placeholders — to be added before submission._
+
+- Landing page
+- Mission Control with validation contract coverage
+- Evidence Locker
+- Public verified profile
+- Employer Verifier preview
+- Campus preview

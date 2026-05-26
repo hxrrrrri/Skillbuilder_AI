@@ -4,38 +4,19 @@ import { useParams } from "next/navigation";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { AgentCard } from "@/components/agent-card";
 import { SkillRadar } from "@/components/skill-radar";
-import { EvidencePanel } from "@/components/evidence-panel";
+import { EvidenceLocker } from "@/components/evidence-locker";
 import { TokenMeter } from "@/components/token-meter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { TextArea } from "@/components/ui/input";
+import { ContractCoverage } from "@/components/contract-coverage";
+import { AuthenticityCard } from "@/components/authenticity-card";
+import { EmployerVerifier } from "@/components/employer-verifier";
+import { ImprovementPlanCard } from "@/components/improvement-plan";
+import { AICollabChallenge } from "@/components/ai-collab-challenge";
+import { MockBanner } from "@/components/mock-banner";
 
-type Run = {
-  id: string;
-  status: string;
-  overall_score: number | null;
-  role_fit: string | null;
-  target_role: string;
-  candidate_level: string;
-  tokens: { raw: number; used: number };
-  repo: { url: string; name: string; owner: string };
-  events: Array<{
-    agent: string;
-    status: "pending" | "running" | "completed" | "failed";
-    order: number;
-    notes: string | null;
-  }>;
-  scores: Array<{ skill: string; score: number; confidence: number; evidence: any[] }>;
-  questions: Array<{
-    id: string;
-    question: string;
-    source_file: string | null;
-    expected_signals: string[];
-    answer: string | null;
-    answer_score: number | null;
-    feedback: string | null;
-  }>;
-};
+type Run = any;
 
 export default function MissionPage() {
   const params = useParams<{ id: string }>();
@@ -65,12 +46,10 @@ export default function MissionPage() {
   }, [params.id, run?.status]);
 
   if (!run) {
-    return (
-      <div className="grid place-items-center py-20 text-muted">Loading mission…</div>
-    );
+    return <div className="grid place-items-center py-20 text-muted">Loading mission…</div>;
   }
 
-  const completedCount = run.events.filter((e) => e.status === "completed").length;
+  const completedCount = run.events.filter((e: any) => e.status === "completed").length;
   const total = run.events.length;
 
   async function submitAnswer(qid: string) {
@@ -109,8 +88,17 @@ export default function MissionPage() {
     }
   }
 
+  const scoresForRadar = (run.scores ?? [])
+    .filter((s: any) => s.score != null && s.skill !== "Authenticity")
+    .map((s: any) => ({ name: s.skill, score: s.score }));
+
+  const contractAssertions = run.contract?.assertions ?? [];
+  const importantFiles = run.context_pack?.filesIndex?.important ?? [];
+
   return (
     <div className="space-y-8">
+      <MockBanner active={!!run.mock_mode} />
+
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-wide text-muted">Mission</div>
@@ -119,19 +107,34 @@ export default function MissionPage() {
               {run.repo.owner}/{run.repo.name}
             </span>
           </h1>
-          <div className="mt-1 flex flex-wrap gap-2 text-xs">
+          {run.candidate && (
+            <div className="mt-1 text-sm text-muted">
+              Candidate: <span className="text-ink">{run.candidate.name}</span>
+              {run.candidate.github_username && (
+                <span className="ml-2 font-mono text-xs">@{run.candidate.github_username}</span>
+              )}
+            </div>
+          )}
+          <div className="mt-2 flex flex-wrap gap-2 text-xs">
             <Badge>{run.target_role}</Badge>
-            <Badge>{run.candidate_level}</Badge>
+            {run.candidate_level && <Badge>{run.candidate_level}</Badge>}
             <Badge tone={run.status === "completed" ? "good" : run.status === "failed" ? "bad" : "warn"}>
               {run.status}
             </Badge>
-            <Badge tone="accent">
-              {completedCount}/{total} agents
+            <Badge tone="accent">{completedCount}/{total} agents</Badge>
+            <Badge tone={run.verification_level === "repo_interview_verified" ? "good" : "default"}>
+              {run.verification_level === "repo_interview_verified" ? "Repo + Interview verified" : "Repo-only verified"}
             </Badge>
           </div>
+          {run.status === "failed" && run.status_message && (
+            <div className="mt-2 max-w-2xl text-sm text-bad">Failure: {run.status_message}</div>
+          )}
         </div>
         {run.status === "completed" && (
           <div className="flex items-center gap-2">
+            <a href={`/api/report/export?run_id=${run.id}`}>
+              <Button variant="outline">Export Report.md</Button>
+            </a>
             {publicUrl ? (
               <a href={publicUrl} target="_blank" rel="noreferrer">
                 <Button variant="outline">Open public profile ↗</Button>
@@ -162,8 +165,8 @@ export default function MissionPage() {
             <div className="text-xs uppercase tracking-wide text-muted">Pipeline</div>
             <div className="mt-1 font-semibold">Orchestrator → Workers → Validator</div>
             <p className="mt-2 text-sm text-muted">
-              Serial execution with structured handoffs. A fresh-context validator audits every score
-              before the skill graph is built.
+              Serial execution with structured handoffs. Fresh-context validator audits every score
+              against the repo file truth set before the graph is built.
             </p>
           </CardBody>
         </Card>
@@ -176,7 +179,7 @@ export default function MissionPage() {
           </CardHeader>
           <CardBody>
             <div className="grid gap-3 md:grid-cols-3">
-              {run.events.map((e) => (
+              {run.events.map((e: any) => (
                 <AgentCard key={e.agent} agent={e.agent} status={e.status} notes={e.notes} />
               ))}
             </div>
@@ -184,40 +187,67 @@ export default function MissionPage() {
         </Card>
       </section>
 
-      {run.scores.length > 0 && (
+      {contractAssertions.length > 0 && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Validation Contract Coverage</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <ContractCoverage
+                assertions={contractAssertions}
+                coverage={run.validation_coverage ?? []}
+              />
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {scoresForRadar.length > 0 && (
         <section className="grid gap-6 lg:grid-cols-5">
           <Card className="lg:col-span-2">
             <CardHeader>
               <CardTitle>Skill Graph</CardTitle>
             </CardHeader>
             <CardBody>
-              <SkillRadar data={run.scores.map((s) => ({ name: s.skill, score: s.score }))} />
+              <SkillRadar data={scoresForRadar} />
             </CardBody>
           </Card>
           <Card className="lg:col-span-3">
             <CardHeader>
-              <CardTitle>Evidence</CardTitle>
+              <CardTitle>Evidence Locker</CardTitle>
             </CardHeader>
             <CardBody>
-              <EvidencePanel scores={run.scores} />
+              <EvidenceLocker scores={run.scores ?? []} />
             </CardBody>
           </Card>
         </section>
       )}
 
-      {run.questions.length > 0 && (
+      {run.authenticity && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Authenticity Signals</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <AuthenticityCard data={run.authenticity} />
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {run.questions?.length > 0 && (
         <section>
           <Card>
             <CardHeader>
               <CardTitle>Code-Based Interview</CardTitle>
             </CardHeader>
             <CardBody className="space-y-4">
-              {run.questions.map((q, i) => (
+              {run.questions.map((q: any, i: number) => (
                 <div key={q.id} className="rounded-lg border border-border bg-panel/70 p-4">
                   <div className="flex items-start justify-between gap-3">
-                    <div className="font-medium text-ink">
-                      Q{i + 1}. {q.question}
-                    </div>
+                    <div className="font-medium text-ink">Q{i + 1}. {q.question}</div>
                     {q.answer_score != null && <Badge tone="good">{q.answer_score}/100</Badge>}
                   </div>
                   {q.source_file && (
@@ -226,6 +256,16 @@ export default function MissionPage() {
                   {q.answer ? (
                     <>
                       <p className="mt-3 text-sm text-ink/80">{q.answer}</p>
+                      {q.dimension_scores && (
+                        <div className="mt-2 grid grid-cols-2 gap-1 text-xs md:grid-cols-5">
+                          {Object.entries(q.dimension_scores).map(([k, v]) => (
+                            <div key={k} className="rounded border border-border px-2 py-1 text-center">
+                              <div className="text-muted">{k.replace(/_/g, " ")}</div>
+                              <div className="font-semibold text-ink">{v as number}/100</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                       {q.feedback && (
                         <p className="mt-2 text-xs italic text-muted">Validator: {q.feedback}</p>
                       )}
@@ -265,6 +305,53 @@ export default function MissionPage() {
                   )}
                 </div>
               ))}
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {run.status === "completed" && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>AI Collaboration Challenge</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <AICollabChallenge
+                runId={run.id}
+                importantFiles={importantFiles}
+                existing={run.ai_collaboration}
+                onUpdated={async () => {
+                  const refresh = await fetch(`/api/runs/${params.id}`, { cache: "no-store" });
+                  if (refresh.ok) setRun(await refresh.json());
+                }}
+              />
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {run.employer_verifier && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Employer Verifier Preview</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <EmployerVerifier data={run.employer_verifier} />
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {run.improvement_plan && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Improvement Plan</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <ImprovementPlanCard data={run.improvement_plan} />
             </CardBody>
           </Card>
         </section>

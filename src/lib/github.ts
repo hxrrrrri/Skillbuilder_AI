@@ -70,9 +70,17 @@ export async function getTree(owner: string, repo: string, branch: string): Prom
   return (d.tree as any[]).map((e) => ({ path: e.path, type: e.type, size: e.size }));
 }
 
+// Encode each path segment but preserve `/` separators. encodeURIComponent on the
+// whole path would turn `src/app/page.tsx` into `src%2Fapp%2Fpage.tsx` and break
+// the GitHub contents endpoint.
+export function encodeRepoPath(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
+}
+
 export async function getFile(owner: string, repo: string, path: string, ref?: string): Promise<string | null> {
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : "";
-  const r = await fetch(`${GH}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}${q}`, {
+  const encodedPath = encodeRepoPath(path);
+  const r = await fetch(`${GH}/repos/${owner}/${repo}/contents/${encodedPath}${q}`, {
     headers: headers(),
   });
   if (!r.ok) return null;

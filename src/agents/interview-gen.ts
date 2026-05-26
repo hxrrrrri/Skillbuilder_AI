@@ -88,7 +88,7 @@ Generate the JSON now.`;
     agent: "interview-gen",
     completed: ["questions_generated"],
     unresolved: [],
-    evidence: out.questions.map((q) => ({ file: q.source_file, reason: `Q: ${q.question}` })),
+    evidence: out.questions.map((q) => ({ file: q.source_file ?? undefined, reason: `Q: ${q.question}` })),
     issues_found: [],
     next_recommended: "validator",
     output: out,

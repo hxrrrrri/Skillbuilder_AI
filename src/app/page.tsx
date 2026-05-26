@@ -14,6 +14,8 @@ const SAMPLE_REPOS = [
 
 export default function Landing() {
   const [repoUrl, setRepoUrl] = useState("");
+  const [candidateName, setCandidateName] = useState("");
+  const [githubUsername, setGithubUsername] = useState("");
   const [role, setRole] = useState("Full-stack developer");
   const [level, setLevel] = useState("Junior");
   const [jd, setJd] = useState("");
@@ -27,6 +29,10 @@ export default function Landing() {
       setError("Paste a GitHub repo URL.");
       return;
     }
+    if (!candidateName.trim()) {
+      setError("Add your name so the verified profile has an owner.");
+      return;
+    }
     setLoading(true);
     try {
       const r = await fetch("/api/analyze", {
@@ -34,13 +40,15 @@ export default function Landing() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           repo_url: repoUrl,
+          candidate_name: candidateName,
+          github_username: githubUsername || undefined,
           target_role: role,
           candidate_level: level,
           job_description: jd || undefined,
         }),
       });
       const data = await r.json();
-      if (!r.ok) throw new Error(data?.error ?? "failed");
+      if (!r.ok) throw new Error(data?.detail ?? data?.error ?? "failed");
       router.push(`/mission/${data.run_id}`);
     } catch (e: any) {
       setError(e.message ?? "Failed to start mission.");
@@ -52,33 +60,56 @@ export default function Landing() {
     <div className="space-y-10">
       <section className="grid items-center gap-8 pt-6 md:grid-cols-5">
         <div className="md:col-span-3">
-          <Badge tone="accent" className="mb-4">Proof-of-work hiring</Badge>
+          <Badge tone="accent" className="mb-4">Proof-of-work hiring infrastructure</Badge>
           <h1 className="text-4xl font-bold leading-tight md:text-5xl">
-            Verify developer skill from <span className="gradient-text">real work</span>.
+            SkillProof AI converts real GitHub work into{" "}
+            <span className="gradient-text">verified hiring evidence</span>.
           </h1>
           <p className="mt-4 max-w-xl text-muted">
-            Paste a public GitHub repo. A team of specialist agents writes a validation contract,
-            audits the code, runs a fresh-context validator, generates a repo-based interview,
-            and ships a credibility profile employers can actually trust.
+            Stop reading resumes. A mission of specialist agents writes a validation contract,
+            audits a candidate's repo, runs a fresh-context validator, generates own-code interview
+            questions, and ships an evidence-backed credibility profile employers can actually verify.
           </p>
           <div className="mt-5 flex flex-wrap gap-2 text-xs text-muted">
             <Badge>Validation contract first</Badge>
             <Badge>Serial agents, parallel reads</Badge>
             <Badge>Creator–verifier separation</Badge>
             <Badge>Token-efficient context pack</Badge>
+            <Badge>Evidence locker</Badge>
+            <Badge>Own-code interview</Badge>
           </div>
         </div>
         <div className="md:col-span-2">
           <Card className="shadow-glow">
             <CardBody className="space-y-3">
               <div>
-                <label className="text-xs uppercase tracking-wide text-muted">GitHub repo URL</label>
+                <label className="text-xs uppercase tracking-wide text-muted">Public GitHub repo URL</label>
                 <Input
                   className="mt-1"
                   placeholder="https://github.com/owner/repo"
                   value={repoUrl}
                   onChange={(e) => setRepoUrl(e.target.value)}
                 />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs uppercase tracking-wide text-muted">Your name</label>
+                  <Input
+                    className="mt-1"
+                    placeholder="Jane Dev"
+                    value={candidateName}
+                    onChange={(e) => setCandidateName(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="text-xs uppercase tracking-wide text-muted">GitHub user (optional)</label>
+                  <Input
+                    className="mt-1"
+                    placeholder="janedev"
+                    value={githubUsername}
+                    onChange={(e) => setGithubUsername(e.target.value)}
+                  />
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -128,30 +159,57 @@ export default function Landing() {
             <div className="mt-1 font-semibold">Validation contract first</div>
             <p className="mt-2 text-sm text-muted">
               The orchestrator writes the rubric before any analysis. Correctness is defined
-              independently of what the candidate built — no after-the-fact rationalization.
+              independently — no after-the-fact rationalization.
             </p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <div className="text-xs uppercase tracking-wide text-accent">02 — Audit</div>
-            <div className="mt-1 font-semibold">Serial workers + fresh-context validator</div>
+            <div className="mt-1 font-semibold">Workers + fresh-context validator</div>
             <p className="mt-2 text-sm text-muted">
-              Architecture, code quality, testing, security, git evidence — each agent runs serially
-              with a structured handoff. A separate validator with no memory of prior steps audits every claim.
+              Architecture, code quality, testing, security, git evidence, docs, authenticity —
+              each agent runs serially with structured handoffs. A separate validator audits every claim.
             </p>
           </CardBody>
         </Card>
         <Card>
           <CardBody>
             <div className="text-xs uppercase tracking-wide text-accent">03 — Verify</div>
-            <div className="mt-1 font-semibold">Skill graph + repo-based interview</div>
+            <div className="mt-1 font-semibold">Own-code interview + evidence locker</div>
             <p className="mt-2 text-sm text-muted">
-              Each score is backed by file evidence. Mock interview questions are generated from
-              the candidate's own code, so bluffing is hard. The output is a shareable verified profile.
+              Mock interview questions are generated from the candidate's own code. Every score is
+              backed by file evidence. The output is a shareable verified profile.
             </p>
           </CardBody>
         </Card>
+      </section>
+
+      <section className="grid gap-3 md:grid-cols-2">
+        <Card>
+          <CardBody>
+            <div className="text-xs uppercase tracking-wide text-accent2">For candidates</div>
+            <p className="mt-2 text-sm text-muted">
+              Show employers what you actually built. Walk recruiters through your real repo,
+              defended by an own-code interview. No more screening lottery.
+            </p>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody>
+            <div className="text-xs uppercase tracking-wide text-accent2">For employers</div>
+            <p className="mt-2 text-sm text-muted">
+              Open the Employer Verifier preview on any profile. See verified strengths, biggest
+              risks, suggested follow-up questions, and a shortlist recommendation.
+            </p>
+          </CardBody>
+        </Card>
+      </section>
+
+      <section>
+        <a href="/campus-preview" className="text-sm text-accent hover:underline">
+          ↗ Open Campus / Placement dashboard preview
+        </a>
       </section>
     </div>
   );

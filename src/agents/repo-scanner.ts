@@ -13,7 +13,7 @@ import {
 import { estimateBytesTokens, estimateTokens } from "@/lib/token-meter";
 import type { Handoff, MissionState, RepoContextPack } from "./types";
 
-const MAX_SNIPPET_BYTES = 8000; // ~2k tokens per file
+const MAX_SNIPPET_BYTES = 8000;
 const MAX_README_BYTES = 12000;
 
 function detectFramework(packageJson: string | null, tree: string[]): string | null {
@@ -66,6 +66,7 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
   const meta = await getRepoMeta(owner, repo);
   const tree = await getTree(owner, repo, meta.defaultBranch);
   const treePaths = tree.map((t) => t.path);
+  const allBlobs = tree.filter((t) => t.type === "blob").map((t) => t.path);
 
   const configFiles = detectConfigFiles(tree);
   const testFiles = detectTestFiles(tree);
@@ -73,7 +74,6 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
   const readmePath = detectReadme(tree);
   const importantFiles = rankImportantFiles(tree, 6);
 
-  // Fetch the small set we actually need.
   const packageJsonPath = configFiles.find((p) => p.endsWith("package.json")) ?? null;
   const packageJson = packageJsonPath ? await getFile(owner, repo, packageJsonPath) : null;
   const readme = readmePath ? await getFile(owner, repo, readmePath) : null;
@@ -100,8 +100,6 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
     const truncated = content.length > MAX_SNIPPET_BYTES;
     snippets.push({ path: p, content: truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content, truncated });
   }
-
-  // Sample up to 2 test files (small).
   for (const p of testFiles.slice(0, 2)) {
     const content = await getFile(owner, repo, p);
     if (content == null) continue;
@@ -142,7 +140,8 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
       hasTypeScript: treePaths.some((p) => /\.tsx?$/.test(p)),
     },
     filesIndex: {
-      total: tree.filter((t) => t.type === "blob").length,
+      total: allBlobs.length,
+      all: allBlobs,
       important: importantFiles,
       config: configFiles,
       tests: testFiles,
