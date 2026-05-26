@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #0a0c10;
+  color: #e6edf3;
+}
+
+body {
+  font-feature-settings: "ss01", "cv01";
+  background-image:
+    radial-gradient(1200px 600px at 0% -10%, rgba(34, 211, 164, 0.06), transparent 60%),
+    radial-gradient(900px 500px at 100% 0%, rgba(34, 184, 211, 0.05), transparent 60%);
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(34, 211, 164, 0.3);
+}
+
+.gradient-text {
+  background: linear-gradient(90deg, #22d3a4, #22b8d3 60%, #c2f0ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.dot-pending { background: #2b3340; }
+.dot-running { background: #f59e0b; box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.18); animation: pulse 1.5s infinite; }
+.dot-completed { background: #22d3a4; }
+.dot-failed { background: #ef4444; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+.scanlines {
+  position: relative;
+}
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 3px,
+    rgba(255, 255, 255, 0.018) 3px,
+    rgba(255, 255, 255, 0.018) 4px
+  );
+}

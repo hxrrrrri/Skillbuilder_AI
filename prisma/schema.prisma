@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String       @id @default(cuid())
+  name           String?
+  email          String?      @unique
+  githubUsername String?
+  createdAt      DateTime     @default(now())
+  repositories   Repository[]
+  profiles       PublicProfile[]
+}
+
+model Repository {
+  id              String         @id @default(cuid())
+  userId          String?
+  repoUrl         String
+  repoName        String
+  owner           String
+  primaryLanguage String?
+  framework       String?
+  analyzedAt      DateTime?
+  createdAt       DateTime       @default(now())
+  user            User?          @relation(fields: [userId], references: [id])
+  runs            AnalysisRun[]
+}
+
+model AnalysisRun {
+  id                  String          @id @default(cuid())
+  repoId              String
+  targetRole          String
+  candidateLevel      String?
+  jobDescription      String?
+  status              String          @default("pending") // pending | running | completed | failed
+  overallScore        Int?
+  roleFit             String?
+  tokenEstimateRaw    Int?
+  tokenEstimateUsed   Int?
+  validationContract  String?         // JSON
+  contextPack         String?         // JSON — what we sent to LLMs
+  createdAt           DateTime        @default(now())
+  completedAt         DateTime?
+  repository          Repository      @relation(fields: [repoId], references: [id])
+  events              AgentEvent[]
+  scores              SkillScore[]
+  questions           InterviewQuestion[]
+  profiles            PublicProfile[]
+}
+
+model AgentEvent {
+  id          String      @id @default(cuid())
+  runId       String
+  agentName   String
+  status      String      // pending | running | completed | failed
+  startedAt   DateTime?
+  completedAt DateTime?
+  output      String?     // JSON Handoff
+  notes       String?
+  order       Int
+  run         AnalysisRun @relation(fields: [runId], references: [id])
+}
+
+model SkillScore {
+  id              String      @id @default(cuid())
+  runId           String
+  skillName       String
+  score           Int
+  confidence      Float       @default(0.8)
+  evidence        String      // JSON array
+  validatorNotes  String?
+  run             AnalysisRun @relation(fields: [runId], references: [id])
+}
+
+model InterviewQuestion {
+  id              String            @id @default(cuid())
+  runId           String
+  question        String
+  sourceFile      String?
+  expectedSignals String?           // JSON array
+  answer          String?
+  answerScore     Int?
+  feedback        String?
+  run             AnalysisRun       @relation(fields: [runId], references: [id])
+}
+
+model PublicProfile {
+  id          String      @id @default(cuid())
+  userId      String?
+  runId       String
+  slug        String      @unique
+  visibility  String      @default("public")
+  createdAt   DateTime    @default(now())
+  user        User?       @relation(fields: [userId], references: [id])
+  run         AnalysisRun @relation(fields: [runId], references: [id])
+}
