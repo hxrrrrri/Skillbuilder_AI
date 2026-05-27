@@ -12,6 +12,8 @@ type Score = {
 type Question = {
   question: string;
   sourceFile: string | null;
+  lineStart?: number | null;
+  lineEnd?: number | null;
   answer: string | null;
   answerScore: number | null;
   feedback: string | null;
@@ -28,6 +30,8 @@ type RunBundle = {
   candidateLevel: string | null;
   validationContract: string | null;
   validationCoverage: string | null;
+  validationSummary?: string | null;
+  repoIntelligence?: string | null;
   authenticitySignals: string | null;
   improvementPlan: string | null;
   employerVerifier: string | null;
@@ -84,8 +88,10 @@ export function buildMarkdownReport(run: RunBundle): string {
     const tags: string[] = [];
     if (ownership.owner_match) tags.push("owner_match (gh)");
     if (ownership.repo_token_verified) tags.push("repo_token_verified");
+    if (ownership.collaborator_verified) tags.push("collaborator_verified");
     if (ownership.self_declared) tags.push("self_declared");
     if (tags.length) lines.push(`- **Ownership:** ${tags.join(", ")}`);
+    if (ownership.verification_method) lines.push(`- **Ownership method:** ${ownership.verification_method}`);
   }
   lines.push("");
 
@@ -137,13 +143,32 @@ export function buildMarkdownReport(run: RunBundle): string {
   }
 
   const coverage = safe<any[]>(run.validationCoverage, []);
+  const coverageSummary = safe<any>(run.validationSummary ?? null, null);
   if (coverage.length) {
     lines.push("## Validation Coverage");
     lines.push("");
-    lines.push("| ID | Dimension | Status | Notes |");
-    lines.push("|---|---|---|---|");
+    if (coverageSummary) {
+      lines.push(`Assertions: ${coverageSummary.total} · passed ${coverageSummary.passed} · partial ${coverageSummary.partial} · failed ${coverageSummary.failed} · unknown ${coverageSummary.unknown} · evidence coverage ${coverageSummary.evidence_coverage_percentage}%`);
+      lines.push("");
+    }
+    lines.push("| ID | Dimension | Status | Confidence | Notes |");
+    lines.push("|---|---|---|---|---|");
     for (const c of coverage) {
-      lines.push(`| ${c.assertion_id} | ${c.dimension} | ${c.status} | ${(c.notes ?? "").replace(/\|/g, "\\|")} |`);
+      lines.push(`| ${c.assertion_id} | ${c.dimension} | ${c.status} | ${c.confidence != null ? `${Math.round(c.confidence * 100)}%` : "—"} | ${(c.notes ?? "").replace(/\|/g, "\\|")} |`);
+    }
+    lines.push("");
+  }
+
+  const intel = safe<any>(run.repoIntelligence ?? null, null);
+  if (intel) {
+    lines.push("## Repository Intelligence");
+    lines.push(`- Files indexed: ${intel.files?.length ?? 0}`);
+    lines.push(`- Frameworks: ${(intel.frameworks ?? []).join(", ") || "none detected"}`);
+    lines.push(`- Package managers: ${(intel.packageManagers ?? []).join(", ") || "none detected"}`);
+    lines.push(`- Routes: ${intel.routes?.length ?? 0}; components: ${intel.components?.length ?? 0}; functions: ${intel.functions?.length ?? 0}; tests: ${intel.testFiles?.length ?? 0}; configs: ${intel.configFiles?.length ?? 0}`);
+    if (intel.riskFlags?.length) {
+      lines.push("- Risk flags:");
+      for (const r of intel.riskFlags.slice(0, 10)) lines.push(`  - ${r.severity}: ${r.reason}${r.file ? ` (${r.file})` : ""}`);
     }
     lines.push("");
   }
@@ -167,8 +192,16 @@ export function buildMarkdownReport(run: RunBundle): string {
       lines.push("- _no evidence cited_");
     } else {
       for (const e of ev) {
-        const file = e.file ? `\`${e.file}\`${e.line ? `:${e.line}` : ""} — ` : "";
-        lines.push(`- ${file}${e.reason}`);
+        const range = e.line_start ? `:${e.line_start}${e.line_end && e.line_end !== e.line_start ? `-${e.line_end}` : ""}` : e.line ? `:${e.line}` : "";
+        const file = e.file ? `\`${e.file}${range}\` — ` : "";
+        const source = e.source ? `_${e.source}_ — ` : "";
+        lines.push(`- ${file}${source}${e.reason}`);
+        if (e.snippet) {
+          lines.push("  ```");
+          lines.push(String(e.snippet).slice(0, 800).replace(/\n/g, "\n  "));
+          lines.push("  ```");
+        }
+        if (e.validator_note) lines.push(`  - validator: ${e.validator_note}`);
       }
     }
     if (s.validatorNotes) lines.push(`- _validator: ${s.validatorNotes}_`);
@@ -197,7 +230,10 @@ export function buildMarkdownReport(run: RunBundle): string {
     lines.push("");
     for (const q of run.questions.filter((q) => q.answer)) {
       lines.push(`### ${q.question}`);
-      if (q.sourceFile) lines.push(`_Source file:_ \`${q.sourceFile}\``);
+      if (q.sourceFile) {
+        const range = q.lineStart ? `:${q.lineStart}${q.lineEnd && q.lineEnd !== q.lineStart ? `-${q.lineEnd}` : ""}` : "";
+        lines.push(`_Source file:_ \`${q.sourceFile}${range}\``);
+      }
       lines.push("");
       lines.push("**Answer:**");
       lines.push("");
@@ -222,6 +258,11 @@ export function buildMarkdownReport(run: RunBundle): string {
     lines.push(`- **Tool used:** ${ai.tool_used ?? "—"}`);
     lines.push(`- **Overall:** ${ai.overall_score}/100`);
     lines.push(`- Correctness: ${ai.correctness_score}/100, Explanation: ${ai.explanation_quality_score}/100, Test awareness: ${ai.test_awareness_score}/100, Review discipline: ${ai.review_discipline_score}/100, Maturity: ${ai.ai_collaboration_maturity_score}/100`);
+    if (ai.target_files?.length) lines.push(`- **Target files:** ${ai.target_files.join(", ")}`);
+    if (ai.what_this_proves?.length) {
+      lines.push("- **What this proves:**");
+      for (const p of ai.what_this_proves) lines.push(`  - ${p}`);
+    }
     if (ai.feedback) lines.push(`- _${ai.feedback}_`);
     lines.push("");
   }
@@ -281,6 +322,8 @@ export function buildMarkdownReport(run: RunBundle): string {
 
   lines.push("---");
   lines.push("_Generated by SkillProof AI — verification of real GitHub work, not resumes._");
+  lines.push("");
+  lines.push("_Limitations: this report reflects accessible repository content, terminal transcripts, interview answers, and challenge submissions. It is not a background check, employment guarantee, or complete security audit._");
   if (run.executionMode && run.executionMode !== "api") {
     lines.push("");
     lines.push(

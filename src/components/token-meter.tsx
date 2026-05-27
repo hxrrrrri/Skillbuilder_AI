@@ -4,7 +4,7 @@ export function TokenMeter({ raw, used }: { raw: number; used: number }) {
   const savedPct = raw > 0 ? Math.max(0, Math.min(100, (1 - used / raw) * 100)) : 0;
   const usedPct = raw > 0 ? Math.min(100, (used / raw) * 100) : 0;
   return (
-    <div className="rounded-xl border border-border bg-panel/70 p-4">
+    <div className="rounded-lg border border-border bg-panel/88 p-4 shadow-card">
       <div className="flex items-center justify-between">
         <div className="text-sm text-muted">Token Budget</div>
         <div className="text-xs text-accent">{savedPct.toFixed(1)}% saved</div>

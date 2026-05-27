@@ -2,7 +2,18 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 
-type Evidence = { file?: string; line?: number; reason: string };
+type Evidence = {
+  file?: string;
+  line?: number;
+  line_start?: number;
+  line_end?: number;
+  reason: string;
+  snippet?: string;
+  snippet_hash?: string;
+  source?: string;
+  confidence?: number;
+  validator_note?: string;
+};
 type Score = {
   skill: string;
   score: number | null;
@@ -37,7 +48,7 @@ function sourceLabel(src: string): { label: string; tone: "good" | "warn" | "bad
 
 function supportLabel(score: number | null, ev: Evidence[]): { label: string; tone: "good" | "warn" | "bad" } {
   if (score == null) return { label: "Insufficient", tone: "bad" };
-  const cited = ev.filter((e) => e.file).length;
+  const cited = ev.filter((e) => e.file || e.source === "terminal" || e.source === "interview" || e.source === "challenge").length;
   if (cited >= 2) return { label: "Verified", tone: "good" };
   if (cited === 1) return { label: "Partial", tone: "warn" };
   return { label: "Insufficient", tone: "bad" };
@@ -45,8 +56,13 @@ function supportLabel(score: number | null, ev: Evidence[]): { label: string; to
 
 export function EvidenceLocker({ scores }: { scores: Score[] }) {
   const [filter, setFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
   const skills = Array.from(new Set(scores.map((s) => s.skill)));
-  const shown = filter === "all" ? scores : scores.filter((s) => s.skill === filter);
+  const sources = Array.from(new Set(scores.flatMap((s) => s.evidence.map((e) => e.source).filter(Boolean)))) as string[];
+  const shown = (filter === "all" ? scores : scores.filter((s) => s.skill === filter)).map((s) => ({
+    ...s,
+    evidence: sourceFilter === "all" ? s.evidence : s.evidence.filter((e) => e.source === sourceFilter),
+  }));
 
   return (
     <div className="space-y-3">
@@ -65,6 +81,22 @@ export function EvidenceLocker({ scores }: { scores: Score[] }) {
             className={`rounded px-2 py-0.5 border ${filter === sk ? "border-accent text-accent" : "border-border text-muted hover:text-ink"}`}
           >
             {sk}
+          </button>
+        ))}
+        <span className="ml-2 text-muted">Source:</span>
+        <button
+          onClick={() => setSourceFilter("all")}
+          className={`rounded px-2 py-0.5 border ${sourceFilter === "all" ? "border-accent text-accent" : "border-border text-muted hover:text-ink"}`}
+        >
+          all
+        </button>
+        {sources.map((src) => (
+          <button
+            key={src}
+            onClick={() => setSourceFilter(src)}
+            className={`rounded px-2 py-0.5 border ${sourceFilter === src ? "border-accent text-accent" : "border-border text-muted hover:text-ink"}`}
+          >
+            {src}
           </button>
         ))}
       </div>
@@ -97,10 +129,19 @@ export function EvidenceLocker({ scores }: { scores: Score[] }) {
                     <span>
                       {e.file && (
                         <span className="mr-1 font-mono text-xs text-ink/80">
-                          {e.file}{e.line ? `:${e.line}` : ""}
+                          {e.file}
+                          {e.line_start ? `:${e.line_start}${e.line_end && e.line_end !== e.line_start ? `-${e.line_end}` : ""}` : e.line ? `:${e.line}` : ""}
                         </span>
                       )}
+                      {e.source && <Badge className="mr-1 align-middle" tone={e.source === "terminal" ? "good" : e.source === "mock" ? "bad" : "default"}>{e.source}</Badge>}
                       {e.reason}
+                      {e.validator_note && <span className="ml-1 text-warn">({e.validator_note})</span>}
+                      {e.snippet && (
+                        <pre className="mt-1 max-h-32 overflow-auto whitespace-pre-wrap rounded border border-border bg-bg/60 p-2 font-mono text-[11px] text-ink/75">
+                          {e.snippet}
+                        </pre>
+                      )}
+                      {e.snippet_hash && <div className="mt-1 font-mono text-[10px] text-muted">sha256:{e.snippet_hash.slice(0, 16)}</div>}
                     </span>
                   </li>
                 ))}

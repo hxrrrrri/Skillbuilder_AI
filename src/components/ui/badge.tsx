@@ -5,17 +5,17 @@ type Tone = "default" | "good" | "warn" | "bad" | "accent";
 
 const TONES: Record<Tone, string> = {
   default: "bg-panel2 text-muted border-border",
-  good: "bg-accent/10 text-accent border-accent/30",
+  good: "bg-good/10 text-good border-good/30",
   warn: "bg-warn/10 text-warn border-warn/30",
   bad: "bg-bad/10 text-bad border-bad/30",
-  accent: "bg-accent2/10 text-accent2 border-accent2/30",
+  accent: "bg-accent/12 text-accent border-accent/35",
 };
 
 export function Badge({ tone = "default", className, ...rest }: { tone?: Tone } & React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium",
+        "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold",
         TONES[tone],
         className
       )}

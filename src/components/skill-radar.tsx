@@ -14,21 +14,21 @@ export function SkillRadar({ data }: { data: Array<{ name: string; score: number
     <div className="h-[380px] w-full">
       <ResponsiveContainer>
         <RadarChart data={data} outerRadius="78%">
-          <PolarGrid stroke="#1f2731" />
-          <PolarAngleAxis dataKey="name" tick={{ fill: "#8b97a8", fontSize: 11 }} />
-          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#3a4453", fontSize: 10 }} />
+          <PolarGrid stroke="#34312d" />
+          <PolarAngleAxis dataKey="name" tick={{ fill: "#a8a096", fontSize: 11 }} />
+          <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: "#6e665d", fontSize: 10 }} />
           <Radar
             name="Score"
             dataKey="score"
-            stroke="#22d3a4"
-            fill="#22d3a4"
+            stroke="#cf765c"
+            fill="#cf765c"
             fillOpacity={0.28}
             isAnimationActive
           />
           <Tooltip
-            contentStyle={{ background: "#0f131a", border: "1px solid #1f2731", borderRadius: 8 }}
-            labelStyle={{ color: "#e6edf3" }}
-            itemStyle={{ color: "#22d3a4" }}
+            contentStyle={{ background: "#151513", border: "1px solid #34312d", borderRadius: 8 }}
+            labelStyle={{ color: "#faf9f5" }}
+            itemStyle={{ color: "#cf765c" }}
           />
         </RadarChart>
       </ResponsiveContainer>

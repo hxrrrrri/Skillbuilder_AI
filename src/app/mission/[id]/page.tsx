@@ -1,9 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { AgentCard } from "@/components/agent-card";
-import { SkillRadar } from "@/components/skill-radar";
 import { EvidenceLocker } from "@/components/evidence-locker";
 import { TokenMeter } from "@/components/token-meter";
 import { Button } from "@/components/ui/button";
@@ -19,19 +18,25 @@ import { TerminalConsole } from "@/components/terminal-console";
 
 type Run = any;
 
-export default function MissionPage() {
-  const params = useParams<{ id: string }>();
+const SkillRadar = dynamic(
+  () => import("@/components/skill-radar").then((mod) => mod.SkillRadar),
+  { ssr: false }
+);
+
+export default function MissionPage({ params }: { params: { id: string } }) {
+  const missionId = params.id;
   const [run, setRun] = useState<Run | null>(null);
   const [answer, setAnswer] = useState("");
   const [answeringId, setAnsweringId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publicUrl, setPublicUrl] = useState<string | null>(null);
+  const [verifyingOwner, setVerifyingOwner] = useState(false);
 
   useEffect(() => {
     let alive = true;
     async function tick() {
-      const r = await fetch(`/api/runs/${params.id}`, { cache: "no-store" });
+      const r = await fetch(`/api/runs/${missionId}`, { cache: "no-store" });
       if (!alive) return;
       if (r.ok) setRun(await r.json());
     }
@@ -44,7 +49,7 @@ export default function MissionPage() {
       alive = false;
       clearInterval(interval);
     };
-  }, [params.id, run?.status]);
+  }, [missionId, run?.status]);
 
   if (!run) {
     return <div className="grid place-items-center py-20 text-muted">Loading mission…</div>;
@@ -64,7 +69,7 @@ export default function MissionPage() {
       if (r.ok) {
         setAnswer("");
         setAnsweringId(null);
-        const refresh = await fetch(`/api/runs/${params.id}`, { cache: "no-store" });
+        const refresh = await fetch(`/api/runs/${missionId}`, { cache: "no-store" });
         if (refresh.ok) setRun(await refresh.json());
       }
     } finally {
@@ -89,12 +94,30 @@ export default function MissionPage() {
     }
   }
 
+  async function verifyOwnership() {
+    setVerifyingOwner(true);
+    try {
+      const r = await fetch("/api/ownership/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_id: run!.id }),
+      });
+      if (r.ok) {
+        const refresh = await fetch(`/api/runs/${params.id}`, { cache: "no-store" });
+        if (refresh.ok) setRun(await refresh.json());
+      }
+    } finally {
+      setVerifyingOwner(false);
+    }
+  }
+
   const scoresForRadar = (run.scores ?? [])
     .filter((s: any) => s.score != null && s.skill !== "Authenticity")
     .map((s: any) => ({ name: s.skill, score: s.score }));
 
   const contractAssertions = run.contract?.assertions ?? [];
   const importantFiles = run.context_pack?.filesIndex?.important ?? [];
+  const repoIntel = run.repo_intelligence;
 
   return (
     <div className="space-y-8">
@@ -136,7 +159,19 @@ export default function MissionPage() {
             {run.ownership_status?.self_declared && !run.ownership_status?.owner_match && (
               <Badge tone="warn">self-declared</Badge>
             )}
+            {run.ownership_status?.verification_token && (
+              <Badge tone="accent">ownership token ready</Badge>
+            )}
           </div>
+          {run.ownership_status?.verification_token && (
+            <div className="mt-2 rounded border border-border bg-panel2/70 p-2 text-xs text-muted">
+              Verify GitHub ownership by adding this token temporarily to README or <span className="font-mono">.skillproof-verify.json</span>:{" "}
+              <span className="font-mono text-ink">{run.ownership_status.verification_token}</span>
+              <Button size="sm" variant="outline" className="ml-2" onClick={verifyOwnership} disabled={verifyingOwner}>
+                {verifyingOwner ? "Checking..." : "Re-check ownership"}
+              </Button>
+            </div>
+          )}
           {run.status === "failed" && run.status_message && (
             <div className="mt-2 max-w-2xl text-sm text-bad">Failure: {run.status_message}</div>
           )}
@@ -207,9 +242,57 @@ export default function MissionPage() {
                 </div>
               </div>
             )}
+            <div className="mt-4 grid gap-2 md:grid-cols-4">
+              {["install", "testing", "build", "typecheck", "lint"].map((kind) => {
+                const rows = (run.terminal_evidence ?? []).filter((t: any) => t.usedFor === kind);
+                const passed = rows.some((t: any) => t.exitCode === 0);
+                const failed = rows.some((t: any) => t.exitCode !== null && t.exitCode !== 0);
+                const pending = rows.some((t: any) => t.statusLabel === "install_pending_approval");
+                const skipped = rows.some((t: any) => t.statusLabel === "skipped" || t.exitCode === null);
+                const tone = passed ? "good" : failed ? "bad" : pending || skipped ? "warn" : "default";
+                const label = passed ? "passed" : failed ? "failed" : pending ? "pending approval" : skipped ? "skipped" : "not measured";
+                return (
+                  <div key={kind} className="rounded border border-border bg-panel2 p-2 text-xs">
+                    <div className="font-mono text-muted">{kind}</div>
+                    <Badge tone={tone as any} className="mt-1">{label}</Badge>
+                  </div>
+                );
+              })}
+            </div>
           </CardBody>
         </Card>
       </section>
+
+      {repoIntel && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Repo Map</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <div className="grid gap-3 md:grid-cols-5">
+                {[
+                  ["files", repoIntel.files?.length ?? 0],
+                  ["routes", repoIntel.routes?.length ?? 0],
+                  ["components", repoIntel.components?.length ?? 0],
+                  ["tests", repoIntel.testFiles?.length ?? 0],
+                  ["configs", repoIntel.configFiles?.length ?? 0],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="rounded border border-border bg-panel2/70 p-3">
+                    <div className="text-xs uppercase text-muted">{label}</div>
+                    <div className="mt-1 text-2xl font-semibold text-ink">{value as number}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(repoIntel.frameworks ?? []).map((f: string) => <Badge key={f}>{f}</Badge>)}
+                {(repoIntel.packageManagers ?? []).map((pm: string) => <Badge key={pm}>pm:{pm}</Badge>)}
+                {(repoIntel.riskFlags ?? []).slice(0, 3).map((r: any, i: number) => <Badge key={i} tone="warn">{r.severity}: {r.reason}</Badge>)}
+              </div>
+            </CardBody>
+          </Card>
+        </section>
+      )}
 
       {(run.terminal_evidence?.length ?? 0) > 0 && (
         <section>
@@ -219,17 +302,17 @@ export default function MissionPage() {
             </CardHeader>
             <CardBody className="space-y-3">
               <div className="text-xs text-muted">
-                Real commands run on the candidate's machine. Token patterns redacted before persistence.
+                Real commands run on the candidate&apos;s machine. Token patterns redacted before persistence.
               </div>
               {run.terminal_evidence.map((t: any, i: number) => (
                 <details key={i} className="rounded border border-border bg-panel2 p-2 text-xs">
                   <summary className="cursor-pointer flex flex-wrap items-center gap-2">
-                    <Badge tone={t.exitCode === 0 ? "good" : "bad"}>exit {t.exitCode ?? "?"}</Badge>
+                    <Badge tone={t.exitCode === 0 ? "good" : t.exitCode === null ? "warn" : "bad"}>{t.exitCode === null ? (t.statusLabel ?? "skipped") : `exit ${t.exitCode}`}</Badge>
                     <Badge>{t.usedFor}</Badge>
                     <span className="font-mono text-ink">{t.command}</span>
                     <span className="ml-auto text-muted">{t.durationMs}ms</span>
                   </summary>
-                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-black/60 p-2 text-[11px] leading-relaxed">
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-border bg-bg/80 p-2 text-[11px] leading-relaxed">
                     {t.stdoutSummary}
                     {t.stderrSummary && <span className="text-bad">{"\n" + t.stderrSummary}</span>}
                   </pre>
@@ -317,7 +400,9 @@ export default function MissionPage() {
                     {q.answer_score != null && <Badge tone="good">{q.answer_score}/100</Badge>}
                   </div>
                   {q.source_file && (
-                    <div className="mt-1 text-xs font-mono text-muted">↳ {q.source_file}</div>
+                    <div className="mt-1 text-xs font-mono text-muted">
+                      ↳ {q.source_file}{q.line_start ? `:${q.line_start}${q.line_end && q.line_end !== q.line_start ? `-${q.line_end}` : ""}` : ""}
+                    </div>
                   )}
                   {q.answer ? (
                     <>
@@ -335,6 +420,23 @@ export default function MissionPage() {
                       {q.feedback && (
                         <p className="mt-2 text-xs italic text-muted">Validator: {q.feedback}</p>
                       )}
+                      <details className="mt-2 text-xs text-muted">
+                        <summary className="cursor-pointer text-accent">Expected signals and red flags</summary>
+                        <div className="mt-2 grid gap-2 md:grid-cols-2">
+                          <div>
+                            <div className="uppercase tracking-wide">Expected signals</div>
+                            <ul className="mt-1 list-disc pl-5">
+                              {(q.expected_signals ?? []).map((s: string) => <li key={s}>{s}</li>)}
+                            </ul>
+                          </div>
+                          <div>
+                            <div className="uppercase tracking-wide">Red flags</div>
+                            <ul className="mt-1 list-disc pl-5">
+                              {(q.red_flags ?? []).map((s: string) => <li key={s}>{s}</li>)}
+                            </ul>
+                          </div>
+                        </div>
+                      </details>
                     </>
                   ) : answeringId === q.id ? (
                     <div className="mt-3 space-y-2">
@@ -388,7 +490,7 @@ export default function MissionPage() {
                 importantFiles={importantFiles}
                 existing={run.ai_collaboration}
                 onUpdated={async () => {
-                  const refresh = await fetch(`/api/runs/${params.id}`, { cache: "no-store" });
+                  const refresh = await fetch(`/api/runs/${missionId}`, { cache: "no-store" });
                   if (refresh.ok) setRun(await refresh.json());
                 }}
               />

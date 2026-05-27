@@ -70,7 +70,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
 
   return (
     <div className="space-y-8">
-      <header className="rounded-2xl border border-border bg-panel/70 p-8 shadow-glow">
+      <header className="rounded-lg border border-border bg-panel/88 p-8 shadow-glow">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="accent">Verified Profile</Badge>
           <Badge tone={run.verificationLevel === "repo_interview_verified" ? "good" : "default"}>

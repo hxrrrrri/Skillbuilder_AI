@@ -171,6 +171,32 @@ export default function LocalSetupPage() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Install & Verify policy</CardTitle>
+        </CardHeader>
+        <CardBody className="grid gap-3 text-sm md:grid-cols-4">
+          <div className="rounded border border-border bg-panel2/70 p-3">
+            <div className="text-xs uppercase text-muted">Demo/mock</div>
+            <Badge tone="warn" className="mt-2">install disabled</Badge>
+          </div>
+          <div className="rounded border border-border bg-panel2/70 p-3">
+            <div className="text-xs uppercase text-muted">CLI/hybrid default</div>
+            <Badge tone="warn" className="mt-2">approval required</Badge>
+          </div>
+          <div className="rounded border border-border bg-panel2/70 p-3">
+            <div className="text-xs uppercase text-muted">Allowed managers</div>
+            <div className="mt-2 flex flex-wrap gap-1">
+              {["npm", "pnpm", "yarn", "bun"].map((pm) => <Badge key={pm}>{pm}</Badge>)}
+            </div>
+          </div>
+          <div className="rounded border border-border bg-panel2/70 p-3">
+            <div className="text-xs uppercase text-muted">Commands</div>
+            <div className="mt-2 text-xs text-muted">install, test, build, typecheck, lint when available</div>
+          </div>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Installed tools</CardTitle>
         </CardHeader>
         <CardBody>

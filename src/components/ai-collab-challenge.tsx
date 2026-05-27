@@ -5,6 +5,11 @@ import { Input, TextArea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 
 type Evaluation = {
+  challenge_id?: string;
+  prompt?: string;
+  target_files?: string[];
+  expected_capabilities?: string[];
+  difficulty?: "easy" | "medium" | "hard";
   correctness_score: number;
   explanation_quality_score: number;
   test_awareness_score: number;
@@ -13,6 +18,7 @@ type Evaluation = {
   overall_score: number;
   tool_used: string;
   feedback: string;
+  what_this_proves?: string[];
 };
 
 const TOOLS = ["Claude Code", "Codex", "Cursor", "Gemini", "Manual", "Other"];
@@ -29,11 +35,20 @@ export function AICollabChallenge({
   onUpdated?: (e: Evaluation) => void;
 }) {
   const target = importantFiles[0] ?? "the main module";
-  const defaultPrompt = `Add null-handling and one unit test to ${target}.`;
+  const challenge = {
+    id: `challenge-${runId.slice(0, 8)}`,
+    prompt: `Improve the reliability of ${target}: add defensive handling for one realistic edge case and include or justify the test coverage.`,
+    targetFiles: importantFiles.slice(0, 3),
+    expectedCapabilities: ["repo-aware patch targeting", "test awareness", "AI-output review", "tradeoff communication"],
+    difficulty: "medium" as const,
+  };
 
-  const [prompt, setPrompt] = useState(defaultPrompt);
+  const [prompt, setPrompt] = useState(challenge.prompt);
   const [diff, setDiff] = useState("");
   const [explanation, setExplanation] = useState("");
+  const [testsChanged, setTestsChanged] = useState("");
+  const [reviewed, setReviewed] = useState(false);
+  const [limitations, setLimitations] = useState(false);
   const [tool, setTool] = useState("Claude Code");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,9 +67,16 @@ export function AICollabChallenge({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           run_id: runId,
+          challenge_id: challenge.id,
           challenge_prompt: prompt,
+          target_files: challenge.targetFiles,
+          expected_capabilities: challenge.expectedCapabilities,
+          difficulty: challenge.difficulty,
           proposed_diff: diff,
           explanation,
+          tests_changed: testsChanged,
+          reviewed_ai_output: reviewed,
+          limitations_discussed: limitations,
           tool_used: tool,
         }),
       });
@@ -75,6 +97,7 @@ export function AICollabChallenge({
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="good">Overall {evaln.overall_score}/100</Badge>
           <Badge>{evaln.tool_used}</Badge>
+          {evaln.difficulty && <Badge>{evaln.difficulty}</Badge>}
         </div>
         <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-5">
           {[
@@ -91,6 +114,14 @@ export function AICollabChallenge({
           ))}
         </div>
         <p className="text-sm italic text-muted">{evaln.feedback}</p>
+        {evaln.what_this_proves?.length ? (
+          <div className="rounded border border-border bg-panel/70 p-3 text-sm">
+            <div className="text-xs uppercase tracking-wide text-muted">What this proves</div>
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
+              {evaln.what_this_proves.map((item, i) => <li key={i}>{item}</li>)}
+            </ul>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -98,6 +129,20 @@ export function AICollabChallenge({
   return (
     <div className="space-y-3">
       <div>
+        <div className="mb-2 rounded border border-border bg-panel/70 p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone="accent">Generated challenge</Badge>
+            <Badge>{challenge.difficulty}</Badge>
+          </div>
+          <div className="mt-2 text-xs uppercase tracking-wide text-muted">Target files</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {challenge.targetFiles.map((file) => <Badge key={file}>{file}</Badge>)}
+          </div>
+          <div className="mt-2 text-xs uppercase tracking-wide text-muted">Expected capabilities</div>
+          <div className="mt-1 flex flex-wrap gap-1">
+            {challenge.expectedCapabilities.map((cap) => <Badge key={cap}>{cap}</Badge>)}
+          </div>
+        </div>
         <label className="text-xs uppercase tracking-wide text-muted">Challenge prompt</label>
         <TextArea value={prompt} onChange={(e) => setPrompt(e.target.value)} className="mt-1 min-h-[60px]" />
       </div>
@@ -118,6 +163,25 @@ export function AICollabChallenge({
           className="mt-1 min-h-[100px]"
           placeholder="Why this approach? What did you skip? Any tradeoffs?"
         />
+      </div>
+      <div>
+        <label className="text-xs uppercase tracking-wide text-muted">Tests added/changed or justification</label>
+        <TextArea
+          value={testsChanged}
+          onChange={(e) => setTestsChanged(e.target.value)}
+          className="mt-1 min-h-[70px]"
+          placeholder="Example: added src/foo.test.ts for null input; or explain why test was not practical."
+        />
+      </div>
+      <div className="grid gap-2 text-sm sm:grid-cols-2">
+        <label className="flex items-center gap-2 rounded border border-border bg-panel/60 p-2">
+          <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />
+          <span>Reviewed AI output before submitting</span>
+        </label>
+        <label className="flex items-center gap-2 rounded border border-border bg-panel/60 p-2">
+          <input type="checkbox" checked={limitations} onChange={(e) => setLimitations(e.target.checked)} />
+          <span>Mentioned limitations or tradeoffs</span>
+        </label>
       </div>
       <div>
         <label className="text-xs uppercase tracking-wide text-muted">Tool used</label>

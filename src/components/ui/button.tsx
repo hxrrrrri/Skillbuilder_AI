@@ -9,14 +9,14 @@ type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ className, variant = "primary", size = "md", ...rest }: Props) {
   const base =
-    "inline-flex items-center justify-center font-medium rounded-md transition disabled:opacity-50 disabled:cursor-not-allowed";
+    "inline-flex items-center justify-center rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
   const variants = {
-    primary: "bg-accent text-black hover:bg-accent/90 shadow-glow",
-    ghost: "bg-transparent text-ink hover:bg-panel2",
-    outline: "border border-border text-ink hover:bg-panel2",
+    primary: "border border-accent/70 bg-accent text-cream shadow-glow hover:bg-[#ba654f] active:bg-[#a9583f]",
+    ghost: "bg-transparent text-ink hover:bg-panel2 hover:text-accent",
+    outline: "border border-border bg-bg/30 text-ink hover:border-accent/60 hover:bg-panel2 hover:text-accent",
   } as const;
   const sizes = {
-    sm: "h-8 px-3 text-sm",
+    sm: "h-9 px-3 text-sm",
     md: "h-10 px-4 text-sm",
     lg: "h-12 px-6 text-base",
   } as const;
