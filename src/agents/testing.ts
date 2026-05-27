@@ -1,6 +1,11 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
-import type { Handoff, MissionState, TestingOutput, ValidationAssertionResult } from "./types";
+import {
+  getTerminalEvidence,
+  hasFailingCommand,
+  hasPassingCommand,
+} from "@/lib/local-runner/evidence-analysis";
+import type { Evidence, Handoff, MissionState, TestingOutput, ValidationAssertionResult } from "./types";
 
 const SYSTEM = `You are the Testing & Reliability agent of SkillProof AI.
 Use ONLY the provided file index and snippets. Return STRICT JSON:
@@ -11,6 +16,8 @@ Use ONLY the provided file index and snippets. Return STRICT JSON:
   "has_ci": boolean,
   "evidence": [{"file": string, "reason": string}]
 }`;
+
+const SCHEMA_HINT = '{"testing_score":number,"test_count":number,"has_e2e":boolean,"has_ci":boolean,"evidence":[{"file":string,"reason":string}]}';
 
 function fallback(state: MissionState): TestingOutput {
   const pack = state.context_pack!;
@@ -52,38 +59,59 @@ function deriveAssertionResults(state: MissionState, out: TestingOutput): Valida
     });
 }
 
-export async function runTesting(state: MissionState): Promise<Handoff<TestingOutput>> {
-  if (!state.context_pack) throw new Error("testing: context_pack missing");
-  let out: TestingOutput;
-  let tin = 0, tout = 0;
+// Override LLM/heuristic with real test execution if terminal evidence exists.
+function applyTerminalEvidence(state: MissionState, out: TestingOutput) {
+  const evidence = getTerminalEvidence(state);
+  const testPass = hasPassingCommand(evidence, "testing");
+  const testFail = hasFailingCommand(evidence, "testing");
+  const extra: Evidence[] = [];
 
-  if (isMockMode()) {
-    out = { ...fallback(state), score_source: state.mock_mode ? "mock" : "heuristic" };
-  } else {
-    const user = `${buildContextBlock(state.context_pack)}
-
-Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 1200 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<TestingOutput>(r.text);
-      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(state), score_source: "heuristic" };
-    } catch {
-      out = { ...fallback(state), score_source: "heuristic" };
-    }
+  if (testPass) {
+    out.testing_score = Math.max(out.testing_score, 70);
+    extra.push({
+      reason: `terminal · tests PASSED · \`${testPass.command}\` exit=0 (${testPass.durationMs}ms)`,
+      snippet: testPass.stdoutSummary.slice(0, 200),
+    });
+  } else if (testFail) {
+    out.testing_score = Math.min(out.testing_score, 45);
+    extra.push({
+      reason: `terminal · tests FAILED · \`${testFail.command}\` exit=${testFail.exitCode}`,
+      snippet: (testFail.stderrSummary || testFail.stdoutSummary).slice(0, 200),
+    });
   }
 
+  out.evidence = [...out.evidence, ...extra];
+}
+
+export async function runTesting(state: MissionState): Promise<Handoff<TestingOutput>> {
+  if (!state.context_pack) throw new Error("testing: context_pack missing");
+
+  const user = `${buildContextBlock(state.context_pack)}
+
+Return the JSON now.`;
+
+  const res = await runAgentJson<TestingOutput>({
+    state,
+    role: "worker",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 1200,
+    fallback: () => fallback(state),
+  });
+
+  const out: TestingOutput = { ...res.output, score_source: res.source };
+  applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Testing",
     score: out.testing_score,
     evidence: out.evidence,
-    confidence: out.score_source === "llm" ? 0.85 : 0.7, // heuristic for testing is fairly strong
-    source: out.score_source ?? "heuristic",
+    confidence: res.source === "llm" ? 0.85 : 0.7,
+    source: res.source,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
   state.assertion_results.push(...(out.assertion_results ?? []));
@@ -92,7 +120,10 @@ Return the JSON now.`;
     agent: "testing",
     completed: ["testing_analyzed"],
     unresolved: [],
-    evidence: out.evidence,
+    evidence: [
+      ...out.evidence,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.testing_score < 50 ? ["Testing coverage looks weak."] : [],
     next_recommended: "security",
     assertion_results: out.assertion_results,

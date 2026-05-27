@@ -6,6 +6,17 @@ vi.mock("@/lib/claude", () => ({
   extractJson: vi.fn(),
 }));
 
+vi.mock("@/lib/providers/run-agent", () => ({
+  runAgentJson: vi.fn(async (opts: any) => ({
+    output: opts.fallback(),
+    provider: "mock",
+    model: "mock:heuristic",
+    inputTokens: 0,
+    outputTokens: 0,
+    source: "mock",
+  })),
+}));
+
 import { runValidator } from "./validator";
 import type { MissionState, ValidationContract } from "./types";
 
@@ -47,6 +58,10 @@ function makeState(overrides: Partial<MissionState> = {}): MissionState {
     tokens_in: 0,
     tokens_out: 0,
     mock_mode: true,
+    execution_mode: "mock",
+    provider_matrix: null,
+    terminal_evidence: [],
+    ownership_status: null,
     ...overrides,
   };
 }

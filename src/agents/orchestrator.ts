@@ -1,4 +1,4 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import type { Handoff, MissionState, ValidationContract } from "./types";
 
 const SYSTEM = `You are the Orchestrator agent of SkillProof AI's Mission system.
@@ -21,6 +21,8 @@ You must return STRICT JSON only — no commentary, no markdown fences — match
 
 Cover these dimensions: architecture, code_quality, testing, security, git_workflow, documentation, debugging, ai_collaboration, communication.
 Weights must sum approximately to 100 across rubric entries. Assertions should be concrete and verifiable from a repo (e.g. "Repo contains at least one integration test that exercises a route handler").`;
+
+const SCHEMA_HINT = '{"mission_id":string,"target_role":string,"candidate_level":string,"evaluation_dimensions":string[],"assertions":[{"id":string,"dimension":string,"statement":string,"weight":number}],"rubric":Record<string,{weight:number,passingScore:number}>}';
 
 function fallbackContract(state: MissionState): ValidationContract {
   return {
@@ -68,40 +70,34 @@ function fallbackContract(state: MissionState): ValidationContract {
 }
 
 export async function runOrchestrator(state: MissionState, jobDescription?: string): Promise<Handoff<ValidationContract>> {
-  let contract: ValidationContract;
-  let tokens_in = 0;
-  let tokens_out = 0;
-
-  if (isMockMode()) {
-    contract = fallbackContract(state);
-  } else {
-    const user = `Mission: ${state.mission_id}
+  const user = `Mission: ${state.mission_id}
 Target role: ${state.target_role}
 Candidate level: ${state.candidate_level}
 ${jobDescription ? `\nJob description:\n${jobDescription}` : ""}
 
 Produce the validation contract JSON now.`;
 
-    try {
-      const r = await llmCall({ role: "orchestrator", system: SYSTEM, user, maxTokens: 2500, temperature: 0.2 });
-      tokens_in = r.inputTokens;
-      tokens_out = r.outputTokens;
-      const parsed = extractJson<ValidationContract>(r.text);
-      contract = parsed ?? fallbackContract(state);
-    } catch {
-      contract = fallbackContract(state);
-    }
-  }
+  const res = await runAgentJson<ValidationContract>({
+    state,
+    role: "orchestrator",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 2500,
+    temperature: 0.2,
+    fallback: () => fallbackContract(state),
+  });
 
+  const contract = res.output && res.output.assertions?.length ? res.output : fallbackContract(state);
   state.contract = contract;
-  state.tokens_in += tokens_in;
-  state.tokens_out += tokens_out;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
 
   return {
     agent: "orchestrator",
     completed: ["validation_contract_authored"],
     unresolved: [],
-    evidence: [],
+    evidence: [{ reason: `Contract built by ${res.provider} (${res.model}); source=${res.source}` }],
     issues_found: [],
     next_recommended: "repo-scanner",
     output: contract,

@@ -1,6 +1,7 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildCommitsBlock } from "./_analysis";
-import type { GitEvidenceOutput, Handoff, MissionState, ValidationAssertionResult } from "./types";
+import { getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
+import type { Evidence, GitEvidenceOutput, Handoff, MissionState, ValidationAssertionResult } from "./types";
 
 const SYSTEM = `You are the Git Evidence agent of SkillProof AI.
 Judge real development behavior from the commit log only.
@@ -11,6 +12,8 @@ Return STRICT JSON:
   "avg_msg_quality": number (0-100),
   "evidence": [{"reason": string}]
 }`;
+
+const SCHEMA_HINT = '{"git_workflow_score":number,"commit_count":number,"avg_msg_quality":number,"evidence":[{"reason":string}]}';
 
 function gradeMsg(msg: string): number {
   const first = msg.split("\n")[0].trim();
@@ -52,38 +55,63 @@ function deriveAssertionResults(state: MissionState, out: GitEvidenceOutput): Va
     }) as ValidationAssertionResult);
 }
 
-export async function runGitEvidence(state: MissionState): Promise<Handoff<GitEvidenceOutput>> {
-  if (!state.context_pack) throw new Error("git-evidence: context_pack missing");
-  let out: GitEvidenceOutput;
-  let tin = 0, tout = 0;
-
-  if (isMockMode()) {
-    out = { ...fallback(state), score_source: state.mock_mode ? "mock" : "heuristic" };
-  } else {
-    const user = `${buildCommitsBlock(state.context_pack)}
-
-Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 900 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<GitEvidenceOutput>(r.text);
-      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(state), score_source: "heuristic" };
-    } catch {
-      out = { ...fallback(state), score_source: "heuristic" };
+// Prefer local git log/shortlog evidence when available.
+function applyTerminalEvidence(state: MissionState, out: GitEvidenceOutput) {
+  const evidence = getTerminalEvidence(state, "git");
+  if (!evidence.length) return;
+  const extra: Evidence[] = [];
+  let bonus = 0;
+  for (const e of evidence) {
+    if (e.exitCode === 0) {
+      bonus += 3;
+      extra.push({
+        reason: `terminal · git · \`${e.command}\` exit=0`,
+        snippet: (e.stdoutSummary || "").slice(0, 200),
+      });
+      // Count lines as commit signal when shortlog/log used.
+      if (/shortlog|log/.test(e.command)) {
+        const lines = (e.stdoutSummary || "").split(/\r?\n/).filter((l) => l.trim().length > 0).length;
+        if (lines > out.commit_count) out.commit_count = lines;
+      }
+    } else if (e.exitCode !== null) {
+      extra.push({
+        reason: `terminal · git FAILED · \`${e.command}\` exit=${e.exitCode}`,
+      });
     }
   }
+  out.git_workflow_score = Math.min(100, out.git_workflow_score + Math.min(bonus, 8));
+  out.evidence = [...out.evidence, ...extra];
+}
 
+export async function runGitEvidence(state: MissionState): Promise<Handoff<GitEvidenceOutput>> {
+  if (!state.context_pack) throw new Error("git-evidence: context_pack missing");
+
+  const user = `${buildCommitsBlock(state.context_pack)}
+
+Return the JSON now.`;
+
+  const res = await runAgentJson<GitEvidenceOutput>({
+    state,
+    role: "worker",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 900,
+    fallback: () => fallback(state),
+  });
+
+  const out: GitEvidenceOutput = { ...res.output, score_source: res.source };
+  applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Git Workflow",
     score: out.git_workflow_score,
     evidence: out.evidence,
-    confidence: out.score_source === "llm" ? 0.85 : 0.75,
-    source: out.score_source ?? "heuristic",
+    confidence: res.source === "llm" ? 0.85 : 0.75,
+    source: res.source,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
   state.assertion_results.push(...(out.assertion_results ?? []));
@@ -92,7 +120,10 @@ Return the JSON now.`;
     agent: "git-evidence",
     completed: ["git_log_analyzed"],
     unresolved: [],
-    evidence: out.evidence,
+    evidence: [
+      ...out.evidence,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.git_workflow_score < 50 ? ["Commit hygiene needs work."] : [],
     next_recommended: "documentation",
     assertion_results: out.assertion_results,

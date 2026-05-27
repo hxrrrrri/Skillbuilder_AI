@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { isMockMode } from "@/lib/claude";
 import { recomputeOverall } from "@/agents/skill-graph";
-import type { AICollabEvaluation } from "@/agents/types";
+import { runAgentJson } from "@/lib/providers/run-agent";
+import { safeJsonParse } from "@/lib/utils";
+import type { AICollabEvaluation, MissionState } from "@/agents/types";
+import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
+import type { ProviderMatrix } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +34,8 @@ Return STRICT JSON:
   "tool_used": string,
   "feedback": string
 }`;
+
+const SCHEMA_HINT = '{"correctness_score":number,"explanation_quality_score":number,"test_awareness_score":number,"review_discipline_score":number,"ai_collaboration_maturity_score":number,"overall_score":number,"tool_used":string,"feedback":string}';
 
 function heuristicScore(body: z.infer<typeof Body>): AICollabEvaluation {
   const diff = body.proposed_diff;
@@ -67,13 +73,30 @@ export async function POST(req: Request) {
   const run = await prisma.analysisRun.findUnique({ where: { id: body.run_id } });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
 
-  let out: AICollabEvaluation;
   const baseline = heuristicScore(body);
+  const mode: ExecutionMode = (run.executionMode as ExecutionMode) ?? "api";
 
-  if (isMockMode()) {
-    out = baseline;
-  } else {
-    const user = `Challenge prompt: ${body.challenge_prompt}
+  const state: MissionState = {
+    mission_id: `challenge_${body.run_id.slice(0, 8)}`,
+    run_id: body.run_id,
+    target_role: run.targetRole,
+    candidate_level: run.candidateLevel ?? "",
+    contract: null,
+    context_pack: null,
+    scores: [],
+    handoffs: [],
+    assertion_results: [],
+    authenticity: null,
+    tokens_in: 0,
+    tokens_out: 0,
+    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    execution_mode: mode,
+    provider_matrix: safeJsonParse<ProviderMatrix | null>(run.providerMatrix ?? null, null),
+    terminal_evidence: safeJsonParse<TerminalEvidence[]>(run.terminalEvidence ?? null, []),
+    ownership_status: safeJsonParse(run.ownershipStatus ?? null, null),
+  };
+
+  const user = `Challenge prompt: ${body.challenge_prompt}
 Tool the candidate says they used: ${body.tool_used}
 
 Proposed diff:
@@ -87,20 +110,24 @@ Candidate explanation:
 Heuristic baseline: ${JSON.stringify(baseline)}
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "validator", system: SYSTEM, user, maxTokens: 900 });
-      out = extractJson<AICollabEvaluation>(r.text) ?? baseline;
-    } catch {
-      out = baseline;
-    }
-  }
+
+  const res = await runAgentJson<AICollabEvaluation>({
+    state,
+    role: "validator",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 900,
+    fallback: () => baseline,
+  });
+
+  const out = res.output;
 
   await prisma.analysisRun.update({
     where: { id: body.run_id },
     data: { aiCollaboration: JSON.stringify(out) },
   });
 
-  // Persist as a skill score so it counts in the rubric.
   const existing = await prisma.skillScore.findFirst({
     where: { runId: body.run_id, skillName: "AI Collaboration" },
   });
@@ -108,8 +135,8 @@ Return the JSON now.`;
     runId: body.run_id,
     skillName: "AI Collaboration",
     score: out.overall_score,
-    confidence: isMockMode() ? 0.5 : 0.8,
-    scoreSource: isMockMode() ? "mock" : "llm",
+    confidence: res.source === "llm" ? 0.8 : 0.5,
+    scoreSource: res.source,
     evidence: JSON.stringify([{ reason: `AI Collaboration challenge submission (${out.tool_used}). ${out.feedback}` }]),
   };
   if (existing) {

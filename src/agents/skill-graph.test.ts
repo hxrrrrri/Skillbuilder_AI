@@ -23,6 +23,10 @@ function makeState(scoresIn: Array<{ skill: string; score: number; source?: any 
     tokens_in: 0,
     tokens_out: 0,
     mock_mode: false,
+    execution_mode: "api",
+    provider_matrix: null,
+    terminal_evidence: [],
+    ownership_status: null,
   };
 }
 

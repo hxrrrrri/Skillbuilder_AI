@@ -1,7 +1,13 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
+import {
+  getTerminalEvidence,
+  hasFailingCommand,
+  hasPassingCommand,
+} from "@/lib/local-runner/evidence-analysis";
 import type {
   CodeQualityOutput,
+  Evidence,
   Handoff,
   MissionState,
   ValidationAssertionResult,
@@ -15,6 +21,8 @@ Return STRICT JSON:
   "observations": string[],
   "evidence": [{"file": string, "line": number?, "reason": string}]
 }`;
+
+const SCHEMA_HINT = '{"code_quality_score":number,"observations":string[],"evidence":[{"file":string,"line":number?,"reason":string}]}';
 
 function fallback(): CodeQualityOutput {
   return {
@@ -41,40 +49,68 @@ function deriveAssertionResults(state: MissionState, out: CodeQualityOutput): Va
     }) as ValidationAssertionResult);
 }
 
+// Apply build + typecheck terminal evidence to nudge code quality score.
+function applyTerminalEvidence(state: MissionState, out: CodeQualityOutput) {
+  const evidence = getTerminalEvidence(state);
+  const extra: Evidence[] = [];
+  const buildPass = hasPassingCommand(evidence, "build");
+  const buildFail = hasFailingCommand(evidence, "build");
+  const tcPass = hasPassingCommand(evidence, "typecheck");
+  const tcFail = hasFailingCommand(evidence, "typecheck");
+
+  if (buildPass) {
+    out.code_quality_score = Math.min(100, out.code_quality_score + 5);
+    extra.push({ reason: `terminal · build OK · \`${buildPass.command}\` exit=0` });
+    out.observations.unshift("Local build succeeded.");
+  } else if (buildFail) {
+    out.code_quality_score = Math.max(0, out.code_quality_score - 12);
+    extra.push({ reason: `terminal · build FAILED · \`${buildFail.command}\` exit=${buildFail.exitCode}` });
+    out.observations.unshift("Local build failed — reliability risk.");
+  }
+
+  if (tcPass) {
+    out.code_quality_score = Math.min(100, out.code_quality_score + 4);
+    extra.push({ reason: `terminal · typecheck OK · \`${tcPass.command}\` exit=0` });
+  } else if (tcFail) {
+    out.code_quality_score = Math.max(0, out.code_quality_score - 10);
+    extra.push({ reason: `terminal · typecheck FAILED · \`${tcFail.command}\` exit=${tcFail.exitCode}` });
+    out.observations.unshift("Local typecheck failed — likely typing issues.");
+  }
+
+  out.evidence = [...out.evidence, ...extra];
+}
+
 export async function runCodeQuality(state: MissionState): Promise<Handoff<CodeQualityOutput>> {
   if (!state.context_pack) throw new Error("code-quality: context_pack missing");
-  let out: CodeQualityOutput;
-  let tin = 0, tout = 0;
 
-  if (isMockMode()) {
-    out = { ...fallback(), score_source: state.mock_mode ? "mock" : "heuristic" };
-  } else {
-    const user = `Target role: ${state.target_role}
+  const user = `Target role: ${state.target_role}
 
 ${buildContextBlock(state.context_pack)}
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 1800 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<CodeQualityOutput>(r.text);
-      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(), score_source: "heuristic" };
-    } catch {
-      out = { ...fallback(), score_source: "heuristic" };
-    }
-  }
 
+  const res = await runAgentJson<CodeQualityOutput>({
+    state,
+    role: "worker",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 1800,
+    fallback,
+  });
+
+  const out: CodeQualityOutput = { ...res.output, score_source: res.source };
+  applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Code Quality",
     score: out.code_quality_score,
     evidence: out.evidence,
-    confidence: out.score_source === "llm" ? 0.85 : out.score_source === "mock" ? 0.3 : 0.55,
-    source: out.score_source ?? "heuristic",
+    confidence: res.source === "llm" ? 0.85 : res.source === "mock" ? 0.3 : 0.6,
+    source: res.source,
     weaknesses: out.observations,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
@@ -84,7 +120,10 @@ Return the JSON now.`;
     agent: "code-quality",
     completed: ["code_quality_analyzed"],
     unresolved: [],
-    evidence: out.evidence,
+    evidence: [
+      ...out.evidence,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.observations,
     next_recommended: "testing",
     assertion_results: out.assertion_results,

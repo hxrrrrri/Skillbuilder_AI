@@ -111,6 +111,28 @@ npm run check
   yellow "Mock / Heuristic mode active" banner and tags every score with a `Heuristic` or `Mock`
   badge. Scores are deterministic and confidence is reduced. The product never pretends
   fallback scores are fully verified.
+- **Demo seed** — `GET /api/demo/seed` fabricates a complete mission (executionMode=`cli`,
+  provider matrix, terminal evidence, ownership=verified, skill scores, interview answer,
+  challenge submission, employer verifier). Used by the landing page **Open Demo Mission**
+  button so the hackathon demo survives GitHub rate limits and missing CLIs. Clearly labeled
+  as sample data.
+
+---
+
+## What is fully wired vs future work
+
+| Status     | Capability                                                            |
+| ---------- | --------------------------------------------------------------------- |
+| ✅ Wired    | Provider mesh routes through `runAgentJson` in every agent.           |
+| ✅ Wired    | Terminal evidence affects Testing / Build / Typecheck / Git / Security / Code Quality scores. |
+| ✅ Wired    | Ownership status (`owner_match` / `repo_token_verified` / `self_declared` / `unverified`) shows in Mission, Public Profile, Employer Verifier, Markdown report. |
+| ✅ Wired    | Markdown report includes provider matrix, terminal evidence, ownership confidence. |
+| ✅ Wired    | Public profile shows execution mode, ownership badge, local proof summary, provider matrix. |
+| ✅ Wired    | Hardened command policy: destructive patterns block before allowlist; approval only lifts allowlisted commands. |
+| ✅ Wired    | `parseRepoUrl` rejects spoof hosts like `github.com.evil.com`. |
+| ⏳ Future   | Private repo support via local folder upload — currently public GitHub URLs only. CLI mode keeps private code on the candidate's machine when used. |
+| ⏳ Future   | Real job queue + worker for mission execution (currently in-process).  |
+| ⏳ Future   | Cryptographic signed badge embed.                                      |
 
 ---
 
@@ -218,6 +240,8 @@ If `{{prompt}}` is not present in `args`, the prompt is piped via stdin instead.
 | POST   | `/api/local/command`          | Run a safe terminal command. Body: `command`, `args`, `cwd?`, `mission_id?`, `approved?`, `saveAsEvidence?`, `usedFor?`. Returns `403 approval_required` for gated commands. |
 | GET    | `/api/local/providers?mode=…` | List provider availability + matrix for an execution mode. |
 | POST   | `/api/local/providers`        | Save `skillproof.local.json` provider config.        |
+| POST   | `/api/local/providers/test`   | Run a tiny JSON probe against a single provider. Body: `provider_id`, `prompt?`. Returns parsed JSON, raw output, model, token estimate, or error. |
+| GET    | `/api/demo/seed`              | Fabricate a complete demo mission and return its profile URL. Sample data — clearly labeled. |
 
 ---
 

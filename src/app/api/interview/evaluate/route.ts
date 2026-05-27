@@ -6,6 +6,8 @@ import { recomputeOverall } from "@/agents/skill-graph";
 import { safeJsonParse } from "@/lib/utils";
 import { isMockMode } from "@/lib/claude";
 import type { MissionState } from "@/agents/types";
+import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
+import type { ProviderMatrix } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,11 +28,13 @@ export async function POST(req: Request) {
   const q = await prisma.interviewQuestion.findUnique({ where: { id: body.question_id } });
   if (!q) return NextResponse.json({ error: "question_not_found" }, { status: 404 });
 
+  const run = await prisma.analysisRun.findUnique({ where: { id: q.runId } });
+  const mode: ExecutionMode = (run?.executionMode as ExecutionMode) ?? "api";
   const state: MissionState = {
     mission_id: `eval_${q.runId.slice(0, 8)}`,
     run_id: q.runId,
-    target_role: "",
-    candidate_level: "",
+    target_role: run?.targetRole ?? "",
+    candidate_level: run?.candidateLevel ?? "",
     contract: null,
     context_pack: null,
     scores: [],
@@ -39,7 +43,11 @@ export async function POST(req: Request) {
     authenticity: null,
     tokens_in: 0,
     tokens_out: 0,
-    mock_mode: isMockMode(),
+    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    execution_mode: mode,
+    provider_matrix: safeJsonParse<ProviderMatrix | null>(run?.providerMatrix ?? null, null),
+    terminal_evidence: safeJsonParse<TerminalEvidence[]>(run?.terminalEvidence ?? null, []),
+    ownership_status: safeJsonParse(run?.ownershipStatus ?? null, null),
   };
 
   const handoff = await evaluateAnswer(

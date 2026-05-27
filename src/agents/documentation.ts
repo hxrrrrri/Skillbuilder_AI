@@ -1,4 +1,4 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import type {
   DocumentationOutput,
   Handoff,
@@ -16,6 +16,8 @@ Return STRICT JSON:
   "evidence": [{"file": string, "reason": string}]
 }
 Reward project-specific content (how to run, what it does, design decisions). Penalize template boilerplate.`;
+
+const SCHEMA_HINT = '{"documentation_score":number,"has_readme":boolean,"readme_specificity":number,"evidence":[{"file":string,"reason":string}]}';
 
 function specificity(readme: string | null): number {
   if (!readme) return 0;
@@ -67,41 +69,37 @@ function deriveAssertionResults(state: MissionState, out: DocumentationOutput): 
 
 export async function runDocumentation(state: MissionState): Promise<Handoff<DocumentationOutput>> {
   if (!state.context_pack) throw new Error("documentation: context_pack missing");
-  let out: DocumentationOutput;
-  let tin = 0, tout = 0;
 
-  if (isMockMode()) {
-    out = { ...fallback(state), score_source: state.mock_mode ? "mock" : "heuristic" };
-  } else {
-    const readmeSnippet = state.context_pack.snippets.find(
-      (s) => s.path === state.context_pack?.filesIndex.readme
-    );
-    const user = `README path: ${state.context_pack.filesIndex.readme ?? "(none)"}
+  const readmeSnippet = state.context_pack.snippets.find(
+    (s) => s.path === state.context_pack?.filesIndex.readme
+  );
+  const user = `README path: ${state.context_pack.filesIndex.readme ?? "(none)"}
 README content (truncated to 4k chars):
 ${(readmeSnippet?.content ?? "(none)").slice(0, 4000)}
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 800 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<DocumentationOutput>(r.text);
-      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(state), score_source: "heuristic" };
-    } catch {
-      out = { ...fallback(state), score_source: "heuristic" };
-    }
-  }
 
+  const res = await runAgentJson<DocumentationOutput>({
+    state,
+    role: "worker",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 800,
+    fallback: () => fallback(state),
+  });
+
+  const out: DocumentationOutput = { ...res.output, score_source: res.source };
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Documentation",
     score: out.documentation_score,
     evidence: out.evidence,
-    confidence: out.score_source === "llm" ? 0.8 : 0.65,
-    source: out.score_source ?? "heuristic",
+    confidence: res.source === "llm" ? 0.8 : 0.65,
+    source: res.source,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
   state.assertion_results.push(...(out.assertion_results ?? []));
@@ -110,7 +108,10 @@ Return the JSON now.`;
     agent: "documentation",
     completed: ["documentation_analyzed"],
     unresolved: [],
-    evidence: out.evidence,
+    evidence: [
+      ...out.evidence,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.documentation_score < 50 ? ["Documentation thin or templated."] : [],
     next_recommended: "authenticity",
     assertion_results: out.assertion_results,

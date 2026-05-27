@@ -2,8 +2,8 @@
 
 > **Most students show resumes. SkillProof shows evidence.**
 
-This is the 5-minute demo flow. Each step maps to a piece of the Missions architecture you'll see
-on screen.
+This is the 5–7 minute demo flow. Each step maps to a piece of the Missions architecture you'll
+see on screen.
 
 ---
 
@@ -24,77 +24,79 @@ export ANTHROPIC_API_KEY=...     # real Claude mode
 export SKILLPROOF_MOCK_LLM=1     # offline heuristic mode (UI shows a yellow banner)
 ```
 
+### Safety net — if anything fails live
+
+Click **Open Demo Mission (sample data)** on the landing page, or hit
+`GET /api/demo/seed` directly. This fabricates a complete mission with `executionMode=cli`,
+provider matrix, terminal evidence, ownership=verified, skill scores, interview answer, and
+challenge submission. The seeded profile lives at `/profile/demo`.
+
 ---
 
 ## Script
 
-1. **Landing page.** "Most students show resumes. SkillProof shows evidence."
-   Paste a public GitHub repo URL, candidate name, optional GitHub username, target role, level.
+1. **Open `/local-setup`.** Show the detected tools panel — `git`, `gh`, `claude`, `codex`,
+   `ollama`, optional `copilot`. Auth status, versions, capabilities. The page recommends an
+   execution mode. **Provider matrix** shows which provider each agent role will use.
 
-2. **Mission starts.** Hit *Run SkillProof mission*. App redirects to Mission Control.
+2. **Click `Test JSON output`** on a provider (e.g. `ollama` or `claude_cli`). The button posts to
+   `/api/local/providers/test` with a tiny `{"ok": true}` prompt and shows the parsed JSON, the
+   raw output, and the model. Useful because CLI flags drift between versions.
 
-3. **Orchestrator → Validation Contract.** First agent card lights up. The orchestrator writes
-   the rubric *before* any code is read. Show that correctness is defined independently.
+3. **Run a safe terminal command** in the sandbox console — e.g. `git --version`. Try a blocked
+   command like `rm -rf /` — policy refuses. Try `npm install -g foo` — policy returns
+   `approval_required`.
 
-4. **Repo Scanner → Context Pack.** Deterministic, no-LLM. Builds a token-efficient pack: README,
-   configs, ranked source files, sampled tests, last 30 commits. Show the **Token Meter** —
-   raw repo estimate vs analyzed pack. Saved % is real.
+4. **Back to landing page.** Paste a public GitHub repo URL, name, optional GitHub username,
+   target role, level. Pick **Local CLI Mode**.
 
-5. **Workers run serially.** Architecture → Code Quality → Testing → Security → Git Evidence →
-   Documentation → Authenticity. Each emits a structured `Handoff`. Each score carries evidence
-   citing real file paths.
+5. **Run mission.** App redirects to Mission Control. Local Proof Runner clones the repo into
+   `.skillproof/runs/<run_id>` and starts capturing terminal evidence: `git log`, `git shortlog`,
+   `git branch`, `git status`, `git remote`, `pnpm test`, `pnpm build`, `pnpm typecheck`,
+   security greps, `gh api user` for ownership.
 
-6. **Interview Generator.** Builds 5 questions tailored to files the candidate actually wrote.
+6. **Mission Control shows agents lighting up.** Orchestrator → Repo Scanner → Architecture →
+   Code Quality → Testing → Security → Git Evidence → Documentation → Authenticity →
+   Interview Gen → Validator → Skill Graph → Profile Gen. Every agent calls through
+   `runAgentJson`, which routes to the provider matrix — so a worker score might come from
+   `ollama`, a validator score from `anthropic_api`, etc. Each agent emits a
+   `provider=… model=…` evidence row.
 
-7. **Validator (fresh context).** The validator gets only the score claims + the **full repo file
-   truth set**. It can never raise scores. It lowers unsupported claims, flags hallucinated file
-   paths, and caps anything > 85 without exceptional evidence.
+7. **Terminal evidence affects scores.** Open the Testing card. If `pnpm test` exited 0, the
+   testing score is at least 70 with cited terminal output. If it failed, score is capped at 45
+   with the failure quoted. Same for Build → Code Quality, Typecheck → Code Quality, git
+   commands → Git Workflow, security greps → Security findings.
 
-8. **Skill Graph.** Weighted rubric aggregation. Anything not measured is shown as
-   `not measured` and excluded from the overall denominator — no silent neutral-50 fillers.
+8. **Evidence Locker.** Every score row shows source (`LLM` / `Heuristic` / `Mock`), confidence,
+   cited files, terminal commands, validator notes, and which contract assertions it addresses.
 
-9. **Evidence Locker.** Every score is filterable by skill. Each row shows:
-   - score
-   - confidence
-   - source badge (`LLM`, `Heuristic`, `Mock`)
-   - support label (`Verified`, `Partial`, `Insufficient`)
-   - cited files
-   - validator notes
-   - which contract assertion IDs it addresses
+9. **Ownership status.** Header shows a badge: `verified` (gh user matches repo owner),
+   `self_declared` (username provided but not verified), or `unverified`. Public profile +
+   Employer Verifier surface the same signal.
 
-10. **Validation Contract Coverage.** Show the dedicated card. Every assertion has a status:
-    passed / partial / failed / unknown. *"A5 Testing: Repo contains automated tests for at least
-    one critical path. Status: Failed. Evidence: No test files detected by scanner."*
+10. **Validation Contract Coverage.** Every assertion has a status: passed / partial / failed /
+    unknown. Coverage rolls up assertion results from each worker.
 
-11. **Authenticity Signals.** Positive vs risk signals (commit messages, project age, README
-    template detection, test presence). Confidence is shown. Not called plagiarism detection.
+11. **Authenticity Signals.** Positive vs risk signals. Not plagiarism detection.
 
-12. **Code-Based Interview.** Answer at least one question. The answer evaluator runs with FRESH
-    CONTEXT and scores 5 dimensions: communication, debugging, architecture explanation, testing
-    reasoning, understanding of own code. Communication + Debugging scores update the skill
-    graph and the overall is recomputed. Verification level upgrades to
-    **Repo + Interview verified**.
+12. **Own-code Interview.** Answer at least one question. Answer evaluator runs fresh-context.
+    Verification level upgrades to **Repo + Interview verified**.
 
-13. **AI Collaboration Challenge.** Paste a tiny diff and an explanation. Pick the AI tool you
-    used (Claude Code / Codex / Cursor / Gemini / Manual). The challenge evaluator scores
-    correctness, explanation quality, test awareness, review discipline, and AI collaboration
-    maturity. This becomes the AI Collaboration skill in the rubric.
+13. **AI Collaboration Challenge.** Paste diff + explanation + tool used. Routed through
+    `runAgentJson` for the validator role — uses CLI provider if available.
 
-14. **Employer Verifier Preview.** Recruiter-readable summary: shortlist recommendation, top
-    verified skills, biggest risks, suggested follow-up interview questions.
+14. **Publish profile.** Open the public URL. Recruiters see:
+    - Verified badge, score, skill graph, evidence locker
+    - **Local Proof section** — execution mode, ownership confidence, terminal command summary
+      by `usedFor`, expandable command list, provider matrix
+    - Employer Verifier with `terminal_proof_summary`, `shortlist_reason` / `caution_reason`,
+      `confidence`, top verified skills, biggest risks, follow-up questions
+    - Improvement plan
 
-15. **Improvement Plan.** 7-day, 30-day broken by week with exact files to improve, recommended
-    tests, git hygiene tips.
-
-16. **Publish Public Profile.** Click *Publish*. Open the public URL. Recruiters see the
-    verification badge, score, skill graph, evidence locker, interview performance,
-    authenticity, AI collab score, employer verifier, improvement areas.
-
-17. **Export Report.md.** Hit *Export Report.md* on Mission Control or the footer of the public
-    profile. Download a complete Markdown SkillProof Report including all of the above.
-
-18. **Campus Preview.** Show `/campus-preview` for 10 seconds — what a college placement cell or
-    bootcamp would see across a whole cohort. Clearly labeled *Preview / sample data*.
+15. **Export Report.md.** The Markdown report includes provider matrix table, terminal evidence
+    blocks with exit codes, ownership confidence, validation coverage, skill graph, evidence,
+    authenticity, interview, AI collab, employer verifier, improvement plan. Token patterns
+    redacted.
 
 ---
 
@@ -103,15 +105,21 @@ export SKILLPROOF_MOCK_LLM=1     # offline heuristic mode (UI shows a yellow ban
 - "Validation contract is written **before** the candidate's code is read."
 - "Validator runs with fresh context. It cannot raise scores. The truth set is every file in the
   repo tree, not just what was sent to other agents."
+- "In Local CLI mode the candidate's code never leaves their machine — agents call local CLIs."
+- "Terminal evidence is real proof. We don't just say `tests exist` — we run them and quote the
+  exit code."
+- "Ownership verification via `gh` matches the authenticated user against the repo owner.
+  Self-declared GitHub usernames are clearly labeled as unverified."
 - "Heuristic/Mock mode is never hidden. Every score is tagged with its source and confidence."
 - "Not measured ≠ 50. We refuse to silently fill in missing data."
-- "The interview is generated from the candidate's own code. Bluffing is hard."
-- "Authenticity signals are signals — not a verdict, never plagiarism detection."
 
 ---
 
 ## Failure modes to demo (optional)
 
-- Paste an invalid repo URL → graceful error.
-- Paste a private repo → "private repo unsupported" banner.
-- Disable `ANTHROPIC_API_KEY` → yellow mock banner appears + every score badged `Mock`.
+- Paste a spoof URL like `https://github.com.evil.com/owner/repo` → rejected as `invalid_repo_url`.
+- Try `rm -rf /` in the terminal sandbox → blocked as `destructive`.
+- Stop Ollama mid-run → mission continues, agents fall back to next provider in the matrix or
+  heuristic.
+- Disable `ANTHROPIC_API_KEY` and switch to `mock` mode → yellow banner appears + scores badged
+  `Mock`. Employer Verifier explicitly warns the matrix included mock.

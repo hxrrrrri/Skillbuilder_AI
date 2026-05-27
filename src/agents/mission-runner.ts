@@ -6,7 +6,7 @@ import { isMockMode } from "@/lib/claude";
 import { runProof } from "@/lib/local-runner/proof-runner";
 import { selectProviderMatrix } from "@/lib/providers/provider-router";
 import type { ExecutionMode } from "@/lib/local-runner/types";
-import type { AgentName, Handoff, MissionState, ProfileOutput, SkillGraphOutput } from "./types";
+import type { AgentName, Handoff, MissionState, OwnershipStatus, ProfileOutput, SkillGraphOutput } from "./types";
 import { runOrchestrator } from "./orchestrator";
 import { runRepoScanner } from "./repo-scanner";
 import { runArchitecture } from "./architecture";
@@ -20,6 +20,40 @@ import { runInterviewGen } from "./interview-gen";
 import { runValidator } from "./validator";
 import { runSkillGraph } from "./skill-graph";
 import { runProfileGen } from "./profile-gen";
+
+type RawOwnership = { owner_match: boolean; repo_token_verified: boolean; self_declared: boolean; gh_user?: string | null };
+
+function buildOwnershipStatus(opts: {
+  raw: RawOwnership;
+  repoOwner: string;
+  githubUsername: string | null;
+}): OwnershipStatus {
+  const { raw, repoOwner, githubUsername } = opts;
+  const notes: string[] = [];
+  let confidence: OwnershipStatus["confidence"] = "unverified";
+  if (raw.owner_match) {
+    confidence = "verified";
+    notes.push(`gh authenticated user matches repo owner '${repoOwner}'.`);
+  } else if (raw.repo_token_verified) {
+    confidence = "verified";
+    notes.push(`Repo contains skillproof token for '${githubUsername}'.`);
+  } else if (githubUsername) {
+    confidence = "self_declared";
+    notes.push(`Self-declared GitHub username '${githubUsername}' — not verified.`);
+  } else {
+    notes.push("No ownership signals — repo analyzed anonymously.");
+  }
+  return {
+    owner_match: raw.owner_match,
+    repo_token_verified: raw.repo_token_verified,
+    self_declared: !raw.owner_match && !raw.repo_token_verified && !!githubUsername,
+    gh_user: raw.gh_user ?? null,
+    github_username: githubUsername,
+    repo_owner: repoOwner,
+    confidence,
+    notes,
+  };
+}
 
 export const PIPELINE: AgentName[] = [
   "orchestrator",
@@ -106,14 +140,17 @@ export async function runMission(opts: {
     tokens_in: 0,
     tokens_out: 0,
     mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    execution_mode: mode,
+    provider_matrix: null,
+    terminal_evidence: [],
+    ownership_status: null,
   };
 
-  // Select provider matrix early so Mission Control can display it.
-  let providerMatrix: any = null;
+  // Select provider matrix early so Mission Control can display it and agents use it.
   try {
-    providerMatrix = await selectProviderMatrix(mode);
+    state.provider_matrix = await selectProviderMatrix(mode);
   } catch {
-    providerMatrix = null;
+    state.provider_matrix = null;
   }
 
   // Run local proof runner first when execution mode uses CLI/hybrid.
@@ -131,15 +168,31 @@ export async function runMission(opts: {
     }
   }
 
+  if (proof) {
+    state.terminal_evidence = proof.evidence;
+    const ownership = buildOwnershipStatus({
+      raw: proof.ownership,
+      repoOwner: opts.owner,
+      githubUsername: opts.githubUsername ?? null,
+    });
+    state.ownership_status = ownership;
+  } else {
+    state.ownership_status = buildOwnershipStatus({
+      raw: { owner_match: false, repo_token_verified: false, self_declared: !!opts.githubUsername },
+      repoOwner: opts.owner,
+      githubUsername: opts.githubUsername ?? null,
+    });
+  }
+
   await prisma.analysisRun.update({
     where: { id: opts.runId },
     data: {
       status: "running",
       statusMessage: state.mock_mode ? "Heuristic/Mock mode active." : `Execution mode: ${mode}`,
       executionMode: mode,
-      providerMatrix: providerMatrix ? JSON.stringify(providerMatrix) : null,
-      terminalEvidence: proof ? JSON.stringify(proof.evidence) : null,
-      ownershipStatus: proof ? JSON.stringify(proof.ownership) : null,
+      providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
+      terminalEvidence: state.terminal_evidence?.length ? JSON.stringify(state.terminal_evidence) : null,
+      ownershipStatus: state.ownership_status ? JSON.stringify(state.ownership_status) : null,
     },
   });
 

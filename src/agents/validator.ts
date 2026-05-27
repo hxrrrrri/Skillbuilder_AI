@@ -1,7 +1,7 @@
 // Creator-verifier separation: this agent runs with FRESH CONTEXT.
 // Truth set = every blob path in the repo tree (filesIndex.all), not just snippet paths.
 
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import type {
   Handoff,
   MissionState,
@@ -27,6 +27,8 @@ Rules:
 - If evidence references a file NOT in the truth set, flag the claim hallucinated.
 - Never raise scores. Only lower or leave alone.
 - Cap > 85 unless evidence is exceptional.`;
+
+const SCHEMA_HINT = '{"validated":boolean,"confidence":number,"unsupported_claims_removed":number,"adjusted_scores":[{"skill":string,"before":number,"after":number,"reason":string}],"hallucinated_files":string[],"notes":string[]}';
 
 function fallback(state: MissionState): ValidatorOutput {
   const truthSet = new Set(state.context_pack?.filesIndex.all ?? []);
@@ -81,27 +83,20 @@ function fallback(state: MissionState): ValidatorOutput {
 }
 
 export async function runValidator(state: MissionState): Promise<Handoff<ValidatorOutput>> {
-  let out: ValidatorOutput;
-  let tin = 0, tout = 0;
-
   // Always run the deterministic baseline so unsupported claims are caught.
   const baseline = fallback(state);
 
-  if (isMockMode()) {
-    out = baseline;
-  } else {
-    const truth = state.context_pack?.filesIndex.all ?? [];
-    // Cap truth set in prompt to avoid blowing tokens on huge repos.
-    const sampledTruth = truth.length > 400
-      ? [...truth.slice(0, 200), `... (${truth.length - 400} more) ...`, ...truth.slice(-200)]
-      : truth;
-    const claims = state.scores.map((c) => ({
-      skill: c.skill,
-      score: c.score,
-      source: c.source,
-      evidence: c.evidence,
-    }));
-    const user = `Repo file truth set (these are the only files that exist):
+  const truth = state.context_pack?.filesIndex.all ?? [];
+  const sampledTruth = truth.length > 400
+    ? [...truth.slice(0, 200), `... (${truth.length - 400} more) ...`, ...truth.slice(-200)]
+    : truth;
+  const claims = state.scores.map((c) => ({
+    skill: c.skill,
+    score: c.score,
+    source: c.source,
+    evidence: c.evidence,
+  }));
+  const user = `Repo file truth set (these are the only files that exist):
 ${sampledTruth.map((p) => "- " + p).join("\n")}
 
 Score claims to audit:
@@ -111,18 +106,22 @@ Heuristic baseline already computed:
 ${JSON.stringify(baseline, null, 2)}
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "validator", system: SYSTEM, user, maxTokens: 1800 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<ValidatorOutput>(r.text);
-      out = parsed
-        ? { ...parsed, assertion_coverage: parsed.assertion_coverage ?? [], hallucinated_files: parsed.hallucinated_files ?? [] }
-        : baseline;
-    } catch {
-      out = baseline;
-    }
-  }
+
+  const res = await runAgentJson<ValidatorOutput>({
+    state,
+    role: "validator",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 1800,
+    fallback: () => baseline,
+  });
+
+  const out: ValidatorOutput = {
+    ...res.output,
+    assertion_coverage: res.output.assertion_coverage ?? [],
+    hallucinated_files: res.output.hallucinated_files ?? [],
+  };
 
   // Apply adjustments back to state.scores. Never raise.
   for (const adj of out.adjusted_scores) {
@@ -136,7 +135,7 @@ Return the JSON now.`;
     }
   }
 
-  // Roll up assertion coverage from agents that produced any.
+  // Roll up assertion coverage from agents.
   const coverage: ValidationAssertionResult[] = [];
   const seen = new Set<string>();
   for (const r of state.assertion_results) {
@@ -145,7 +144,6 @@ Return the JSON now.`;
       seen.add(r.assertion_id);
     }
   }
-  // Any contract assertion not covered → unknown.
   if (state.contract) {
     for (const a of state.contract.assertions) {
       if (!seen.has(a.id)) {
@@ -162,14 +160,17 @@ Return the JSON now.`;
   }
   out.assertion_coverage = coverage;
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
 
   return {
     agent: "validator",
     completed: ["claims_audited", "scores_adjusted", "assertion_coverage_built"],
     unresolved: [],
-    evidence: out.notes.map((n) => ({ reason: n })),
+    evidence: [
+      ...out.notes.map((n) => ({ reason: n })),
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.adjusted_scores.map((a) => `${a.skill}: ${a.before} → ${a.after} (${a.reason})`),
     next_recommended: "skill-graph",
     assertion_results: out.assertion_coverage,

@@ -32,6 +32,17 @@ type ProviderInfo = {
   mode: string;
 };
 
+type ProviderTestResult = {
+  provider_id: string;
+  available: boolean;
+  json: any | null;
+  raw?: string;
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  error?: string | null;
+};
+
 export default function LocalSetupPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [providers, setProviders] = useState<ProviderInfo | null>(null);
@@ -40,6 +51,8 @@ export default function LocalSetupPage() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [testing, setTesting] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, ProviderTestResult>>({});
 
   async function load() {
     setLoading(true);
@@ -60,6 +73,26 @@ export default function LocalSetupPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  async function testProvider(providerId: string) {
+    setTesting(providerId);
+    try {
+      const r = await fetch("/api/local/providers/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider_id: providerId }),
+      });
+      const data = await r.json();
+      setTestResults((prev) => ({ ...prev, [providerId]: data }));
+    } catch (err: any) {
+      setTestResults((prev) => ({
+        ...prev,
+        [providerId]: { provider_id: providerId, available: false, json: null, error: err?.message ?? String(err) },
+      }));
+    } finally {
+      setTesting(null);
+    }
+  }
 
   async function saveConfig() {
     setSaveMsg(null);
@@ -207,6 +240,50 @@ export default function LocalSetupPage() {
                     {p.label}: {p.available ? "available" : "off"}
                   </Badge>
                 ))}
+              </div>
+              <div className="mt-4 space-y-2">
+                <div className="text-xs uppercase text-muted">Test JSON output</div>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {providers.availability.map((p) => {
+                    const r = testResults[p.id];
+                    return (
+                      <div key={p.id} className="rounded border border-border p-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono">{p.id}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={testing === p.id || !p.available}
+                            onClick={() => testProvider(p.id)}
+                          >
+                            {testing === p.id ? "testing…" : "Test JSON output"}
+                          </Button>
+                        </div>
+                        {r && (
+                          <div className="mt-2 space-y-1">
+                            <div>
+                              <Badge tone={r.json && !r.error ? "good" : "warn"}>
+                                {r.json && !r.error ? "JSON OK" : r.error ?? "no JSON"}
+                              </Badge>
+                              {r.model && <span className="ml-2 font-mono text-muted">{r.model}</span>}
+                            </div>
+                            {r.json && (
+                              <pre className="overflow-x-auto rounded bg-panel2 p-2 font-mono">
+                                {JSON.stringify(r.json, null, 2)}
+                              </pre>
+                            )}
+                            {r.raw && (
+                              <details>
+                                <summary className="cursor-pointer text-muted">raw output</summary>
+                                <pre className="overflow-x-auto rounded bg-panel2 p-2 font-mono">{r.raw}</pre>
+                              </details>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
               <div className="mt-4">
                 {editing ? (

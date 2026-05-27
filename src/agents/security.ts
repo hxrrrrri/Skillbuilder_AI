@@ -1,6 +1,7 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
-import type { Handoff, MissionState, SecurityOutput, ValidationAssertionResult } from "./types";
+import { getTerminalEvidence, hasFailingCommand } from "@/lib/local-runner/evidence-analysis";
+import type { Evidence, Handoff, MissionState, SecurityOutput, ValidationAssertionResult } from "./types";
 
 const SYSTEM = `You are the Security Awareness agent of SkillProof AI.
 Light static review — flag obvious risks visible in the provided snippets. Do not invent CVEs.
@@ -10,6 +11,8 @@ Return STRICT JSON:
   "findings": [{"severity": "low"|"med"|"high", "note": string, "file": string?}],
   "evidence": [{"file": string, "reason": string}]
 }`;
+
+const SCHEMA_HINT = '{"security_score":number,"findings":[{"severity":"low|med|high","note":string,"file":string?}],"evidence":[{"file":string,"reason":string}]}';
 
 function looksLikeSecret(snippet: string): boolean {
   return (
@@ -54,38 +57,52 @@ function deriveAssertionResults(state: MissionState, out: SecurityOutput): Valid
     }) as ValidationAssertionResult);
 }
 
-export async function runSecurity(state: MissionState): Promise<Handoff<SecurityOutput>> {
-  if (!state.context_pack) throw new Error("security: context_pack missing");
-  let out: SecurityOutput;
-  let tin = 0, tout = 0;
-
-  if (isMockMode()) {
-    out = { ...fallback(state), score_source: state.mock_mode ? "mock" : "heuristic" };
-  } else {
-    const user = `${buildContextBlock(state.context_pack)}
-
-Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 1500 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<SecurityOutput>(r.text);
-      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(state), score_source: "heuristic" };
-    } catch {
-      out = { ...fallback(state), score_source: "heuristic" };
+// Roll in terminal-derived security findings (grep hits surfaced by proof-runner).
+function applyTerminalEvidence(state: MissionState, out: SecurityOutput) {
+  const evidence = getTerminalEvidence(state, "security");
+  const extra: Evidence[] = [];
+  for (const e of evidence) {
+    if (e.exitCode === 0 && (e.stdoutSummary || "").trim().length > 0) {
+      out.findings.push({
+        severity: "med",
+        note: `terminal grep: ${e.command} — see stdout`,
+      });
+      out.security_score = Math.max(0, out.security_score - 6);
+      extra.push({ reason: `terminal · security · ${e.command}`, snippet: e.stdoutSummary.slice(0, 200) });
     }
   }
+  if (extra.length) out.evidence = [...out.evidence, ...extra];
+}
 
+export async function runSecurity(state: MissionState): Promise<Handoff<SecurityOutput>> {
+  if (!state.context_pack) throw new Error("security: context_pack missing");
+
+  const user = `${buildContextBlock(state.context_pack)}
+
+Return the JSON now.`;
+
+  const res = await runAgentJson<SecurityOutput>({
+    state,
+    role: "worker",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 1500,
+    fallback: () => fallback(state),
+  });
+
+  const out: SecurityOutput = { ...res.output, score_source: res.source };
+  applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Security",
     score: out.security_score,
     evidence: out.evidence,
-    confidence: out.score_source === "llm" ? 0.85 : 0.6,
-    source: out.score_source ?? "heuristic",
+    confidence: res.source === "llm" ? 0.85 : 0.6,
+    source: res.source,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
   state.assertion_results.push(...(out.assertion_results ?? []));
@@ -94,7 +111,10 @@ Return the JSON now.`;
     agent: "security",
     completed: ["security_reviewed"],
     unresolved: [],
-    evidence: out.evidence,
+    evidence: [
+      ...out.evidence,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.findings.map((f) => `[${f.severity}] ${f.note}${f.file ? ` (${f.file})` : ""}`),
     next_recommended: "git-evidence",
     assertion_results: out.assertion_results,

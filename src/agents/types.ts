@@ -1,6 +1,9 @@
 // Shared types for the Missions architecture.
 // Structured handoff is how agents pass state — never raw blobs of memory.
 
+import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
+import type { ProviderMatrix } from "@/lib/providers/types";
+
 export type AgentName =
   | "orchestrator"
   | "repo-scanner"
@@ -222,13 +225,31 @@ export type SkillGraphOutput = {
   not_measured: string[];
 };
 
+export type OwnershipStatus = {
+  owner_match: boolean;
+  repo_token_verified: boolean;
+  self_declared: boolean;
+  gh_user?: string | null;
+  github_username?: string | null;
+  repo_owner: string;
+  confidence: "verified" | "self_declared" | "unverified";
+  notes: string[];
+};
+
 export type EmployerVerifier = {
   hiring_recommendation: "Strong shortlist" | "Consider with reservations" | "Needs more proof";
+  confidence?: number;
+  ownership_status?: OwnershipStatus | null;
+  verification_level?: string;
+  execution_mode?: ExecutionMode | null;
   top_verified_skills: string[];
   biggest_risks: string[];
   best_evidence: Evidence[];
+  terminal_proof_summary?: string | null;
   suggested_followup_questions: string[];
   role_fit_summary: string;
+  shortlist_reason?: string | null;
+  caution_reason?: string | null;
 };
 
 export type ImprovementPlanItem = {
@@ -283,4 +304,8 @@ export type MissionState = {
   tokens_in: number;
   tokens_out: number;
   mock_mode: boolean;
+  execution_mode: ExecutionMode;
+  provider_matrix?: ProviderMatrix | null;
+  terminal_evidence?: TerminalEvidence[];
+  ownership_status?: OwnershipStatus | null;
 };

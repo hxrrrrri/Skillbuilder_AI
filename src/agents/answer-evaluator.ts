@@ -1,4 +1,4 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import type { AnswerEvaluation, Handoff, MissionState } from "./types";
 
 const SYSTEM = `You are the Answer Evaluator agent of SkillProof AI — a creator-verifier agent with FRESH CONTEXT.
@@ -14,6 +14,8 @@ Return STRICT JSON:
 }
 A bluffed answer gets a low understanding score regardless of how polished it sounds.
 A short but technically precise answer beats a long handwave.`;
+
+const SCHEMA_HINT = '{"communication_score":number,"debugging_score":number,"architecture_explanation_score":number,"testing_reasoning_score":number,"understanding_of_own_code":number,"summary":string}';
 
 function fallback(): AnswerEvaluation {
   return {
@@ -31,14 +33,7 @@ export async function evaluateAnswer(
   question: { question: string; source_file: string | null; expected_signals: string[] },
   answer: string
 ): Promise<Handoff<AnswerEvaluation>> {
-  let out: AnswerEvaluation;
-  let tin = 0,
-    tout = 0;
-
-  if (isMockMode()) {
-    out = fallback();
-  } else {
-    const user = `Question: ${question.question}
+  const user = `Question: ${question.question}
 Source file: ${question.source_file ?? "(none)"}
 Expected signals: ${question.expected_signals.join(", ")}
 
@@ -46,18 +41,20 @@ Candidate answer:
 """${answer}"""
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "validator", system: SYSTEM, user, maxTokens: 800 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      out = extractJson<AnswerEvaluation>(r.text) ?? fallback();
-    } catch {
-      out = fallback();
-    }
-  }
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  const res = await runAgentJson<AnswerEvaluation>({
+    state,
+    role: "validator",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 800,
+    fallback,
+  });
+
+  const out = res.output;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
 
   state.scores.push({
     skill: "Communication",
@@ -74,7 +71,10 @@ Return the JSON now.`;
     agent: "answer-evaluator",
     completed: ["answer_scored"],
     unresolved: [],
-    evidence: [{ reason: out.summary }],
+    evidence: [
+      { reason: out.summary },
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: [],
     output: out,
   };

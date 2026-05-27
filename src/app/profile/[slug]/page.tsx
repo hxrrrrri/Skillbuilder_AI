@@ -49,6 +49,24 @@ export default async function PublicProfile({ params }: { params: { slug: string
   const employer = safeJsonParse<any>(run.employerVerifier, null);
   const plan = safeJsonParse<any>(run.improvementPlan, null);
   const ai = safeJsonParse<any>(run.aiCollaboration, null);
+  const ownership = safeJsonParse<any>(run.ownershipStatus, null);
+  const providerMatrix = safeJsonParse<Record<string, string>>(run.providerMatrix, {});
+  const terminalEvidence = safeJsonParse<any[]>(run.terminalEvidence, []);
+  const mode = run.executionMode ?? "api";
+  const terminalSummary = (() => {
+    let passed = 0;
+    let failed = 0;
+    const byUsedFor: Record<string, { p: number; f: number }> = {};
+    for (const e of terminalEvidence) {
+      const ok = e.exitCode === 0;
+      if (ok) passed += 1;
+      else if (e.exitCode !== null && e.exitCode !== undefined) failed += 1;
+      if (!byUsedFor[e.usedFor]) byUsedFor[e.usedFor] = { p: 0, f: 0 };
+      if (ok) byUsedFor[e.usedFor].p += 1;
+      else if (e.exitCode !== null && e.exitCode !== undefined) byUsedFor[e.usedFor].f += 1;
+    }
+    return { total: terminalEvidence.length, passed, failed, byUsedFor };
+  })();
 
   return (
     <div className="space-y-8">
@@ -59,6 +77,13 @@ export default async function PublicProfile({ params }: { params: { slug: string
             {run.verificationLevel === "repo_interview_verified" ? "Repo + Interview verified" : "Repo-only verified"}
           </Badge>
           <Badge tone="good">Validator audited</Badge>
+          <Badge tone={mode === "mock" ? "warn" : "default"}>mode: {mode}</Badge>
+          {ownership?.confidence === "verified" && <Badge tone="good">ownership: verified</Badge>}
+          {ownership?.confidence === "self_declared" && <Badge tone="warn">ownership: self-declared</Badge>}
+          {ownership?.confidence === "unverified" && <Badge tone="warn">ownership: unverified</Badge>}
+          {terminalEvidence.length > 0 && (
+            <Badge tone="good">Local proof · {terminalEvidence.length} cmds</Badge>
+          )}
         </div>
         <h1 className="mt-3 text-3xl font-bold md:text-4xl">
           {candidate?.name ?? "Anonymous Candidate"}
@@ -101,6 +126,92 @@ export default async function PublicProfile({ params }: { params: { slug: string
             </CardHeader>
             <CardBody>
               <EvidenceLocker scores={scores} />
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {(terminalEvidence.length > 0 || Object.keys(providerMatrix).length > 0 || ownership) && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Local Proof</CardTitle>
+            </CardHeader>
+            <CardBody className="space-y-4 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge>execution mode: {mode}</Badge>
+                {terminalEvidence.length > 0 && (
+                  <>
+                    <Badge tone="good">{terminalSummary.passed} passed</Badge>
+                    {terminalSummary.failed > 0 && <Badge tone="warn">{terminalSummary.failed} failed</Badge>}
+                    <Badge>{terminalEvidence.length} commands</Badge>
+                  </>
+                )}
+              </div>
+
+              {ownership && (
+                <div>
+                  <div className="text-xs uppercase text-muted">Ownership</div>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {ownership.owner_match && <Badge tone="good">GitHub owner verified via gh</Badge>}
+                    {ownership.repo_token_verified && <Badge tone="good">Repo token verified</Badge>}
+                    {ownership.self_declared && !ownership.owner_match && !ownership.repo_token_verified && (
+                      <Badge tone="warn">Self-declared GitHub identity</Badge>
+                    )}
+                    {ownership.confidence === "unverified" && <Badge tone="warn">Anonymous</Badge>}
+                  </div>
+                  {Array.isArray(ownership.notes) && ownership.notes.length > 0 && (
+                    <ul className="mt-2 list-disc pl-5 text-xs text-muted">
+                      {ownership.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {Object.keys(providerMatrix).length > 0 && (
+                <div>
+                  <div className="text-xs uppercase text-muted">Provider matrix</div>
+                  <div className="mt-1 grid gap-2 md:grid-cols-5">
+                    {Object.entries(providerMatrix).map(([role, prov]) => (
+                      <div key={role} className="rounded border border-border p-2 text-xs">
+                        <div className="text-muted">{role}</div>
+                        <div className="mt-1 font-mono">{prov}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {terminalEvidence.length > 0 && (
+                <div>
+                  <div className="text-xs uppercase text-muted">Terminal evidence summary</div>
+                  <div className="mt-1 grid gap-2 md:grid-cols-4">
+                    {Object.entries(terminalSummary.byUsedFor).map(([k, v]) => (
+                      <div key={k} className="rounded border border-border p-2 text-xs">
+                        <div className="font-mono text-muted">{k}</div>
+                        <div className="mt-1">
+                          <Badge tone={v.f === 0 ? "good" : "warn"}>{v.p} passed</Badge>
+                          {v.f > 0 && <Badge tone="warn">{v.f} failed</Badge>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs text-muted">show commands</summary>
+                    <ul className="mt-2 space-y-1 text-xs">
+                      {terminalEvidence.slice(0, 30).map((t, i) => (
+                        <li key={i} className="flex items-center gap-2 font-mono">
+                          <Badge tone={t.exitCode === 0 ? "good" : t.exitCode === null ? "default" : "warn"}>
+                            {t.exitCode === null ? "—" : `exit=${t.exitCode}`}
+                          </Badge>
+                          <span className="truncate">{t.command}</span>
+                          <span className="text-muted">{t.usedFor}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                </div>
+              )}
             </CardBody>
           </Card>
         </section>

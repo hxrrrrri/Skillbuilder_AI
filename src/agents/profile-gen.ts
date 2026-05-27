@@ -1,4 +1,5 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
+import { summarizeTerminalEvidence, hasPassingCommand, hasFailingCommand, getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
 import type {
   EmployerVerifier,
   Handoff,
@@ -34,6 +35,8 @@ Return STRICT JSON:
 }
 Tone: factual, evidence-grounded, no hype.`;
 
+const SCHEMA_HINT = '{"developer_summary":string,"verified_skills":string[],"improvement_areas":string[],"employer_recommendation":string,"evidence_highlights":[{"file":string?,"reason":string}],"employer_verifier":{...},"improvement_plan":{...}}';
+
 function hiringRecFromScore(score: number): EmployerVerifier["hiring_recommendation"] {
   if (score >= 75) return "Strong shortlist";
   if (score >= 55) return "Consider with reservations";
@@ -50,7 +53,7 @@ function fallbackImprovementPlan(state: MissionState, graph: SkillGraphOutput): 
   return {
     seven_day: [
       lacksTests ? "Add at least one unit test per critical utility." : "Add an integration test for a route handler.",
-      "Clean up any vague commit messages on next push (conventional commits)." ,
+      "Clean up any vague commit messages on next push (conventional commits).",
       lacksDocs ? "Expand README with project-specific Setup + Architecture sections." : "Document one tricky decision in README.",
     ],
     thirty_day: [
@@ -67,70 +70,163 @@ function fallbackImprovementPlan(state: MissionState, graph: SkillGraphOutput): 
   };
 }
 
+// Augment Employer Verifier with local proof + ownership context.
+function augmentEmployerVerifier(
+  state: MissionState,
+  graph: SkillGraphOutput,
+  base: EmployerVerifier,
+): EmployerVerifier {
+  const out: EmployerVerifier = { ...base };
+  out.ownership_status = state.ownership_status ?? null;
+  out.execution_mode = state.execution_mode ?? null;
+  out.verification_level = state.context_pack ? "repo_only" : "unknown";
+
+  const terminal = getTerminalEvidence(state);
+  const summary = summarizeTerminalEvidence(terminal);
+  out.terminal_proof_summary = terminal.length ? summary.text : "no terminal evidence";
+
+  const risks = [...(out.biggest_risks ?? [])];
+  const evidence = [...(out.best_evidence ?? [])];
+
+  if (state.execution_mode === "cli" || state.execution_mode === "hybrid") {
+    const testPass = hasPassingCommand(terminal, "testing");
+    const testFail = hasFailingCommand(terminal, "testing");
+    const buildPass = hasPassingCommand(terminal, "build");
+    const buildFail = hasFailingCommand(terminal, "build");
+    const tcPass = hasPassingCommand(terminal, "typecheck");
+    const tcFail = hasFailingCommand(terminal, "typecheck");
+
+    if (testPass) evidence.unshift({ reason: `Local tests passed: \`${testPass.command}\`` });
+    if (buildPass) evidence.unshift({ reason: `Local build succeeded: \`${buildPass.command}\`` });
+    if (tcPass) evidence.unshift({ reason: `Local typecheck passed: \`${tcPass.command}\`` });
+
+    if (testFail) risks.unshift(`Local tests failed: \`${testFail.command}\` exit=${testFail.exitCode}`);
+    if (buildFail) risks.unshift(`Local build failed: \`${buildFail.command}\` exit=${buildFail.exitCode}`);
+    if (tcFail) risks.unshift(`Local typecheck failed: \`${tcFail.command}\` exit=${tcFail.exitCode}`);
+  }
+
+  // Ownership trust signals.
+  const ownership = state.ownership_status;
+  if (ownership) {
+    if (ownership.confidence === "verified") {
+      evidence.unshift({ reason: `Ownership verified (${ownership.owner_match ? "gh user match" : "repo token match"}).` });
+    } else if (ownership.confidence === "self_declared") {
+      risks.push(`Identity self-declared as @${ownership.github_username} — not verified.`);
+    } else {
+      risks.push("No ownership verification — repo analyzed anonymously.");
+    }
+  }
+
+  // Mock-mode warning.
+  if (state.execution_mode === "mock" || state.mock_mode) {
+    risks.unshift("Provider matrix included MOCK — scores partially heuristic, not LLM-graded.");
+  }
+
+  // Interview status.
+  const interviewHandoff = state.handoffs.find((h) => h.agent === "interview-gen");
+  const hasInterview = !!interviewHandoff;
+  if (!hasInterview) {
+    out.suggested_followup_questions = [
+      ...(out.suggested_followup_questions ?? []),
+      "No interview answered yet — only repo-only verification.",
+    ];
+  }
+
+  // Confidence: combine validator + ownership + execution mode.
+  const baseConfidence = graph.skill_graph.length
+    ? graph.skill_graph.reduce((s, x) => s + (x.confidence ?? 0.5), 0) / graph.skill_graph.length
+    : 0.5;
+  let confidence = baseConfidence;
+  if (ownership?.confidence === "verified") confidence = Math.min(1, confidence + 0.1);
+  if (ownership?.confidence === "unverified") confidence = Math.max(0, confidence - 0.1);
+  if (state.execution_mode === "cli" || state.execution_mode === "hybrid") confidence = Math.min(1, confidence + 0.05);
+  if (state.mock_mode) confidence = Math.max(0, confidence - 0.2);
+  out.confidence = Math.round(confidence * 100) / 100;
+
+  // Shortlist / caution reasons.
+  if (out.hiring_recommendation === "Strong shortlist") {
+    out.shortlist_reason = `Overall ${graph.overall_score}/100, ownership ${ownership?.confidence ?? "unknown"}, ${terminal.length ? "terminal evidence captured" : "repo-only signals"}.`;
+    out.caution_reason = null;
+  } else {
+    out.shortlist_reason = null;
+    out.caution_reason = risks.slice(0, 2).join(" · ") || "Insufficient evidence depth.";
+  }
+
+  out.biggest_risks = Array.from(new Set(risks)).slice(0, 6);
+  out.best_evidence = evidence.slice(0, 6);
+  return out;
+}
+
 function fallback(state: MissionState, graph: SkillGraphOutput): ProfileOutput {
   const overall = graph.overall_score;
   const rec = hiringRecFromScore(overall);
+  const base: EmployerVerifier = {
+    hiring_recommendation: rec,
+    top_verified_skills: graph.top_strengths,
+    biggest_risks: [
+      ...(graph.not_measured.length ? [`Not measured: ${graph.not_measured.join(", ")}.`] : []),
+      ...(state.authenticity?.risk_signals ?? []).slice(0, 3),
+    ],
+    best_evidence: graph.skill_graph.flatMap((s) => s.evidence.slice(0, 1)).slice(0, 4),
+    suggested_followup_questions: [
+      `Walk through your testing strategy for the ${graph.growth_areas[0] ?? "weakest"} area.`,
+      "Describe a debugging session you ran in this repo end-to-end.",
+      "What would you refactor first if you had a free day?",
+    ],
+    role_fit_summary: `${rec} for ${state.target_role} at ${state.candidate_level} level.`,
+  };
   return {
     developer_summary: `${graph.role_fit} with an overall SkillProof score of ${overall}/100. Strongest in ${graph.top_strengths.join(", ") || "(no strong area)"}.`,
     verified_skills: graph.top_strengths,
     improvement_areas: graph.growth_areas,
     employer_recommendation: `${rec}. Verify ${graph.growth_areas[0] ?? "testing"} depth in a follow-up before production-critical assignments.`,
     evidence_highlights: graph.skill_graph.flatMap((s) => s.evidence.slice(0, 1)).slice(0, 6),
-    employer_verifier: {
-      hiring_recommendation: rec,
-      top_verified_skills: graph.top_strengths,
-      biggest_risks: [
-        ...(graph.not_measured.length ? [`Not measured: ${graph.not_measured.join(", ")}.`] : []),
-        ...(state.authenticity?.risk_signals ?? []).slice(0, 3),
-      ],
-      best_evidence: graph.skill_graph.flatMap((s) => s.evidence.slice(0, 1)).slice(0, 4),
-      suggested_followup_questions: [
-        `Walk through your testing strategy for the ${graph.growth_areas[0] ?? "weakest"} area.`,
-        "Describe a debugging session you ran in this repo end-to-end.",
-        "What would you refactor first if you had a free day?",
-      ],
-      role_fit_summary: `${rec} for ${state.target_role} at ${state.candidate_level} level.`,
-    },
+    employer_verifier: augmentEmployerVerifier(state, graph, base),
     improvement_plan: fallbackImprovementPlan(state, graph),
   };
 }
 
 export async function runProfileGen(state: MissionState, graph: SkillGraphOutput): Promise<Handoff<ProfileOutput>> {
-  let out: ProfileOutput;
-  let tin = 0, tout = 0;
-
-  if (isMockMode()) {
-    out = fallback(state, graph);
-  } else {
-    const user = `Skill graph:
+  const user = `Skill graph:
 ${JSON.stringify(graph, null, 2)}
 
 Target role: ${state.target_role}
 Candidate level: ${state.candidate_level}
 Authenticity signals: ${JSON.stringify(state.authenticity ?? null)}
+Execution mode: ${state.execution_mode}
+Ownership status: ${JSON.stringify(state.ownership_status ?? null)}
+Terminal evidence summary: ${JSON.stringify(summarizeTerminalEvidence(getTerminalEvidence(state)))}
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 2200 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      out = extractJson<ProfileOutput>(r.text) ?? fallback(state, graph);
-      // Patch missing nested if the model skipped them.
-      if (!out.employer_verifier) out.employer_verifier = fallback(state, graph).employer_verifier;
-      if (!out.improvement_plan) out.improvement_plan = fallback(state, graph).improvement_plan;
-    } catch {
-      out = fallback(state, graph);
-    }
-  }
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  const res = await runAgentJson<ProfileOutput>({
+    state,
+    role: "profile",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 2200,
+    fallback: () => fallback(state, graph),
+  });
+
+  let out = res.output;
+  if (!out?.employer_verifier || !out?.improvement_plan) {
+    out = fallback(state, graph);
+  }
+  // Always augment employer_verifier with deterministic local-proof signals.
+  out.employer_verifier = augmentEmployerVerifier(state, graph, out.employer_verifier);
+
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
 
   return {
     agent: "profile-gen",
     completed: ["public_profile_drafted", "employer_verifier_built", "improvement_plan_built"],
     unresolved: [],
-    evidence: out.evidence_highlights,
+    evidence: [
+      ...out.evidence_highlights,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: [],
     output: out,
   };

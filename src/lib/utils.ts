@@ -8,10 +8,14 @@ export function cn(...inputs: ClassValue[]) {
 export function parseRepoUrl(url: string): { owner: string; repo: string } | null {
   try {
     const u = new URL(url.trim());
-    if (!u.hostname.includes("github.com")) return null;
+    const host = u.hostname.toLowerCase();
+    if (host !== "github.com" && host !== "www.github.com") return null;
     const parts = u.pathname.split("/").filter(Boolean);
     if (parts.length < 2) return null;
-    return { owner: parts[0], repo: parts[1].replace(/\.git$/, "") };
+    const owner = parts[0];
+    const repo = parts[1].replace(/\.git$/, "");
+    if (!/^[A-Za-z0-9._-]+$/.test(owner) || !/^[A-Za-z0-9._-]+$/.test(repo)) return null;
+    return { owner, repo };
   } catch {
     return null;
   }

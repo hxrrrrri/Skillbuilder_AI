@@ -20,6 +20,18 @@ describe("parseRepoUrl", () => {
   it("rejects garbage", () => {
     expect(parseRepoUrl("not a url")).toBeNull();
   });
+  it("accepts www.github.com", () => {
+    expect(parseRepoUrl("https://www.github.com/owner/repo")).toEqual({ owner: "owner", repo: "repo" });
+  });
+  it("rejects spoof subdomain like github.com.evil.com", () => {
+    expect(parseRepoUrl("https://github.com.evil.com/owner/repo")).toBeNull();
+  });
+  it("rejects evilgithub.com lookalike", () => {
+    expect(parseRepoUrl("https://evilgithub.com/owner/repo")).toBeNull();
+  });
+  it("rejects owners with unsafe characters", () => {
+    expect(parseRepoUrl("https://github.com/owner%2F/repo")).toBeNull();
+  });
 });
 
 describe("slugify", () => {

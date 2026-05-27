@@ -1,4 +1,4 @@
-import { extractJson, isMockMode, llmCall } from "@/lib/claude";
+import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
 import type {
   ArchitectureOutput,
@@ -17,6 +17,8 @@ Return STRICT JSON, no commentary:
   "evidence": [{"file": string, "line": number?, "reason": string}]
 }
 Every claim must cite a file from the snippets. If snippets are insufficient, lower confidence and say so.`;
+
+const SCHEMA_HINT = '{"architecture_score":number,"strengths":string[],"weaknesses":string[],"evidence":[{"file":string,"line":number?,"reason":string}]}';
 
 function fallback(): ArchitectureOutput {
   return {
@@ -51,39 +53,38 @@ function deriveAssertionResults(
 
 export async function runArchitecture(state: MissionState): Promise<Handoff<ArchitectureOutput>> {
   if (!state.context_pack) throw new Error("architecture: context_pack missing — run repo-scanner first");
-  let out: ArchitectureOutput;
-  let tin = 0, tout = 0;
 
-  if (isMockMode()) {
-    out = { ...fallback(), score_source: state.mock_mode ? "mock" : "heuristic" };
-  } else {
-    const user = `Validation contract dimensions: ${state.contract?.evaluation_dimensions.join(", ") ?? "n/a"}
+  const user = `Validation contract dimensions: ${state.contract?.evaluation_dimensions.join(", ") ?? "n/a"}
 Target role: ${state.target_role}
 
 ${buildContextBlock(state.context_pack)}
 
 Return the JSON now.`;
-    try {
-      const r = await llmCall({ role: "worker", system: SYSTEM, user, maxTokens: 1800 });
-      tin = r.inputTokens;
-      tout = r.outputTokens;
-      const parsed = extractJson<ArchitectureOutput>(r.text);
-      out = parsed ? { ...parsed, score_source: "llm" } : { ...fallback(), score_source: "heuristic" };
-    } catch {
-      out = { ...fallback(), score_source: "heuristic" };
-    }
-  }
 
+  const res = await runAgentJson<ArchitectureOutput>({
+    state,
+    role: "worker",
+    system: SYSTEM,
+    user,
+    schemaHint: SCHEMA_HINT,
+    maxTokens: 1800,
+    fallback,
+  });
+
+  const out: ArchitectureOutput = {
+    ...res.output,
+    score_source: res.source,
+  };
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += tin;
-  state.tokens_out += tout;
+  state.tokens_in += res.inputTokens;
+  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Architecture",
     score: out.architecture_score,
     evidence: out.evidence,
-    confidence: out.score_source === "llm" ? 0.85 : out.score_source === "mock" ? 0.3 : 0.55,
-    source: out.score_source ?? "heuristic",
+    confidence: res.source === "llm" ? 0.85 : res.source === "mock" ? 0.3 : 0.55,
+    source: res.source,
     strengths: out.strengths,
     weaknesses: out.weaknesses,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
@@ -94,7 +95,10 @@ Return the JSON now.`;
     agent: "architecture",
     completed: ["architecture_analyzed"],
     unresolved: [],
-    evidence: out.evidence,
+    evidence: [
+      ...out.evidence,
+      { reason: `provider=${res.provider} model=${res.model}` },
+    ],
     issues_found: out.weaknesses,
     next_recommended: "code-quality",
     assertion_results: out.assertion_results,

@@ -183,6 +183,23 @@ export default function Landing() {
               <Button size="lg" className="w-full" onClick={start} disabled={loading}>
                 {loading ? "Starting mission…" : "Run SkillProof mission →"}
               </Button>
+              <button
+                type="button"
+                className="w-full rounded border border-dashed border-border px-3 py-2 text-xs text-muted hover:border-accent hover:text-accent"
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const r = await fetch("/api/demo/seed");
+                    const d = await r.json();
+                    if (d?.profile_url) router.push(d.profile_url);
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                disabled={loading}
+              >
+                Open Demo Mission (sample data)
+              </button>
               <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted">
                 <span>Try:</span>
                 {SAMPLE_REPOS.map((r) => (
