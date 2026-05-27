@@ -15,6 +15,7 @@ const Body = z.object({
   candidate_level: z.string().min(2).max(40).default("Junior"),
   job_description: z.string().max(4000).optional(),
   execution_mode: z.enum(["api", "cli", "hybrid", "mock"]).default("api"),
+  local_install_approved: z.boolean().default(false),
 });
 
 export async function POST(req: Request) {
@@ -55,33 +56,38 @@ export async function POST(req: Request) {
       jobDescription: body.job_description,
       status: "pending",
       executionMode: body.execution_mode,
+      localInstallApproved: body.local_install_approved,
     },
   });
 
   await preCreateEvents(run.id);
 
-  // Local in-process runner. For serverless deploys, swap this for a queue.
-  runMission({
-    runId: run.id,
-    owner: parsed.owner,
-    repo: parsed.repo,
-    repoUrl: body.repo_url,
-    targetRole: body.target_role,
-    candidateLevel: body.candidate_level,
-    candidateName: body.candidate_name,
-    githubUsername: body.github_username,
-    jobDescription: body.job_description,
-    executionMode: body.execution_mode,
-  }).catch(async (err) => {
-    console.error("[mission] failed", err);
-    await prisma.analysisRun.update({
-      where: { id: run.id },
-      data: {
-        status: "failed",
-        statusMessage: err instanceof Error ? err.message : String(err),
-      },
-    }).catch(() => {});
-  });
+  // In-process fallback for hackathon/local demos. Set SKILLPROOF_WORKER_MODE=1
+  // and run `npm run worker` to process pending missions out-of-process.
+  if (process.env.SKILLPROOF_WORKER_MODE !== "1") {
+    runMission({
+      runId: run.id,
+      owner: parsed.owner,
+      repo: parsed.repo,
+      repoUrl: body.repo_url,
+      targetRole: body.target_role,
+      candidateLevel: body.candidate_level,
+      candidateName: body.candidate_name,
+      githubUsername: body.github_username,
+      jobDescription: body.job_description,
+      executionMode: body.execution_mode,
+      localInstallApproved: body.local_install_approved,
+    }).catch(async (err) => {
+      console.error("[mission] failed", err);
+      await prisma.analysisRun.update({
+        where: { id: run.id },
+        data: {
+          status: "failed",
+          statusMessage: err instanceof Error ? err.message : String(err),
+        },
+      }).catch(() => {});
+    });
+  }
 
   return NextResponse.json({ run_id: run.id, candidate_id: candidate.id }, { status: 202 });
 }

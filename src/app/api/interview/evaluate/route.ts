@@ -56,6 +56,8 @@ export async function POST(req: Request) {
       question: q.question,
       source_file: q.sourceFile,
       expected_signals: safeJsonParse<string[]>(q.expectedSignals, []),
+      red_flags: safeJsonParse<string[]>(q.redFlags, []),
+      scoring_rubric: safeJsonParse(q.scoringRubric, null),
     },
     body.answer
   );
@@ -93,6 +95,7 @@ export async function POST(req: Request) {
   const upserts: Array<{ skill: string; score: number }> = [
     { skill: "Communication", score: evalOut.communication_score },
     { skill: "Debugging", score: evalOut.debugging_score },
+    { skill: "Understanding of Own Code", score: evalOut.understanding_of_own_code },
   ];
   // Soft-update Architecture/Testing only if missing (don't override repo evidence).
   const existing = await prisma.skillScore.findMany({ where: { runId: q.runId } });
@@ -107,7 +110,7 @@ export async function POST(req: Request) {
           score: u.score,
           confidence: 0.8,
           scoreSource: interviewSource,
-          evidence: JSON.stringify([{ reason: `Interview answer evaluated by fresh-context validator.` }]),
+          evidence: JSON.stringify([{ reason: `Interview answer evaluated by fresh-context validator.`, source: "interview" }]),
         },
       });
     } else {
@@ -118,7 +121,7 @@ export async function POST(req: Request) {
           score: u.score,
           confidence: 0.8,
           scoreSource: interviewSource,
-          evidence: JSON.stringify([{ reason: `Interview answer evaluated by fresh-context validator.` }]),
+          evidence: JSON.stringify([{ reason: `Interview answer evaluated by fresh-context validator.`, source: "interview" }]),
         },
       });
     }

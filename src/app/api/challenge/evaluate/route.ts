@@ -15,8 +15,15 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   run_id: z.string(),
   challenge_prompt: z.string().min(5).max(2000),
+  challenge_id: z.string().optional(),
+  target_files: z.array(z.string()).max(8).default([]),
+  expected_capabilities: z.array(z.string()).max(12).default([]),
+  difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
   proposed_diff: z.string().min(2).max(20000),
   explanation: z.string().min(2).max(8000),
+  tests_changed: z.string().max(2000).optional(),
+  reviewed_ai_output: z.boolean().default(false),
+  limitations_discussed: z.boolean().default(false),
   tool_used: z.enum(["Claude Code", "Codex", "Cursor", "Gemini", "Manual", "Other"]).default("Other"),
 });
 
@@ -40,17 +47,24 @@ const SCHEMA_HINT = '{"correctness_score":number,"explanation_quality_score":num
 function heuristicScore(body: z.infer<typeof Body>): AICollabEvaluation {
   const diff = body.proposed_diff;
   const exp = body.explanation;
+  const targetHits = body.target_files.filter((file) => diff.includes(file) || diff.includes(`a/${file}`) || diff.includes(`b/${file}`));
   const hasTests = /\btest\b|\bspec\b|\bdescribe\(|\bit\(|\bexpect\(/i.test(diff);
-  const mentionsTests = /\btest|\bspec|\bcover/i.test(exp);
-  const mentionsReview = /\breview|\bcaveat|\blimitation|\btradeoff/i.test(exp);
+  const mentionsTests = /\btest|\bspec|\bcover/i.test(exp) || !!body.tests_changed;
+  const mentionsReview = body.reviewed_ai_output || /\breview|\bcaveat|\blimitation|\btradeoff/i.test(exp);
   const mentionsAI = /\b(claude|gpt|copilot|cursor|gemini|ai)\b/i.test(exp);
-  const correctness = Math.min(100, 50 + (diff.length > 200 ? 15 : 0) + (hasTests ? 10 : 0));
-  const explanation = Math.min(100, 50 + (exp.length > 200 ? 15 : 0) + (mentionsReview ? 10 : 0));
+  const explanationMatches = targetHits.length > 0 && targetHits.some((file) => exp.includes(file.split("/").pop() ?? file));
+  const correctness = Math.min(100, 42 + (diff.length > 200 ? 12 : 0) + (targetHits.length ? 18 : -10) + (explanationMatches ? 8 : 0) + (hasTests ? 8 : 0));
+  const explanation = Math.min(100, 45 + (exp.length > 200 ? 12 : 0) + (mentionsReview ? 10 : 0) + (explanationMatches ? 12 : 0));
   const testAware = mentionsTests || hasTests ? 75 : 40;
-  const review = mentionsReview ? 70 : 50;
-  const maturity = mentionsAI && mentionsReview ? 75 : 55;
+  const review = mentionsReview ? 75 : 45;
+  const maturity = mentionsAI && mentionsReview && (body.limitations_discussed || /\blimitation|tradeoff|risk|follow-up/i.test(exp)) ? 80 : mentionsAI ? 62 : 52;
   const overall = Math.round((correctness + explanation + testAware + review + maturity) / 5);
   return {
+    challenge_id: body.challenge_id,
+    prompt: body.challenge_prompt,
+    target_files: body.target_files,
+    expected_capabilities: body.expected_capabilities,
+    difficulty: body.difficulty,
     correctness_score: correctness,
     explanation_quality_score: explanation,
     test_awareness_score: testAware,
@@ -58,7 +72,18 @@ function heuristicScore(body: z.infer<typeof Body>): AICollabEvaluation {
     ai_collaboration_maturity_score: maturity,
     overall_score: overall,
     tool_used: body.tool_used,
-    feedback: "Heuristic evaluation: looked at length, test mentions, review/limitation language, and explicit AI tool mention.",
+    feedback: targetHits.length
+      ? "Heuristic evaluation: diff touched target repo files, explanation/test awareness/review discipline were scored against the challenge."
+      : "Heuristic evaluation: diff did not clearly touch the target files, so correctness was capped.",
+    what_this_proves: [
+      targetHits.length ? "Can target changes to the relevant repo area." : "Target-file alignment still needs proof.",
+      mentionsTests ? "Considers tests or justifies test scope." : "Test discipline not demonstrated.",
+      mentionsReview ? "Reviews AI output instead of blindly accepting it." : "AI review discipline not demonstrated.",
+    ],
+    evidence: [
+      { reason: `AI challenge diff touched ${targetHits.length}/${body.target_files.length || 1} target files.`, source: "challenge" },
+      { reason: `Candidate used ${body.tool_used}; reviewed=${body.reviewed_ai_output}; limitations=${body.limitations_discussed}.`, source: "challenge" },
+    ],
   };
 }
 
@@ -98,6 +123,11 @@ export async function POST(req: Request) {
 
   const user = `Challenge prompt: ${body.challenge_prompt}
 Tool the candidate says they used: ${body.tool_used}
+Target files: ${body.target_files.join(", ") || "(not supplied)"}
+Expected capabilities: ${body.expected_capabilities.join(", ") || "(not supplied)"}
+Candidate says tests changed/added: ${body.tests_changed || "(not supplied)"}
+Candidate reviewed AI output: ${body.reviewed_ai_output}
+Candidate discussed limitations/tradeoffs: ${body.limitations_discussed}
 
 Proposed diff:
 \`\`\`
@@ -122,6 +152,13 @@ Return the JSON now.`;
   });
 
   const out = res.output;
+  out.challenge_id = out.challenge_id ?? body.challenge_id;
+  out.prompt = out.prompt ?? body.challenge_prompt;
+  out.target_files = out.target_files ?? body.target_files;
+  out.expected_capabilities = out.expected_capabilities ?? body.expected_capabilities;
+  out.difficulty = out.difficulty ?? body.difficulty;
+  out.evidence = out.evidence ?? baseline.evidence;
+  out.what_this_proves = out.what_this_proves ?? baseline.what_this_proves;
 
   await prisma.analysisRun.update({
     where: { id: body.run_id },
@@ -137,7 +174,7 @@ Return the JSON now.`;
     score: out.overall_score,
     confidence: res.source === "llm" ? 0.8 : 0.5,
     scoreSource: res.source,
-    evidence: JSON.stringify([{ reason: `AI Collaboration challenge submission (${out.tool_used}). ${out.feedback}` }]),
+    evidence: JSON.stringify(out.evidence?.length ? out.evidence : [{ reason: `AI Collaboration challenge submission (${out.tool_used}). ${out.feedback}`, source: "challenge" }]),
   };
   if (existing) {
     await prisma.skillScore.update({ where: { id: existing.id }, data });

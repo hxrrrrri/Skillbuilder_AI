@@ -48,13 +48,16 @@ model AnalysisRun {
   tokenEstimateUsed    Int?
   validationContract   String?             // JSON
   contextPack          String?             // JSON
+  repoIntelligence     String?             // JSON RepoIntelligenceIndex
   validationCoverage   String?             // JSON ValidationAssertionResult[]
+  validationSummary    String?             // JSON AssertionCoverageSummary
   authenticitySignals  String?             // JSON AuthenticityOutput
   improvementPlan      String?             // JSON ImprovementPlan
   employerVerifier     String?             // JSON EmployerVerifier
   aiCollaboration      String?             // JSON AICollabEvaluation
   profileSummary       String?             // JSON ProfileOutput
   executionMode        String              @default("api") // api|cli|hybrid|mock
+  localInstallApproved Boolean             @default(false)
   terminalEvidence     String?             // JSON TerminalEvidence[]
   providerMatrix       String?             // JSON role -> provider id
   ownershipStatus      String?             // JSON { owner_match, repo_token_verified, self_declared }
@@ -98,7 +101,11 @@ model InterviewQuestion {
   runId           String
   question        String
   sourceFile      String?
+  lineStart       Int?
+  lineEnd         Int?
   expectedSignals String?           // JSON string[]
+  redFlags        String?           // JSON string[]
+  scoringRubric   String?           // JSON InterviewQuestion.scoring_rubric
   answer          String?
   answerScore     Int?
   feedback        String?

@@ -21,24 +21,33 @@ import { runValidator } from "./validator";
 import { runSkillGraph } from "./skill-graph";
 import { runProfileGen } from "./profile-gen";
 
-type RawOwnership = { owner_match: boolean; repo_token_verified: boolean; self_declared: boolean; gh_user?: string | null };
+type RawOwnership = { owner_match: boolean; repo_token_verified: boolean; collaborator_verified?: boolean; self_declared: boolean; gh_user?: string | null };
 
 function buildOwnershipStatus(opts: {
   raw: RawOwnership;
   repoOwner: string;
   githubUsername: string | null;
+  verificationToken?: string | null;
 }): OwnershipStatus {
-  const { raw, repoOwner, githubUsername } = opts;
+  const { raw, repoOwner, githubUsername, verificationToken } = opts;
   const notes: string[] = [];
   let confidence: OwnershipStatus["confidence"] = "unverified";
+  let verification_method: OwnershipStatus["verification_method"] = "unverified";
   if (raw.owner_match) {
     confidence = "verified";
+    verification_method = "owner_match";
     notes.push(`gh authenticated user matches repo owner '${repoOwner}'.`);
   } else if (raw.repo_token_verified) {
     confidence = "verified";
-    notes.push(`Repo contains skillproof token for '${githubUsername}'.`);
+    verification_method = "repo_token_verified";
+    notes.push(`Repo contains SkillProof ownership token for '${githubUsername}'.`);
+  } else if (raw.collaborator_verified) {
+    confidence = "verified";
+    verification_method = "collaborator_verified";
+    notes.push(`gh authenticated user is a collaborator on '${repoOwner}'.`);
   } else if (githubUsername) {
     confidence = "self_declared";
+    verification_method = "self_declared";
     notes.push(`Self-declared GitHub username '${githubUsername}' — not verified.`);
   } else {
     notes.push("No ownership signals — repo analyzed anonymously.");
@@ -46,7 +55,10 @@ function buildOwnershipStatus(opts: {
   return {
     owner_match: raw.owner_match,
     repo_token_verified: raw.repo_token_verified,
-    self_declared: !raw.owner_match && !raw.repo_token_verified && !!githubUsername,
+    collaborator_verified: !!raw.collaborator_verified,
+    self_declared: !raw.owner_match && !raw.repo_token_verified && !raw.collaborator_verified && !!githubUsername,
+    verification_method,
+    verification_token: verificationToken ?? null,
     gh_user: raw.gh_user ?? null,
     github_username: githubUsername,
     repo_owner: repoOwner,
@@ -122,6 +134,7 @@ export async function runMission(opts: {
   githubUsername?: string;
   jobDescription?: string;
   executionMode?: ExecutionMode;
+  localInstallApproved?: boolean;
 }) {
   const mode: ExecutionMode = opts.executionMode ?? "api";
   const state: MissionState = {
@@ -155,6 +168,9 @@ export async function runMission(opts: {
 
   // Run local proof runner first when execution mode uses CLI/hybrid.
   let proof: Awaited<ReturnType<typeof runProof>> | null = null;
+  const ownershipToken = opts.githubUsername
+    ? `skillproof:${opts.githubUsername}:${opts.runId}:${opts.runId.slice(-8)}`
+    : null;
   if ((mode === "cli" || mode === "hybrid") && opts.repoUrl) {
     try {
       proof = await runProof({
@@ -162,6 +178,13 @@ export async function runMission(opts: {
         repoUrl: opts.repoUrl,
         repoOwner: opts.owner,
         githubUsername: opts.githubUsername ?? null,
+        ownershipToken,
+        policy: {
+          allowInstall: true,
+          installRequiresApproval: true,
+          installApproved: !!opts.localInstallApproved,
+          networkAllowed: true,
+        },
       });
     } catch (err) {
       console.error("[proof-runner] failed", err);
@@ -174,6 +197,7 @@ export async function runMission(opts: {
       raw: proof.ownership,
       repoOwner: opts.owner,
       githubUsername: opts.githubUsername ?? null,
+      verificationToken: ownershipToken,
     });
     state.ownership_status = ownership;
   } else {
@@ -181,6 +205,7 @@ export async function runMission(opts: {
       raw: { owner_match: false, repo_token_verified: false, self_declared: !!opts.githubUsername },
       repoOwner: opts.owner,
       githubUsername: opts.githubUsername ?? null,
+      verificationToken: ownershipToken,
     });
   }
 
@@ -190,6 +215,7 @@ export async function runMission(opts: {
       status: "running",
       statusMessage: state.mock_mode ? "Heuristic/Mock mode active." : `Execution mode: ${mode}`,
       executionMode: mode,
+      localInstallApproved: !!opts.localInstallApproved,
       providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
       terminalEvidence: state.terminal_evidence?.length ? JSON.stringify(state.terminal_evidence) : null,
       ownershipStatus: state.ownership_status ? JSON.stringify(state.ownership_status) : null,
@@ -266,7 +292,11 @@ export async function runMission(opts: {
           runId: opts.runId,
           question: q.question,
           sourceFile: q.source_file ?? null,
+          lineStart: q.line_start ?? null,
+          lineEnd: q.line_end ?? null,
           expectedSignals: JSON.stringify(q.expected_signals ?? []),
+          redFlags: JSON.stringify(q.red_flags ?? []),
+          scoringRubric: JSON.stringify(q.scoring_rubric ?? null),
         })),
       });
     }
@@ -297,7 +327,9 @@ export async function runMission(opts: {
             : null,
           tokens: state.context_pack?.tokens,
         }),
+        repoIntelligence: state.context_pack?.intelligence ? JSON.stringify(state.context_pack.intelligence) : null,
         validationCoverage: JSON.stringify(validatorHandoff.output.assertion_coverage),
+        validationSummary: JSON.stringify(validatorHandoff.output.assertion_coverage_summary),
         authenticitySignals: JSON.stringify(state.authenticity ?? null),
         improvementPlan: JSON.stringify(profile?.improvement_plan ?? null),
         employerVerifier: JSON.stringify(profile?.employer_verifier ?? null),
