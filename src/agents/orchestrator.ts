@@ -1,5 +1,5 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
-import type { Handoff, MissionState, ValidationContract } from "./types";
+import type { Handoff, MissionState, ValidationAssertion, ValidationContract } from "./types";
 
 const SYSTEM = `You are the Orchestrator agent of SkillProof AI's Mission system.
 Your single job is to produce a Validation Contract BEFORE any code analysis happens.
@@ -12,7 +12,14 @@ You must return STRICT JSON only — no commentary, no markdown fences — match
   "candidate_level": string,
   "evaluation_dimensions": string[],
   "assertions": [
-    {"id": string, "dimension": string, "statement": string, "weight": number}
+    {
+      "id": string,
+      "dimension": string,
+      "statement": string,
+      "weight": number,
+      "detector": "static"|"terminal"|"llm"|"interview"|"challenge",
+      "required_evidence": number
+    }
   ],
   "rubric": {
     "<dimension>": {"weight": number, "passingScore": number}
@@ -22,7 +29,37 @@ You must return STRICT JSON only — no commentary, no markdown fences — match
 Cover these dimensions: architecture, code_quality, testing, security, git_workflow, documentation, debugging, ai_collaboration, communication.
 Weights must sum approximately to 100 across rubric entries. Assertions should be concrete and verifiable from a repo (e.g. "Repo contains at least one integration test that exercises a route handler").`;
 
-const SCHEMA_HINT = '{"mission_id":string,"target_role":string,"candidate_level":string,"evaluation_dimensions":string[],"assertions":[{"id":string,"dimension":string,"statement":string,"weight":number}],"rubric":Record<string,{weight:number,passingScore:number}>}';
+const SCHEMA_HINT = '{"mission_id":string,"target_role":string,"candidate_level":string,"evaluation_dimensions":string[],"assertions":[{"id":string,"dimension":string,"statement":string,"weight":number,"detector":"static|terminal|llm|interview|challenge","required_evidence":number}],"rubric":Record<string,{weight:number,passingScore:number}>}';
+
+function assertion(
+  id: string,
+  dimension: string,
+  statement: string,
+  weight: number,
+  detector: ValidationAssertion["detector"] = "static",
+  required_evidence = 1
+): ValidationAssertion {
+  return { id, dimension, statement, weight, detector, required_evidence };
+}
+
+function normalizeContract(contract: ValidationContract, state: MissionState): ValidationContract {
+  return {
+    ...contract,
+    mission_id: contract.mission_id || state.mission_id,
+    target_role: contract.target_role || state.target_role,
+    candidate_level: contract.candidate_level || state.candidate_level,
+    assertions: (contract.assertions ?? []).map((a) => ({
+      ...a,
+      detector: a.detector ?? (
+        a.dimension === "testing" || a.dimension === "git_workflow" ? "terminal"
+          : a.dimension === "communication" ? "interview"
+          : a.dimension === "ai_collaboration" ? "challenge"
+          : "static"
+      ),
+      required_evidence: Math.max(1, a.required_evidence ?? 1),
+    })),
+  };
+}
 
 function fallbackContract(state: MissionState): ValidationContract {
   return {
@@ -41,19 +78,19 @@ function fallbackContract(state: MissionState): ValidationContract {
       "communication",
     ],
     assertions: [
-      { id: "A1", dimension: "architecture", statement: "Project separates UI, data, and business logic into distinct modules.", weight: 8 },
-      { id: "A2", dimension: "architecture", statement: "Config and secrets are not hard-coded in application code.", weight: 4 },
-      { id: "A3", dimension: "code_quality", statement: "Functions have descriptive names and bounded responsibilities.", weight: 8 },
-      { id: "A4", dimension: "code_quality", statement: "Strict typing is used where the language supports it.", weight: 4 },
-      { id: "A5", dimension: "testing", statement: "Repo contains automated tests for at least one critical path.", weight: 10 },
-      { id: "A6", dimension: "testing", statement: "CI runs tests on push or PR.", weight: 5 },
-      { id: "A7", dimension: "security", statement: "No secrets, API keys, or credentials are committed.", weight: 6 },
-      { id: "A8", dimension: "security", statement: "User input crossing trust boundaries is validated.", weight: 4 },
-      { id: "A9", dimension: "git_workflow", statement: "Commits are incremental and use meaningful messages.", weight: 7 },
-      { id: "A10", dimension: "documentation", statement: "README explains what the project does and how to run it.", weight: 7 },
-      { id: "A11", dimension: "debugging", statement: "Errors are handled with informative messages, not silenced.", weight: 6 },
-      { id: "A12", dimension: "ai_collaboration", statement: "If AI was used, generated code is integrated thoughtfully and tested.", weight: 4 },
-      { id: "A13", dimension: "communication", statement: "Candidate can explain implementation choices in their own words.", weight: 5 },
+      assertion("A1", "architecture", "Project separates UI, data, and business logic into distinct modules.", 8),
+      assertion("A2", "architecture", "Config and secrets are not hard-coded in application code.", 4),
+      assertion("A3", "code_quality", "Functions have descriptive names and bounded responsibilities.", 8),
+      assertion("A4", "code_quality", "Strict typing is used where the language supports it.", 4),
+      assertion("A5", "testing", "Repo contains automated tests for at least one critical path.", 10, "terminal"),
+      assertion("A6", "testing", "CI runs tests on push or PR.", 5, "terminal"),
+      assertion("A7", "security", "No secrets, API keys, or credentials are committed.", 6),
+      assertion("A8", "security", "User input crossing trust boundaries is validated.", 4),
+      assertion("A9", "git_workflow", "Commits are incremental and use meaningful messages.", 7, "terminal"),
+      assertion("A10", "documentation", "README explains what the project does and how to run it.", 7),
+      assertion("A11", "debugging", "Errors are handled with informative messages, not silenced.", 6, "interview"),
+      assertion("A12", "ai_collaboration", "If AI was used, generated code is integrated thoughtfully and tested.", 4, "challenge"),
+      assertion("A13", "communication", "Candidate can explain implementation choices in their own words.", 5, "interview"),
     ],
     rubric: {
       architecture: { weight: 15, passingScore: 60 },
@@ -88,7 +125,10 @@ Produce the validation contract JSON now.`;
     fallback: () => fallbackContract(state),
   });
 
-  const contract = res.output && res.output.assertions?.length ? res.output : fallbackContract(state);
+  const contract = normalizeContract(
+    res.output && res.output.assertions?.length ? res.output : fallbackContract(state),
+    state
+  );
   state.contract = contract;
   state.tokens_in += res.inputTokens;
   state.tokens_out += res.outputTokens;

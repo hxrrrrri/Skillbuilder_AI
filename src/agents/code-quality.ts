@@ -1,5 +1,7 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
+import { hydrateEvidenceFromContext } from "@/lib/evidence";
+import { assertionResultsForDimension } from "./assertions";
 import {
   getTerminalEvidence,
   hasFailingCommand,
@@ -24,29 +26,27 @@ Return STRICT JSON:
 
 const SCHEMA_HINT = '{"code_quality_score":number,"observations":string[],"evidence":[{"file":string,"line":number?,"reason":string}]}';
 
-function fallback(): CodeQualityOutput {
+function fallback(state?: MissionState): CodeQualityOutput {
+  const file = state?.context_pack?.filesIndex.important[0] ?? undefined;
   return {
     code_quality_score: 55,
     observations: ["LLM unavailable — heuristic score only"],
-    evidence: [{ reason: "Heuristic mode: deterministic score returned." }],
+    evidence: [{ file, reason: "Heuristic mode: deterministic score returned from repo intelligence and file layout." }],
     score_source: "heuristic",
   };
 }
 
 function deriveAssertionResults(state: MissionState, out: CodeQualityOutput): ValidationAssertionResult[] {
-  const contract = state.contract;
-  if (!contract) return [];
-  return contract.assertions
-    .filter((a) => a.dimension === "code_quality")
-    .map((a) => ({
-      assertion_id: a.id,
-      dimension: a.dimension,
-      statement: a.statement,
-      status: out.code_quality_score >= 60 ? "passed" : out.code_quality_score >= 45 ? "partial" : "failed",
-      evidence: out.evidence.slice(0, 2),
-      responsible_agent: "code-quality",
-      notes: out.code_quality_score >= 60 ? "Snippets show reasonable quality." : "Quality issues detected.",
-    }) as ValidationAssertionResult);
+  const typed = !!state.context_pack?.detected.hasTypeScript || (state.context_pack?.intelligence?.languages.TypeScript ?? 0) > 0;
+  return assertionResultsForDimension({
+    state,
+    dimension: "code_quality",
+    agent: "code-quality",
+    evidence: out.evidence,
+    passed: (a) => /typing|typed|strict/i.test(a.statement) ? typed : out.code_quality_score >= 55,
+    partial: () => out.code_quality_score >= 45,
+    baseNote: "Code-quality assertions require direct file or terminal evidence, not only the aggregate score.",
+  });
 }
 
 // Apply build + typecheck terminal evidence to nudge code quality score.
@@ -60,20 +60,20 @@ function applyTerminalEvidence(state: MissionState, out: CodeQualityOutput) {
 
   if (buildPass) {
     out.code_quality_score = Math.min(100, out.code_quality_score + 5);
-    extra.push({ reason: `terminal · build OK · \`${buildPass.command}\` exit=0` });
+    extra.push({ reason: `terminal · build OK · \`${buildPass.command}\` exit=0`, source: "terminal" });
     out.observations.unshift("Local build succeeded.");
   } else if (buildFail) {
     out.code_quality_score = Math.max(0, out.code_quality_score - 12);
-    extra.push({ reason: `terminal · build FAILED · \`${buildFail.command}\` exit=${buildFail.exitCode}` });
+    extra.push({ reason: `terminal · build FAILED · \`${buildFail.command}\` exit=${buildFail.exitCode}`, source: "terminal" });
     out.observations.unshift("Local build failed — reliability risk.");
   }
 
   if (tcPass) {
     out.code_quality_score = Math.min(100, out.code_quality_score + 4);
-    extra.push({ reason: `terminal · typecheck OK · \`${tcPass.command}\` exit=0` });
+    extra.push({ reason: `terminal · typecheck OK · \`${tcPass.command}\` exit=0`, source: "terminal" });
   } else if (tcFail) {
     out.code_quality_score = Math.max(0, out.code_quality_score - 10);
-    extra.push({ reason: `terminal · typecheck FAILED · \`${tcFail.command}\` exit=${tcFail.exitCode}` });
+    extra.push({ reason: `terminal · typecheck FAILED · \`${tcFail.command}\` exit=${tcFail.exitCode}`, source: "terminal" });
     out.observations.unshift("Local typecheck failed — likely typing issues.");
   }
 
@@ -96,10 +96,11 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
-    fallback,
+    fallback: () => fallback(state),
   });
 
   const out: CodeQualityOutput = { ...res.output, score_source: res.source };
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 

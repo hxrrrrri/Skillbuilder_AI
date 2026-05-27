@@ -11,6 +11,8 @@ import {
   rankImportantFiles,
 } from "@/lib/github";
 import { estimateBytesTokens, estimateTokens } from "@/lib/token-meter";
+import { snippetHash } from "@/lib/evidence";
+import { buildRepoIntelligenceIndex } from "@/lib/repo-intelligence";
 import type { Handoff, MissionState, RepoContextPack } from "./types";
 
 const MAX_SNIPPET_BYTES = 8000;
@@ -82,29 +84,57 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
 
   if (readme) {
     const truncated = readme.length > MAX_README_BYTES;
+    const content = truncated ? readme.slice(0, MAX_README_BYTES) : readme;
     snippets.push({
       path: readmePath!,
-      content: truncated ? readme.slice(0, MAX_README_BYTES) : readme,
+      content,
       truncated,
+      line_start: 1,
+      line_end: content.split(/\r?\n/).length,
+      snippet_hash: snippetHash(content),
     });
   }
   for (const p of [packageJsonPath, ...configFiles.filter((c) => c !== packageJsonPath)].filter(Boolean) as string[]) {
     const content = p === packageJsonPath ? packageJson : await getFile(owner, repo, p);
     if (content == null) continue;
     const truncated = content.length > MAX_SNIPPET_BYTES;
-    snippets.push({ path: p, content: truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content, truncated });
+    const body = truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content;
+    snippets.push({
+      path: p,
+      content: body,
+      truncated,
+      line_start: 1,
+      line_end: body.split(/\r?\n/).length,
+      snippet_hash: snippetHash(body),
+    });
   }
   for (const p of importantFiles) {
     const content = await getFile(owner, repo, p);
     if (content == null) continue;
     const truncated = content.length > MAX_SNIPPET_BYTES;
-    snippets.push({ path: p, content: truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content, truncated });
+    const body = truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content;
+    snippets.push({
+      path: p,
+      content: body,
+      truncated,
+      line_start: 1,
+      line_end: body.split(/\r?\n/).length,
+      snippet_hash: snippetHash(body),
+    });
   }
   for (const p of testFiles.slice(0, 2)) {
     const content = await getFile(owner, repo, p);
     if (content == null) continue;
     const truncated = content.length > MAX_SNIPPET_BYTES;
-    snippets.push({ path: p, content: truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content, truncated });
+    const body = truncated ? content.slice(0, MAX_SNIPPET_BYTES) : content;
+    snippets.push({
+      path: p,
+      content: body,
+      truncated,
+      line_start: 1,
+      line_end: body.split(/\r?\n/).length,
+      snippet_hash: snippetHash(body),
+    });
   }
 
   const commits = await getCommits(owner, repo, 30);
@@ -117,6 +147,10 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
   const packEstimate =
     snippets.reduce((s, x) => s + estimateTokens(x.content), 0) +
     estimateTokens(commits.map((c) => c.message).join("\n"));
+  const intelligence = buildRepoIntelligenceIndex({
+    files: tree.map((t) => ({ path: t.path, size: t.size, type: t.type })),
+    snippets: snippets.map((s) => ({ path: s.path, content: s.content })),
+  });
 
   const pack: RepoContextPack = {
     meta: {
@@ -151,6 +185,7 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
     snippets,
     commits,
     tokens: { rawEstimate, packEstimate },
+    intelligence,
   };
 
   state.context_pack = pack;
@@ -161,11 +196,13 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
       "repo_meta_fetched",
       "tree_indexed",
       "important_files_ranked",
+      "deterministic_repo_intelligence_indexed",
       "context_pack_built",
     ],
     unresolved: [],
     evidence: [
       { reason: `Indexed ${pack.filesIndex.total} files; selected ${snippets.length} for analysis.` },
+      { reason: `Repo intelligence: ${intelligence.routes.length} routes, ${intelligence.components.length} components, ${intelligence.functions.length} functions, ${intelligence.testFiles.length} test files.` },
       { reason: `Estimated raw repo size ~${rawEstimate.toLocaleString()} tokens; pack ~${packEstimate.toLocaleString()} tokens.` },
     ],
     issues_found:

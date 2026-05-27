@@ -3,6 +3,7 @@
 
 import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
 import type { ProviderMatrix } from "@/lib/providers/types";
+import type { RepoIntelligenceIndex } from "@/lib/repo-intelligence";
 
 export type AgentName =
   | "orchestrator"
@@ -24,9 +25,19 @@ export type ScoreSource = "llm" | "heuristic" | "mock" | "pending";
 
 export type Evidence = {
   file?: string;
+  line_start?: number;
+  line_end?: number;
+  /**
+   * Legacy single-line field. New code should prefer line_start/line_end,
+   * but keeping this avoids breaking older persisted evidence.
+   */
   line?: number;
   reason: string;
   snippet?: string;
+  snippet_hash?: string;
+  source?: "github_api" | "local_clone" | "terminal" | "llm" | "heuristic" | "interview" | "challenge";
+  confidence?: number;
+  validator_note?: string;
 };
 
 export type ScoreClaim = {
@@ -46,13 +57,17 @@ export type ValidationContract = {
   target_role: string;
   candidate_level: string;
   evaluation_dimensions: string[];
-  assertions: Array<{
-    id: string;
-    dimension: string;
-    statement: string;
-    weight: number;
-  }>;
+  assertions: ValidationAssertion[];
   rubric: Record<string, { weight: number; passingScore: number }>;
+};
+
+export type ValidationAssertion = {
+  id: string;
+  dimension: string;
+  statement: string;
+  weight: number;
+  detector: "static" | "terminal" | "llm" | "interview" | "challenge";
+  required_evidence: number;
 };
 
 // Result of one assertion after analysis — produced by responsible agent.
@@ -60,9 +75,19 @@ export type ValidationAssertionResult = {
   assertion_id: string;
   dimension: string;
   status: "passed" | "failed" | "partial" | "unknown";
+  confidence: number;
   evidence: Evidence[];
   responsible_agent: AgentName;
   notes: string;
+};
+
+export type AssertionCoverageSummary = {
+  total: number;
+  passed: number;
+  failed: number;
+  partial: number;
+  unknown: number;
+  evidence_coverage_percentage: number;
 };
 
 // Structured handoff — every agent emits this.
@@ -109,9 +134,17 @@ export type RepoContextPack = {
     ci: string[];
     readme: string | null;
   };
-  snippets: Array<{ path: string; content: string; truncated: boolean }>;
+  snippets: Array<{
+    path: string;
+    content: string;
+    truncated: boolean;
+    line_start?: number;
+    line_end?: number;
+    snippet_hash?: string;
+  }>;
   commits: Array<{ sha: string; message: string; author: string | null; date: string }>;
   tokens: { rawEstimate: number; packEstimate: number };
+  intelligence?: RepoIntelligenceIndex;
 };
 
 export type ArchitectureOutput = {
@@ -181,7 +214,17 @@ export type InterviewQuestionT = {
   id: string;
   question: string;
   source_file: string | null;
+  line_start?: number;
+  line_end?: number;
   expected_signals: string[];
+  red_flags: string[];
+  scoring_rubric: {
+    communication: string;
+    debugging: string;
+    architecture_explanation: string;
+    testing_reasoning: string;
+    understanding_of_own_code: string;
+  };
 };
 
 export type InterviewGenOutput = {
@@ -205,6 +248,7 @@ export type ValidatorOutput = {
   hallucinated_files: string[];
   notes: string[];
   assertion_coverage: ValidationAssertionResult[];
+  assertion_coverage_summary: AssertionCoverageSummary;
 };
 
 export type SkillGraphOutput = {
@@ -228,7 +272,10 @@ export type SkillGraphOutput = {
 export type OwnershipStatus = {
   owner_match: boolean;
   repo_token_verified: boolean;
+  collaborator_verified?: boolean;
   self_declared: boolean;
+  verification_method?: "owner_match" | "repo_token_verified" | "collaborator_verified" | "self_declared" | "unverified";
+  verification_token?: string | null;
   gh_user?: string | null;
   github_username?: string | null;
   repo_owner: string;
@@ -267,6 +314,11 @@ export type ImprovementPlan = {
 };
 
 export type AICollabEvaluation = {
+  challenge_id?: string;
+  prompt?: string;
+  target_files?: string[];
+  expected_capabilities?: string[];
+  difficulty?: "easy" | "medium" | "hard";
   correctness_score: number;
   explanation_quality_score: number;
   test_awareness_score: number;
@@ -275,6 +327,8 @@ export type AICollabEvaluation = {
   overall_score: number;
   tool_used: string;
   feedback: string;
+  what_this_proves?: string[];
+  evidence?: Evidence[];
 };
 
 export type ProfileOutput = {

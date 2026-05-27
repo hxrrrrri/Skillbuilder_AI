@@ -2,6 +2,7 @@
 // Truth set = every blob path in the repo tree (filesIndex.all), not just snippet paths.
 
 import { runAgentJson } from "@/lib/providers/run-agent";
+import { validateEvidenceAgainstContext } from "@/lib/evidence";
 import type {
   Handoff,
   MissionState,
@@ -31,16 +32,17 @@ Rules:
 const SCHEMA_HINT = '{"validated":boolean,"confidence":number,"unsupported_claims_removed":number,"adjusted_scores":[{"skill":string,"before":number,"after":number,"reason":string}],"hallucinated_files":string[],"notes":string[]}';
 
 function fallback(state: MissionState): ValidatorOutput {
-  const truthSet = new Set(state.context_pack?.filesIndex.all ?? []);
   const adjusted: ValidatorOutput["adjusted_scores"] = [];
   const hallucinated: string[] = [];
   let removed = 0;
 
   for (const claim of state.scores) {
-    const badFiles = claim.evidence
-      .map((e) => e.file)
-      .filter((f): f is string => !!f && !truthSet.has(f));
+    const validatedEvidence = validateEvidenceAgainstContext(claim.evidence, state.context_pack);
+    const badFiles = validatedEvidence
+      .filter((e) => e.file && !e.valid)
+      .map((e) => e.file!) ;
     const noEvidence = claim.evidence.length === 0;
+    const noValidEvidence = !noEvidence && validatedEvidence.every((e) => !e.valid);
 
     if (noEvidence) {
       adjusted.push({
@@ -59,6 +61,14 @@ function fallback(state: MissionState): ValidatorOutput {
         reason: `Evidence references files not in repo tree: ${badFiles.slice(0, 3).join(", ")}.`,
       });
       removed += 1;
+    } else if (noValidEvidence) {
+      adjusted.push({
+        skill: claim.skill,
+        before: claim.score,
+        after: Math.min(claim.score, 60),
+        reason: "Evidence exists but could not be verified by file/source/hash checks.",
+      });
+      removed += 1;
     } else if (claim.score > 85) {
       adjusted.push({
         skill: claim.skill,
@@ -67,7 +77,19 @@ function fallback(state: MissionState): ValidatorOutput {
         reason: "Capped to 85 without exceptional evidence.",
       });
     }
+    claim.evidence = validatedEvidence.map(({ valid, validator_note, ...e }) => ({
+      ...e,
+      validator_note,
+      confidence: valid ? e.confidence ?? 0.8 : Math.min(e.confidence ?? 0.4, 0.4),
+    }));
   }
+
+  const assertionCounts = { passed: 0, failed: 0, partial: 0, unknown: 0 };
+  for (const r of state.assertion_results) {
+    assertionCounts[r.status] += 1;
+  }
+  const totalAssertions = state.contract?.assertions.length ?? state.assertion_results.length;
+  const coveredAssertions = state.assertion_results.filter((r) => r.evidence.length > 0).length;
 
   return {
     validated: removed === 0,
@@ -79,6 +101,16 @@ function fallback(state: MissionState): ValidatorOutput {
       ? ["All claims grounded in evidence within repo tree."]
       : [`Removed/lowered ${removed} unsupported claims.`],
     assertion_coverage: [],
+    assertion_coverage_summary: {
+      total: totalAssertions,
+      passed: assertionCounts.passed,
+      failed: assertionCounts.failed,
+      partial: assertionCounts.partial,
+      unknown: Math.max(assertionCounts.unknown, totalAssertions - state.assertion_results.length),
+      evidence_coverage_percentage: totalAssertions > 0
+        ? Math.round((coveredAssertions / totalAssertions) * 100)
+        : 0,
+    },
   };
 }
 
@@ -121,7 +153,15 @@ Return the JSON now.`;
     ...res.output,
     assertion_coverage: res.output.assertion_coverage ?? [],
     hallucinated_files: res.output.hallucinated_files ?? [],
+    assertion_coverage_summary: res.output.assertion_coverage_summary ?? baseline.assertion_coverage_summary,
   };
+  const mergedAdjustments = [...baseline.adjusted_scores];
+  for (const adj of out.adjusted_scores ?? []) {
+    if (!mergedAdjustments.some((a) => a.skill === adj.skill && a.reason === adj.reason)) mergedAdjustments.push(adj);
+  }
+  out.adjusted_scores = mergedAdjustments;
+  out.hallucinated_files = Array.from(new Set([...(baseline.hallucinated_files ?? []), ...(out.hallucinated_files ?? [])]));
+  out.unsupported_claims_removed = Math.max(out.unsupported_claims_removed ?? 0, baseline.unsupported_claims_removed);
 
   // Apply adjustments back to state.scores. Never raise.
   for (const adj of out.adjusted_scores) {
@@ -151,6 +191,7 @@ Return the JSON now.`;
           assertion_id: a.id,
           dimension: a.dimension,
           status: "unknown",
+          confidence: 0,
           evidence: [],
           responsible_agent: "validator",
           notes: "No agent reported on this assertion.",
@@ -159,6 +200,17 @@ Return the JSON now.`;
     }
   }
   out.assertion_coverage = coverage;
+  const counts = { passed: 0, failed: 0, partial: 0, unknown: 0 };
+  for (const c of coverage) counts[c.status] += 1;
+  const withEvidence = coverage.filter((c) => c.evidence.length > 0).length;
+  out.assertion_coverage_summary = {
+    total: coverage.length,
+    passed: counts.passed,
+    failed: counts.failed,
+    partial: counts.partial,
+    unknown: counts.unknown,
+    evidence_coverage_percentage: coverage.length ? Math.round((withEvidence / coverage.length) * 100) : 0,
+  };
 
   state.tokens_in += res.inputTokens;
   state.tokens_out += res.outputTokens;

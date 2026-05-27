@@ -26,7 +26,16 @@ function makeState(overrides: Partial<MissionState> = {}): MissionState {
     target_role: "dev",
     candidate_level: "Junior",
     evaluation_dimensions: ["architecture"],
-    assertions: [{ id: "A1", dimension: "architecture", statement: "x", weight: 5 }],
+    assertions: [
+      {
+        id: "A1",
+        dimension: "architecture",
+        statement: "x",
+        weight: 5,
+        detector: "static",
+        required_evidence: 1,
+      },
+    ],
     rubric: { architecture: { weight: 15, passingScore: 60 } },
   };
   return {

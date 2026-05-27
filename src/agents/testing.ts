@@ -1,5 +1,7 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
+import { hydrateEvidenceFromContext } from "@/lib/evidence";
+import { assertionResultsForDimension } from "./assertions";
 import {
   getTerminalEvidence,
   hasFailingCommand,
@@ -28,35 +30,24 @@ function fallback(state: MissionState): TestingOutput {
     has_e2e: pack.filesIndex.tests.some((p) => /e2e|cypress|playwright/i.test(p)),
     has_ci: pack.detected.hasCI,
     evidence: [
-      { reason: `${pack.filesIndex.tests.length} test files detected by scanner.` },
-      { reason: pack.detected.hasCI ? "CI workflow present." : "No CI workflow detected." },
+      { file: pack.filesIndex.tests[0], reason: `${pack.filesIndex.tests.length} test files detected by scanner.` },
+      { file: pack.filesIndex.ci[0], reason: pack.detected.hasCI ? "CI workflow present." : "No CI workflow detected." },
     ],
     score_source: "heuristic",
   };
 }
 
 function deriveAssertionResults(state: MissionState, out: TestingOutput): ValidationAssertionResult[] {
-  const contract = state.contract;
-  if (!contract) return [];
-  return contract.assertions
-    .filter((a) => a.dimension === "testing")
-    .map((a) => {
-      const wantsCI = /ci/i.test(a.statement);
-      const status: ValidationAssertionResult["status"] = wantsCI
-        ? out.has_ci ? "passed" : "failed"
-        : out.test_count > 0 ? (out.testing_score >= 60 ? "passed" : "partial") : "failed";
-      return {
-        assertion_id: a.id,
-        dimension: a.dimension,
-        statement: a.statement,
-        status,
-        evidence: out.evidence.slice(0, 2),
-        responsible_agent: "testing",
-        notes: status === "failed"
-          ? wantsCI ? "No CI workflow detected by scanner." : "No tests detected by scanner."
-          : "Tests/CI present.",
-      } as ValidationAssertionResult;
-    });
+  return assertionResultsForDimension({
+    state,
+    dimension: "testing",
+    agent: "testing",
+    evidence: out.evidence,
+    passed: (a) => /ci/i.test(a.statement) ? out.has_ci : out.test_count > 0,
+    failed: (a) => /ci/i.test(a.statement) ? !out.has_ci : out.test_count === 0,
+    partial: () => out.testing_score >= 45,
+    baseNote: "Testing assertion evaluated from test files, CI files, and terminal test evidence.",
+  });
 }
 
 // Override LLM/heuristic with real test execution if terminal evidence exists.
@@ -71,12 +62,14 @@ function applyTerminalEvidence(state: MissionState, out: TestingOutput) {
     extra.push({
       reason: `terminal · tests PASSED · \`${testPass.command}\` exit=0 (${testPass.durationMs}ms)`,
       snippet: testPass.stdoutSummary.slice(0, 200),
+      source: "terminal",
     });
   } else if (testFail) {
     out.testing_score = Math.min(out.testing_score, 45);
     extra.push({
       reason: `terminal · tests FAILED · \`${testFail.command}\` exit=${testFail.exitCode}`,
       snippet: (testFail.stderrSummary || testFail.stdoutSummary).slice(0, 200),
+      source: "terminal",
     });
   }
 
@@ -101,6 +94,7 @@ Return the JSON now.`;
   });
 
   const out: TestingOutput = { ...res.output, score_source: res.source };
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 

@@ -23,6 +23,18 @@ Description: ${pack.meta.description ?? "(none)"}`;
   const importantList = `Important files (ranked):\n${pack.filesIndex.important.map((p) => "- " + p).join("\n") || "(none)"}`;
   const testList = `Test files:\n${pack.filesIndex.tests.slice(0, 20).map((p) => "- " + p).join("\n") || "(none)"}`;
   const ciList = `CI files:\n${pack.filesIndex.ci.map((p) => "- " + p).join("\n") || "(none)"}`;
+  const intel = pack.intelligence
+    ? `Deterministic repo intelligence:
+Languages: ${Object.entries(pack.intelligence.languages).slice(0, 8).map(([k, v]) => `${k}=${v}`).join(", ") || "unknown"}
+Frameworks: ${pack.intelligence.frameworks.join(", ") || "none"}
+Package managers: ${pack.intelligence.packageManagers.join(", ") || pack.detected.packageManager || "unknown"}
+Routes: ${pack.intelligence.routes.slice(0, 12).map((r) => `${r.route} (${r.file})`).join("; ") || "none"}
+Components: ${pack.intelligence.components.slice(0, 12).map((c) => `${c.name} (${c.file})`).join("; ") || "none"}
+Functions: ${pack.intelligence.functions.slice(0, 16).map((f) => `${f.name} (${f.file})`).join("; ") || "none"}
+Schemas: ${pack.intelligence.schemas.slice(0, 12).map((s) => `${s.name}:${s.library} (${s.file})`).join("; ") || "none"}
+API clients: ${pack.intelligence.apiClients.slice(0, 12).map((a) => `${a.kind} (${a.file})`).join("; ") || "none"}
+Risk flags: ${pack.intelligence.riskFlags.slice(0, 12).map((r) => `${r.severity}:${r.reason}${r.file ? ` (${r.file})` : ""}`).join("; ") || "none"}`
+    : "";
 
   let snippetsBlock = "";
   if (includeSnippets) {
@@ -36,7 +48,7 @@ Description: ${pack.meta.description ?? "(none)"}`;
         .join("\n\n");
   }
 
-  return [meta, importantList, testList, ciList, snippetsBlock].filter(Boolean).join("\n\n");
+  return [meta, importantList, testList, ciList, intel, snippetsBlock].filter(Boolean).join("\n\n");
 }
 
 export function buildCommitsBlock(pack: RepoContextPack): string {

@@ -1,6 +1,7 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildCommitsBlock } from "./_analysis";
 import { getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
+import { assertionResultsForDimension } from "./assertions";
 import type { Evidence, GitEvidenceOutput, Handoff, MissionState, ValidationAssertionResult } from "./types";
 
 const SYSTEM = `You are the Git Evidence agent of SkillProof AI.
@@ -32,27 +33,24 @@ function fallback(state: MissionState): GitEvidenceOutput {
     commit_count: commits.length,
     avg_msg_quality: Math.round(avg),
     evidence: [
-      { reason: `${commits.length} recent commits sampled.` },
-      { reason: `Avg commit message quality heuristic: ${Math.round(avg)}.` },
+      { reason: `${commits.length} recent commits sampled.`, source: "github_api" },
+      { reason: `Avg commit message quality heuristic: ${Math.round(avg)}.`, source: "heuristic" },
     ],
     score_source: "heuristic",
   };
 }
 
 function deriveAssertionResults(state: MissionState, out: GitEvidenceOutput): ValidationAssertionResult[] {
-  const contract = state.contract;
-  if (!contract) return [];
-  return contract.assertions
-    .filter((a) => a.dimension === "git_workflow")
-    .map((a) => ({
-      assertion_id: a.id,
-      dimension: a.dimension,
-      statement: a.statement,
-      status: out.git_workflow_score >= 60 ? "passed" : out.git_workflow_score >= 45 ? "partial" : "failed",
-      evidence: out.evidence.slice(0, 2),
-      responsible_agent: "git-evidence",
-      notes: `${out.commit_count} commits, avg msg quality ${out.avg_msg_quality}.`,
-    }) as ValidationAssertionResult);
+  return assertionResultsForDimension({
+    state,
+    dimension: "git_workflow",
+    agent: "git-evidence",
+    evidence: out.evidence,
+    passed: () => out.commit_count >= 3 && out.avg_msg_quality >= 55,
+    failed: () => out.commit_count === 0,
+    partial: () => out.commit_count > 0,
+    baseNote: `${out.commit_count} commits, avg msg quality ${out.avg_msg_quality}.`,
+  });
 }
 
 // Prefer local git log/shortlog evidence when available.
@@ -67,6 +65,7 @@ function applyTerminalEvidence(state: MissionState, out: GitEvidenceOutput) {
       extra.push({
         reason: `terminal · git · \`${e.command}\` exit=0`,
         snippet: (e.stdoutSummary || "").slice(0, 200),
+        source: "terminal",
       });
       // Count lines as commit signal when shortlog/log used.
       if (/shortlog|log/.test(e.command)) {
@@ -76,6 +75,7 @@ function applyTerminalEvidence(state: MissionState, out: GitEvidenceOutput) {
     } else if (e.exitCode !== null) {
       extra.push({
         reason: `terminal · git FAILED · \`${e.command}\` exit=${e.exitCode}`,
+        source: "terminal",
       });
     }
   }
@@ -101,6 +101,7 @@ Return the JSON now.`;
   });
 
   const out: GitEvidenceOutput = { ...res.output, score_source: res.source };
+  out.evidence = (out.evidence ?? []).map((e) => ({ ...e, source: e.source ?? "github_api" }));
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 

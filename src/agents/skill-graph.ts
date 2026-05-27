@@ -15,7 +15,7 @@ export const RUBRIC_WEIGHTS: Record<string, number> = {
 };
 
 // Authenticity is shown alongside but not added to overall score by default.
-const COSMETIC_SKILLS = new Set(["Authenticity"]);
+const COSMETIC_SKILLS = new Set(["Authenticity", "Understanding of Own Code"]);
 
 function roleFitLabel(overall: number, role: string): string {
   if (overall >= 80) return `Strong ${role}`;

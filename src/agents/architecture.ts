@@ -1,5 +1,7 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
+import { hydrateEvidenceFromContext } from "@/lib/evidence";
 import { buildContextBlock } from "./_analysis";
+import { assertionResultsForDimension } from "./assertions";
 import type {
   ArchitectureOutput,
   Handoff,
@@ -20,12 +22,13 @@ Every claim must cite a file from the snippets. If snippets are insufficient, lo
 
 const SCHEMA_HINT = '{"architecture_score":number,"strengths":string[],"weaknesses":string[],"evidence":[{"file":string,"line":number?,"reason":string}]}';
 
-function fallback(): ArchitectureOutput {
+function fallback(state?: MissionState): ArchitectureOutput {
+  const file = state?.context_pack?.filesIndex.important[0] ?? state?.context_pack?.filesIndex.readme ?? undefined;
   return {
     architecture_score: 60,
     strengths: ["Heuristic: folder layout present"],
     weaknesses: ["LLM unavailable — heuristic score only"],
-    evidence: [{ reason: "Heuristic mode: deterministic score returned." }],
+    evidence: [{ file, reason: "Heuristic mode: deterministic architecture score from repo layout and intelligence index." }],
     score_source: "heuristic",
   };
 }
@@ -34,21 +37,21 @@ function deriveAssertionResults(
   state: MissionState,
   out: ArchitectureOutput
 ): ValidationAssertionResult[] {
-  const contract = state.contract;
-  if (!contract) return [];
-  return contract.assertions
-    .filter((a) => a.dimension === "architecture")
-    .map((a) => ({
-      assertion_id: a.id,
-      dimension: a.dimension,
-      statement: a.statement,
-      status: out.architecture_score >= 60 ? "passed" : out.architecture_score >= 45 ? "partial" : "failed",
-      evidence: out.evidence.slice(0, 2),
-      responsible_agent: "architecture",
-      notes: out.architecture_score >= 60
-        ? "Architecture signals support assertion."
-        : "Architecture signals weak or missing.",
-    }) as ValidationAssertionResult);
+  const hasArchitectureSignals =
+    (state.context_pack?.intelligence?.routes.length ?? 0) > 0 ||
+    (state.context_pack?.intelligence?.components.length ?? 0) > 0 ||
+    (state.context_pack?.filesIndex.important.length ?? 0) >= 2;
+  return assertionResultsForDimension({
+    state,
+    dimension: "architecture",
+    agent: "architecture",
+    evidence: out.evidence,
+    passed: () => hasArchitectureSignals,
+    partial: () => out.architecture_score >= 45,
+    baseNote: hasArchitectureSignals
+      ? "Deterministic repo index plus cited files support architecture assertion."
+      : "Architecture evidence is limited to broad file layout signals.",
+  });
 }
 
 export async function runArchitecture(state: MissionState): Promise<Handoff<ArchitectureOutput>> {
@@ -68,13 +71,14 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
-    fallback,
+    fallback: () => fallback(state),
   });
 
   const out: ArchitectureOutput = {
     ...res.output,
     score_source: res.source,
   };
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
   out.assertion_results = deriveAssertionResults(state, out);
 
   state.tokens_in += res.inputTokens;

@@ -1,6 +1,8 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
-import { getTerminalEvidence, hasFailingCommand } from "@/lib/local-runner/evidence-analysis";
+import { getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
+import { hydrateEvidenceFromContext } from "@/lib/evidence";
+import { assertionResultsForDimension } from "./assertions";
 import type { Evidence, Handoff, MissionState, SecurityOutput, ValidationAssertionResult } from "./types";
 
 const SYSTEM = `You are the Security Awareness agent of SkillProof AI.
@@ -34,27 +36,25 @@ function fallback(state: MissionState): SecurityOutput {
     security_score: findings.length ? 35 : 60,
     findings,
     evidence: [
-      { reason: `Scanned ${state.context_pack!.snippets.length} snippets for obvious secret patterns.` },
+      { file: state.context_pack!.snippets[0]?.path, reason: `Scanned ${state.context_pack!.snippets.length} snippets for obvious secret patterns.` },
     ],
     score_source: "heuristic",
   };
 }
 
 function deriveAssertionResults(state: MissionState, out: SecurityOutput): ValidationAssertionResult[] {
-  const contract = state.contract;
-  if (!contract) return [];
-  return contract.assertions
-    .filter((a) => a.dimension === "security")
-    .map((a) => ({
-      assertion_id: a.id,
-      dimension: a.dimension,
-      statement: a.statement,
-      status: out.findings.some((f) => f.severity === "high") ? "failed"
-        : out.security_score >= 60 ? "passed" : "partial",
-      evidence: out.evidence.slice(0, 2),
-      responsible_agent: "security",
-      notes: out.findings.length ? `${out.findings.length} findings.` : "No high-severity findings.",
-    }) as ValidationAssertionResult);
+  const high = out.findings.some((f) => f.severity === "high");
+  const hasValidationSignals = (state.context_pack?.intelligence?.schemas.length ?? 0) > 0;
+  return assertionResultsForDimension({
+    state,
+    dimension: "security",
+    agent: "security",
+    evidence: out.evidence,
+    passed: (a) => /input|validated|validation/i.test(a.statement) ? hasValidationSignals : !high,
+    failed: () => high,
+    partial: () => out.security_score >= 45,
+    baseNote: out.findings.length ? `${out.findings.length} security findings.` : "No high-severity static or terminal findings.",
+  });
 }
 
 // Roll in terminal-derived security findings (grep hits surfaced by proof-runner).
@@ -68,7 +68,7 @@ function applyTerminalEvidence(state: MissionState, out: SecurityOutput) {
         note: `terminal grep: ${e.command} — see stdout`,
       });
       out.security_score = Math.max(0, out.security_score - 6);
-      extra.push({ reason: `terminal · security · ${e.command}`, snippet: e.stdoutSummary.slice(0, 200) });
+      extra.push({ reason: `terminal · security · ${e.command}`, snippet: e.stdoutSummary.slice(0, 200), source: "terminal" });
     }
   }
   if (extra.length) out.evidence = [...out.evidence, ...extra];
@@ -92,6 +92,7 @@ Return the JSON now.`;
   });
 
   const out: SecurityOutput = { ...res.output, score_source: res.source };
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 

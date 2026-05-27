@@ -1,4 +1,6 @@
 import { runAgentJson } from "@/lib/providers/run-agent";
+import { hydrateEvidenceFromContext } from "@/lib/evidence";
+import { assertionResultsForDimension } from "./assertions";
 import type {
   DocumentationOutput,
   Handoff,
@@ -51,20 +53,16 @@ function fallback(state: MissionState): DocumentationOutput {
 }
 
 function deriveAssertionResults(state: MissionState, out: DocumentationOutput): ValidationAssertionResult[] {
-  const contract = state.contract;
-  if (!contract) return [];
-  return contract.assertions
-    .filter((a) => a.dimension === "documentation")
-    .map((a) => ({
-      assertion_id: a.id,
-      dimension: a.dimension,
-      statement: a.statement,
-      status: out.has_readme && out.documentation_score >= 55 ? "passed"
-        : out.has_readme ? "partial" : "failed",
-      evidence: out.evidence,
-      responsible_agent: "documentation",
-      notes: out.has_readme ? "README present." : "No README found.",
-    }) as ValidationAssertionResult);
+  return assertionResultsForDimension({
+    state,
+    dimension: "documentation",
+    agent: "documentation",
+    evidence: out.evidence,
+    passed: () => out.has_readme && out.documentation_score >= 55,
+    failed: () => !out.has_readme,
+    partial: () => out.has_readme,
+    baseNote: out.has_readme ? "README present and reviewed." : "No README found.",
+  });
 }
 
 export async function runDocumentation(state: MissionState): Promise<Handoff<DocumentationOutput>> {
@@ -90,6 +88,7 @@ Return the JSON now.`;
   });
 
   const out: DocumentationOutput = { ...res.output, score_source: res.source };
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
   out.assertion_results = deriveAssertionResults(state, out);
 
   state.tokens_in += res.inputTokens;
