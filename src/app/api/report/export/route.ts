@@ -64,6 +64,9 @@ export async function GET(req: Request) {
   }
 
   const publicView = !isOwner && !allowedByRole;
+  if (publicView && process.env.SKILLPROOF_PUBLIC_REPORTS_ENABLED === "0") {
+    return NextResponse.json({ error: "public_reports_disabled" }, { status: 403 });
+  }
   const md = buildMarkdownReport(run as any, {
     publicView,
     includeTerminalProof: publicView ? !!publicProfile?.includeTerminalProof : true,

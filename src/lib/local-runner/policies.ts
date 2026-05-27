@@ -65,6 +65,14 @@ const DESTRUCTIVE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
 
 // Approval-required patterns. Allowed if `approved: true`.
 const APPROVAL_PATTERNS: Array<{ re: RegExp; reason: string }> = [
+  { re: /\bnpm\b\s+(install|i)\b/i, reason: "npm install may execute dependency lifecycle scripts" },
+  { re: /\bpnpm\b\s+install\b/i, reason: "pnpm install may execute dependency lifecycle scripts" },
+  { re: /\byarn\b\s+install\b/i, reason: "yarn install may execute dependency lifecycle scripts" },
+  { re: /\bbun\b\s+install\b/i, reason: "bun install may execute dependency lifecycle scripts" },
+  { re: /\bnpm\b\s+(run|test)\b/i, reason: "npm package scripts execute project-defined commands" },
+  { re: /\bpnpm\b\s+(run|test)\b/i, reason: "pnpm package scripts execute project-defined commands" },
+  { re: /\byarn\b\s+(run|test|build|lint)\b/i, reason: "yarn package scripts execute project-defined commands" },
+  { re: /\bbun\b\s+(run|test)\b/i, reason: "bun package scripts execute project-defined commands" },
   { re: /\bnpm\b\s+install\s+-g\b/i, reason: "global npm install" },
   { re: /\bnpm\b\s+i\s+-g\b/i, reason: "global npm install" },
   { re: /\bpnpm\b\s+add\s+-g\b/i, reason: "global pnpm install" },

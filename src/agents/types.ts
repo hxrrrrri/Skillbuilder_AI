@@ -12,6 +12,7 @@ export type AgentName =
   | "code-quality"
   | "testing"
   | "security"
+  | "ai-collaboration"
   | "git-evidence"
   | "documentation"
   | "authenticity"
@@ -356,6 +357,7 @@ export type MissionState = {
   handoffs: Handoff[];
   assertion_results: ValidationAssertionResult[];
   authenticity?: AuthenticityOutput | null;
+  aiCollaboration?: AICollabEvaluation | null;
   tokens_in: number;
   tokens_out: number;
   mock_mode: boolean;

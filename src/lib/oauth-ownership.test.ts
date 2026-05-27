@@ -22,7 +22,7 @@ describe("upgradeOwnershipFromOauth", () => {
     expect(mocks.prisma.analysisRun.update).not.toHaveBeenCalled();
   });
 
-  it("upgrades runs whose self-declared gh_user matches", async () => {
+  it("upgrades only runs whose repo owner matches the verified GitHub login", async () => {
     mocks.prisma.candidate.findUnique.mockResolvedValue({ id: "c1" });
     mocks.prisma.analysisRun.findMany.mockResolvedValue([
       {
@@ -37,8 +37,8 @@ describe("upgradeOwnershipFromOauth", () => {
       },
       {
         id: "r3",
-        ownershipStatus: JSON.stringify({ confidence: "self_declared", gh_user: "bob" }),
-        repository: { owner: "bob" },
+        ownershipStatus: JSON.stringify({ confidence: "self_declared", gh_user: "alice" }),
+        repository: { owner: "team-repo" },
       },
     ]);
     const { upgradeOwnershipFromOauth } = await import("./oauth-ownership");
@@ -49,6 +49,9 @@ describe("upgradeOwnershipFromOauth", () => {
     const blob = JSON.parse(call.data.ownershipStatus);
     expect(blob.github_oauth_owner_match).toBe(true);
     expect(blob.confidence).toBe("verified");
-    expect(blob.verification_method).toBe("github_oauth_owner_match");
+    expect(blob.verification_method).toBe("github_oauth_repo_owner_match");
+    expect(mocks.prisma.analysisRun.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "r3" } }),
+    );
   });
 });

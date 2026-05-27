@@ -20,9 +20,9 @@ function safe(s: string | null): OwnershipBlob {
 }
 
 /**
- * After a candidate links GitHub via OAuth, walk their runs and promote any
- * ownership row whose self-declared gh_user matches the verified login.
- * Scaffold: only flips the JSON flag + confidence; does not re-score.
+ * After a candidate links GitHub via OAuth, walk their runs and promote only
+ * rows where the verified GitHub login matches the repository owner. OAuth
+ * email/account linking by itself is never treated as repo ownership proof.
  */
 export async function upgradeOwnershipFromOauth(opts: {
   userId: string;
@@ -40,17 +40,17 @@ export async function upgradeOwnershipFromOauth(opts: {
   let upgraded = 0;
   for (const run of runs) {
     const blob = safe(run.ownershipStatus);
-    const ghUser = (blob.gh_user ?? "").toLowerCase();
     const repoOwner = run.repository.owner.toLowerCase();
     if (
       blob.confidence !== "verified" &&
-      (ghUser === opts.githubLogin.toLowerCase() || repoOwner === opts.githubLogin.toLowerCase())
+      repoOwner === opts.githubLogin.toLowerCase()
     ) {
       const next: OwnershipBlob = {
         ...blob,
         github_oauth_owner_match: true,
+        gh_user: opts.githubLogin,
         confidence: "verified",
-        verification_method: "github_oauth_owner_match",
+        verification_method: "github_oauth_repo_owner_match",
       };
       await prisma.analysisRun.update({
         where: { id: run.id },

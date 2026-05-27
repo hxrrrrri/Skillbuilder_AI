@@ -83,17 +83,11 @@ export function TerminalConsole({ missionId, cwd, defaultCommand, enableSaveAsEv
 
   async function saveAsEvidence(usedFor: string) {
     if (!latest || !missionId) return;
-    await fetch("/api/local/command", {
+    await fetch(`/api/local/terminal-runs/${encodeURIComponent(latest.id)}/save`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        command: latest.command,
-        args: latest.args,
-        cwd: latest.cwd,
-        mission_id: missionId,
-        approved: true,
-        saveAsEvidence: true,
-        usedFor,
+        run_id: missionId,
       }),
     });
   }
@@ -125,7 +119,7 @@ export function TerminalConsole({ missionId, cwd, defaultCommand, enableSaveAsEv
       </div>
       {approveRequest && (
         <div className="rounded border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
-          Needs approval: {approveRequest}.{" "}
+          Needs approval: {approveRequest}. This command may install dependencies or execute package scripts. Run only in a trusted local/sandbox workspace.{" "}
           <button className="underline" onClick={() => execute(true)}>
             Approve and run
           </button>

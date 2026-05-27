@@ -19,10 +19,10 @@ const DEFAULT_PALETTE: SandboxPaletteEntry[] = [
   { label: "git log --oneline -n 30", command: "git", args: ["log", "--oneline", "-n", "30"], usedFor: "git", description: "Recent commits, single-line." },
   { label: "git shortlog -sn", command: "git", args: ["shortlog", "-sn"], usedFor: "git", description: "Authorship summary." },
   { label: "git diff --stat HEAD~5..HEAD", command: "git", args: ["diff", "--stat", "HEAD~5..HEAD"], usedFor: "git", description: "Recent change size." },
-  { label: "npm test", command: "npm", args: ["test"], usedFor: "testing", description: "Run the test suite." },
-  { label: "npm run typecheck", command: "npm", args: ["run", "typecheck"], usedFor: "typecheck", description: "TypeScript check." },
-  { label: "npm run lint", command: "npm", args: ["run", "lint"], usedFor: "lint", description: "Lint the project." },
-  { label: "npm run build", command: "npm", args: ["run", "build"], usedFor: "build", description: "Production build." },
+  { label: "npm test", command: "npm", args: ["test"], usedFor: "testing", approvalRequired: true, description: "Run the test suite." },
+  { label: "npm run typecheck", command: "npm", args: ["run", "typecheck"], usedFor: "typecheck", approvalRequired: true, description: "TypeScript check." },
+  { label: "npm run lint", command: "npm", args: ["run", "lint"], usedFor: "lint", approvalRequired: true, description: "Lint the project." },
+  { label: "npm run build", command: "npm", args: ["run", "build"], usedFor: "build", approvalRequired: true, description: "Production build." },
   { label: "pnpm install", command: "pnpm", args: ["install"], usedFor: "install", approvalRequired: true, description: "Install deps (needs approval)." },
   { label: "npm install", command: "npm", args: ["install"], usedFor: "install", approvalRequired: true, description: "Install deps (needs approval)." },
 ];
@@ -222,7 +222,7 @@ export function SandboxTerminal({
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => execute(p, { approved: !!p.approvalRequired, saveAsEvidence: false })}
+                      onClick={() => execute(p, { approved: false, saveAsEvidence: false })}
                       disabled={isRunning}
                     >
                       {isRunning ? "running…" : "run"}
@@ -234,7 +234,8 @@ export function SandboxTerminal({
           </ul>
           {pendingApproval && (
             <div className="mt-3 rounded border border-warn/40 bg-warn/10 p-2 text-xs text-warn">
-              <strong>Approval required</strong> — {pendingApproval.reason}.{" "}
+              <strong>Approval required</strong> — {pendingApproval.reason}. This command may install dependencies or
+              execute package scripts. Run only in a trusted local/sandbox workspace.{" "}
               <button
                 className="underline"
                 onClick={() => execute(pendingApproval.entry, { approved: true, saveAsEvidence: false })}
@@ -342,16 +343,11 @@ function SaveToTranscriptButton({
     setBusy(true);
     setErr(null);
     try {
-      const res = await fetch("/api/local/command", {
+      const res = await fetch(`/api/local/terminal-runs/${encodeURIComponent(entry.id)}/save`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          command: entry.command,
-          args: entry.args,
-          mission_id: runId,
-          approved: true,
-          saveAsEvidence: true,
-          usedFor: entry.usedFor,
+          run_id: runId,
         }),
       });
       if (!res.ok) {

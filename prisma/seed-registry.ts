@@ -7,6 +7,7 @@
  *   npm run db:seed-registry -- --force   (also overwrite existing rows)
  */
 import { seedRegistry, PROVIDER_DEFAULTS, AGENT_DEFAULTS } from "../src/lib/providers/registry";
+import { seedEvaluatorSkillRegistry, DEFAULT_EVALUATOR_SKILLS } from "../src/lib/evaluator-runtime/skill-registry";
 import { prisma } from "../src/lib/db";
 
 async function main() {
@@ -18,6 +19,10 @@ async function main() {
   );
   console.log(
     `Agents:    +${result.agents.created} created, ${result.agents.updated} updated (of ${AGENT_DEFAULTS.length} defaults)`,
+  );
+  const skills = await seedEvaluatorSkillRegistry({ force });
+  console.log(
+    `Skills:    +${skills.created} created, ${skills.updated} updated (of ${DEFAULT_EVALUATOR_SKILLS.length} evaluator defaults)`,
   );
 }
 

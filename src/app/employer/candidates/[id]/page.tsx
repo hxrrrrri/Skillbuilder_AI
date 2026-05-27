@@ -40,6 +40,30 @@ export default async function EmployerCandidateDetail({ params }: { params: { id
         {summary.mockOrHeuristic && <Badge tone="warn">Mock / heuristic signals present</Badge>}
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Trust layer</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <div className="flex flex-wrap gap-2">
+            {summary.trustBadges.map((badge) => (
+              <Badge
+                key={badge}
+                tone={badge.includes("Warning") ? "warn" : badge.includes("Verified") || badge.includes("Evidence") ? "good" : "default"}
+              >
+                {badge}
+              </Badge>
+            ))}
+          </div>
+          <div className="mt-3 grid gap-3 text-sm md:grid-cols-4">
+            <Metric label="Evidence count" value={summary.evidenceCount} />
+            <Metric label="Terminal proof" value={summary.terminalProofCount} />
+            <SmallMetric label="Commit" value={summary.evaluatedCommitSha ? summary.evaluatedCommitSha.slice(0, 12) : "not captured"} />
+            <SmallMetric label="Evaluator" value={summary.evaluatorVersion ?? "not captured"} />
+          </div>
+        </CardBody>
+      </Card>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <Card>
@@ -132,6 +156,15 @@ function Metric({ label, value }: { label: string; value: number | null | undefi
     <div className="rounded-md border border-border bg-panel2/40 p-3">
       <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
       <div className="mt-1 font-display text-3xl text-ink">{value == null ? "not measured" : value}</div>
+    </div>
+  );
+}
+
+function SmallMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-border bg-panel2/40 p-3">
+      <div className="text-xs uppercase tracking-wide text-muted">{label}</div>
+      <div className="mt-1 break-all font-mono text-sm text-ink">{value}</div>
     </div>
   );
 }

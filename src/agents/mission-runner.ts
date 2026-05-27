@@ -14,6 +14,7 @@ import { runArchitecture } from "./architecture";
 import { runCodeQuality } from "./code-quality";
 import { runTesting } from "./testing";
 import { runSecurity } from "./security";
+import { runAICollaborationReview } from "./ai-collaboration";
 import { runGitEvidence } from "./git-evidence";
 import { runDocumentation } from "./documentation";
 import { runAuthenticity } from "./authenticity";
@@ -21,6 +22,13 @@ import { runInterviewGen } from "./interview-gen";
 import { runValidator } from "./validator";
 import { runSkillGraph } from "./skill-graph";
 import { runProfileGen } from "./profile-gen";
+import { upsertHarnessContextSnapshot } from "@/lib/evaluator-runtime/harness-context";
+import {
+  completeEvaluatorSkillRun,
+  failEvaluatorSkillRun,
+  prepareEvaluatorSkillRun,
+  AGENT_TO_EVALUATOR_SKILL,
+} from "@/lib/evaluator-runtime/skill-runner";
 
 type RawOwnership = { owner_match: boolean; repo_token_verified: boolean; collaborator_verified?: boolean; self_declared: boolean; gh_user?: string | null };
 
@@ -75,6 +83,7 @@ export const PIPELINE: AgentName[] = [
   "code-quality",
   "testing",
   "security",
+  "ai-collaboration",
   "git-evidence",
   "documentation",
   "authenticity",
@@ -179,6 +188,7 @@ export async function runMission(opts: {
     handoffs: [],
     assertion_results: [],
     authenticity: null,
+    aiCollaboration: null,
     tokens_in: 0,
     tokens_out: 0,
     mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
@@ -260,6 +270,18 @@ export async function runMission(opts: {
   async function step<T>(name: AgentName, fn: () => Promise<Handoff<T>>): Promise<Handoff<T>> {
     const ev = events.find((e) => e.agentName === name);
     const evId = ev?.id ?? (await recordEvent(opts.runId, name, PIPELINE.indexOf(name))).id;
+    const skillRun = await prepareEvaluatorSkillRun({
+      agentName: name,
+      runId: opts.runId,
+      tenantId: state.ownership_status ? null : undefined,
+      state,
+    });
+    if (skillRun.kind === "disabled") {
+      const handoff = skippedHandoff(name, skillRun.reason) as Handoff<T>;
+      state.handoffs.push(handoff as Handoff);
+      await skipEvent(evId, handoff as Handoff);
+      return handoff;
+    }
     const resolved = await resolveAgentConfig(name);
     const plannedRuntime = state.provider_matrix?.agents?.[name];
     if (!resolved.enabled) {
@@ -302,6 +324,7 @@ export async function runMission(opts: {
       const runtime = state.provider_runtime?.[name] ?? state.provider_matrix?.agents?.[name];
       const enriched = runtime ? ({ ...handoff, runtime } as Handoff<T>) : handoff;
       state.handoffs.push(enriched as Handoff);
+      await completeEvaluatorSkillRun({ prepared: skillRun, state, handoff: enriched as Handoff });
       await completeEvent(evId, enriched as Handoff);
       await prisma.analysisRun.update({
         where: { id: opts.runId },
@@ -315,6 +338,7 @@ export async function runMission(opts: {
         if (runtime) state.provider_runtime = { ...(state.provider_runtime ?? {}), [name]: runtime };
         const handoff = skippedHandoff(name, err.message || "skipped", runtime) as Handoff<T>;
         state.handoffs.push(handoff as Handoff);
+        await failEvaluatorSkillRun({ prepared: skillRun, state, error: err, handoff: handoff as Handoff });
         await skipEvent(evId, handoff as Handoff);
         await prisma.analysisRun.update({
           where: { id: opts.runId },
@@ -323,6 +347,15 @@ export async function runMission(opts: {
         return handoff;
       }
       await failEvent(evId, err);
+      await failEvaluatorSkillRun({ prepared: skillRun, state, error: err });
+      if (AGENT_TO_EVALUATOR_SKILL[name]) {
+        const handoff = skippedHandoff(
+          name,
+          err instanceof Error ? err.message : String(err),
+        ) as Handoff<T>;
+        state.handoffs.push(handoff as Handoff);
+        return handoff;
+      }
       throw err;
     }
   }
@@ -356,11 +389,18 @@ export async function runMission(opts: {
   try {
     await step("orchestrator", () => runOrchestrator(state, opts.jobDescription));
     await step("repo-scanner", () => runRepoScanner(state, opts.owner, opts.repo));
+    await upsertHarnessContextSnapshot({
+      runId: opts.runId,
+      repoUrl: opts.repoUrl ?? `https://github.com/${opts.owner}/${opts.repo}`,
+      contextPack: state.context_pack,
+      executionMode: mode,
+    });
 
     await contextStep("architecture", () => runArchitecture(state));
     await contextStep("code-quality", () => runCodeQuality(state));
     await contextStep("testing", () => runTesting(state));
     await contextStep("security", () => runSecurity(state));
+    await contextStep("ai-collaboration", () => runAICollaborationReview(state));
     await contextStep("git-evidence", () => runGitEvidence(state));
     await contextStep("documentation", () => runDocumentation(state));
     await contextStep("authenticity", () => runAuthenticity(state));
@@ -462,6 +502,7 @@ export async function runMission(opts: {
         authenticitySignals: JSON.stringify(state.authenticity ?? null),
         improvementPlan: JSON.stringify(profile?.improvement_plan ?? null),
         employerVerifier: JSON.stringify(profile?.employer_verifier ?? null),
+        aiCollaboration: JSON.stringify(state.aiCollaboration ?? null),
         profileSummary: JSON.stringify(profile ?? null),
         providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
       },

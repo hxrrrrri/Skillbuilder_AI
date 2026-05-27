@@ -49,7 +49,15 @@ export default async function PublicProfile({ params }: { params: { slug: string
     score: s.score === -1 ? null : s.score,
     confidence: s.confidence,
     source: s.scoreSource,
-    evidence: safeJsonParse<any[]>(s.evidence, []),
+    evidence: safeJsonParse<any[]>(s.evidence, []).map((e) => ({
+      file: e.file,
+      line_start: e.line_start ?? e.line,
+      line_end: e.line_end,
+      reason: e.reason,
+      source: e.source,
+      confidence: e.confidence,
+      validator_note: e.validator_note,
+    })),
     validator_notes: s.validatorNotes,
   }));
 

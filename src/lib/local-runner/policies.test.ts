@@ -4,8 +4,14 @@ import { evaluatePolicy } from "./policies";
 describe("evaluatePolicy", () => {
   it("allows known dev commands", () => {
     expect(evaluatePolicy({ command: "git", args: ["status"] }).allowed).toBe(true);
-    expect(evaluatePolicy({ command: "npm", args: ["test"] }).allowed).toBe(true);
+    expect(evaluatePolicy({ command: "npm", args: ["test"], approved: true }).allowed).toBe(true);
     expect(evaluatePolicy({ command: "gh", args: ["auth", "status"] }).allowed).toBe(true);
+  });
+
+  it("requires approval for package scripts", () => {
+    const d = evaluatePolicy({ command: "npm", args: ["test"] });
+    expect(d.allowed).toBe(false);
+    expect(d.requiresApproval).toBe(true);
   });
 
   it("blocks rm -rf even if approved", () => {

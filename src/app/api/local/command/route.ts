@@ -5,10 +5,10 @@ import { prisma } from "@/lib/db";
 import { evaluatePolicy } from "@/lib/local-runner/policies";
 import { runCommand, summarize } from "@/lib/local-runner/terminal";
 import { resolveSafeRunCwd } from "@/lib/local-runner/workspace";
-import type { TerminalEvidence } from "@/lib/local-runner/types";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/roles";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { saveCommandRunAsEvidence } from "@/lib/local-runner/terminal-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +18,7 @@ const Body = z.object({
   args: z.array(z.string().max(500)).max(40).default([]),
   cwd: z.string().max(500).optional(),
   mission_id: z.string().optional(),
+  runId: z.string().optional(),
   requiresApproval: z.boolean().optional(),
   approved: z.boolean().optional(),
   saveAsEvidence: z.boolean().optional(),
@@ -37,6 +38,10 @@ export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? null;
   const userAgent = req.headers.get("user-agent") ?? null;
 
+  if (!user) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
   if (process.env.NODE_ENV === "production" && process.env.SKILLPROOF_TERMINAL_ENABLED !== "1") {
     return NextResponse.json(
       {
@@ -54,11 +59,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_body", detail: err?.message }, { status: 400 });
   }
 
-  if (!user) {
-    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
-  }
+  const runId = body.runId ?? body.mission_id;
 
-  if (!body.mission_id) {
+  if (!runId) {
     return NextResponse.json(
       { error: "missing_run_id", reason: "terminal commands must be scoped to a verification run" },
       { status: 400 },
@@ -67,15 +70,13 @@ export async function POST(req: Request) {
 
   let runOwnerId: string | null = null;
   let runTenantId: string | null = null;
-  let existingTerminalEvidence: string | null = null;
   const runRow = await prisma.analysisRun.findUnique({
-    where: { id: body.mission_id },
+    where: { id: runId },
     select: {
       id: true,
       createdByUserId: true,
       candidate: { select: { userId: true } },
       tenantId: true,
-      terminalEvidence: true,
     },
   });
   if (!runRow) {
@@ -83,7 +84,6 @@ export async function POST(req: Request) {
   }
   runOwnerId = runRow.createdByUserId ?? runRow.candidate?.userId ?? null;
   runTenantId = runRow.tenantId ?? null;
-  existingTerminalEvidence = runRow.terminalEvidence ?? null;
 
   const isOwner =
     runRow.createdByUserId === user.id ||
@@ -95,7 +95,7 @@ export async function POST(req: Request) {
       actorUserId: user.id,
       tenantId: runTenantId,
       targetType: "run",
-      targetId: body.mission_id,
+      targetId: runId,
       metadata: { command: body.command, reason: runOwnerId ? "not_run_owner" : "run_has_no_owner" },
       ip,
       userAgent,
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const safeCwd = resolveSafeRunCwd(body.cwd, body.mission_id);
+  const safeCwd = resolveSafeRunCwd(body.cwd, runId);
   if (!safeCwd.ok) {
     return NextResponse.json({ error: "cwd_blocked", reason: safeCwd.reason }, { status: 403 });
   }
@@ -114,15 +114,14 @@ export async function POST(req: Request) {
   const policy = evaluatePolicy({ command: body.command, args: body.args, approved: !!body.approved });
   if (!policy.allowed && policy.requiresApproval) {
     await writeAuditLog({
-      action: "terminal.command",
-      actorUserId: user?.id ?? null,
+      action: "terminal.command.approval_required",
+      actorUserId: user.id,
       tenantId: runTenantId,
       targetType: "run",
-      targetId: body.mission_id ?? null,
+      targetId: runId,
       metadata: {
         command: body.command,
         args: body.args,
-        outcome: "approval_required",
         reason: policy.reason,
       },
       ip,
@@ -132,21 +131,33 @@ export async function POST(req: Request) {
   }
   if (!policy.allowed) {
     await writeAuditLog({
-      action: "terminal.command",
-      actorUserId: user?.id ?? null,
+      action: "terminal.command.blocked",
+      actorUserId: user.id,
       tenantId: runTenantId,
       targetType: "run",
-      targetId: body.mission_id ?? null,
+      targetId: runId,
       metadata: {
         command: body.command,
         args: body.args,
-        outcome: "blocked",
         reason: policy.reason,
       },
       ip,
       userAgent,
     });
     return NextResponse.json({ error: "blocked", reason: policy.reason }, { status: 403 });
+  }
+
+  if (body.approved) {
+    await writeAuditLog({
+      action: "terminal.command.approved",
+      actorUserId: user.id,
+      tenantId: runTenantId,
+      targetType: "run",
+      targetId: runId,
+      metadata: { command: body.command, args: body.args, reason: policy.reason },
+      ip,
+      userAgent,
+    }).catch(() => {});
   }
 
   const run = await runCommand({
@@ -160,27 +171,42 @@ export async function POST(req: Request) {
   const outputHash = sha256Hex(run.stdout, "\0", run.stderr);
   const redactionWarning = /\[REDACTED[_A-Z]*\]/.test(`${run.stdout}\n${run.stderr}`);
 
-  if (body.saveAsEvidence && body.mission_id) {
+  await prisma.terminalCommandRun.create({
+    data: {
+      id: run.id,
+      command: run.command,
+      args: JSON.stringify(run.args),
+      cwd: run.cwd,
+      exitCode: run.exitCode,
+      stdoutSummary: summarize(run.stdout, 1200),
+      stderrSummary: summarize(run.stderr, 800),
+      durationMs: run.durationMs,
+      outputHash,
+      usedFor: body.usedFor ?? "agent",
+      ranAt: run.completedAt ? new Date(run.completedAt) : new Date(),
+      actorUserId: user.id,
+      runId,
+      savedAsEvidence: false,
+    },
+  });
+
+  if (body.saveAsEvidence) {
     try {
-      const list: TerminalEvidence[] = existingTerminalEvidence
-        ? JSON.parse(existingTerminalEvidence)
-        : [];
-      list.push({
-        command: [run.command, ...run.args].join(" "),
-        cwd: run.cwd,
-        exitCode: run.exitCode,
-        stdoutSummary: summarize(run.stdout, 1200),
-        stderrSummary: summarize(run.stderr, 800),
-        durationMs: run.durationMs,
-        usedFor: body.usedFor ?? "agent",
-        outputSha256: outputHash,
-        redactionWarning,
-        evidenceSource: "sandbox_terminal",
-        includeInReport: true,
+      await saveCommandRunAsEvidence({
+        commandRunId: run.id,
+        runId,
+        actorUserId: user.id,
+        isAdmin,
       });
-      await prisma.analysisRun.update({
-        where: { id: body.mission_id },
-        data: { terminalEvidence: JSON.stringify(list) },
+      await writeAuditLog({
+        action: "terminal.command.saved_as_evidence",
+        actorUserId: user.id,
+        tenantId: runTenantId,
+        targetType: "TerminalCommandRun",
+        targetId: run.id,
+        metadata: { runId, usedFor: body.usedFor ?? "agent" },
+        ip,
+        userAgent,
       });
     } catch (err) {
       // non-fatal
@@ -188,11 +214,11 @@ export async function POST(req: Request) {
   }
 
   await writeAuditLog({
-    action: "terminal.command",
-    actorUserId: user?.id ?? null,
+    action: "terminal.command.executed",
+    actorUserId: user.id,
     tenantId: runTenantId,
     targetType: "run",
-    targetId: body.mission_id ?? null,
+    targetId: runId,
     metadata: {
       command: body.command,
       args: body.args,
@@ -200,8 +226,9 @@ export async function POST(req: Request) {
       status: run.status,
       durationMs: run.durationMs,
       outputSha256: outputHash,
-      savedAsEvidence: !!(body.saveAsEvidence && body.mission_id),
+      savedAsEvidence: !!body.saveAsEvidence,
       usedFor: body.saveAsEvidence ? body.usedFor ?? "agent" : null,
+      commandRunId: run.id,
     },
     ip,
     userAgent,

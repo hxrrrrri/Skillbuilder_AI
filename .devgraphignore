@@ -1,0 +1,10 @@
+.git/**
+.devgraph/**
+node_modules/**
+dist/**
+build/**
+.venv/**
+__pycache__/**
+*.pyc
+*.lock
+coverage/**

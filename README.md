@@ -43,16 +43,20 @@ Inspired by Factory's Missions architecture.
 | Validation contract  | [src/agents/types.ts](src/agents/types.ts) — written before analysis |
 | Structured handoffs  | `Handoff` in [src/agents/types.ts](src/agents/types.ts)              |
 | Serial execution     | [src/agents/mission-runner.ts](src/agents/mission-runner.ts)         |
-| Mission Control      | [src/app/mission/[id]/page.tsx](src/app/mission/%5Bid%5D/page.tsx)  |
+| Candidate run detail | [src/app/candidate/runs/[id]/page.tsx](src/app/candidate/runs/%5Bid%5D/page.tsx) |
+| Legacy mission route | `/mission/[id]` is protected and redirects to role-safe run pages.      |
 | Per-role models      | env: `MODEL_ORCHESTRATOR`, `MODEL_WORKER`, `MODEL_VALIDATOR`         |
+| Evaluator runtime    | [src/lib/evaluator-runtime](src/lib/evaluator-runtime) + [evaluator-skills](evaluator-skills) |
 
 ### Pipeline order
 
 ```
 orchestrator → repo-scanner → architecture → code-quality → testing → security
-→ git-evidence → documentation → authenticity → interview-gen
+→ ai-collaboration → git-evidence → documentation → authenticity → interview-gen
 → validator → skill-graph → profile-gen
 ```
+
+Each core evaluator execution records a `SkillRun`, emits `EvidenceFinding` rows, and is tied to a `HarnessContextSnapshot` containing commit SHA, file-tree hash, detected stack, evaluator runtime version, and validator version. One failed evaluator skill is recorded as failed and the rest of the pipeline can continue.
 
 ---
 
@@ -63,7 +67,7 @@ context pack: README, configs, file tree summary, top-ranked source files, sampl
 commits, plus a deterministic `RepoIntelligenceIndex` with languages, frameworks, routes,
 components, functions, schemas, API clients, tests, config/CI files, dependency edges, and risk
 flags. The validator's truth set is the **full repo tree** (`filesIndex.all`), not just snippets.
-Mission Control surfaces `tokens raw` vs `tokens used` and a saved percentage.
+Candidate/admin run pages surface `tokens raw` vs `tokens used` and a saved percentage.
 
 ---
 
@@ -105,6 +109,10 @@ npm run worker
 | Var                   | Purpose                                                       |
 | --------------------- | ------------------------------------------------------------- |
 | `DATABASE_URL`        | SQLite URL, e.g. `file:./dev.db`                              |
+| `NEXTAUTH_URL`        | App URL used by NextAuth.                                     |
+| `NEXTAUTH_SECRET`     | Required NextAuth secret. Generate with `openssl rand -base64 32`. |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | Optional GitHub OAuth login/linking. Login identity is not repo ownership by itself. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Optional Google OAuth login. Never used for GitHub ownership proof. |
 | `ANTHROPIC_API_KEY`   | Claude API key — leave unset to use heuristic / mock mode.    |
 | `SKILLPROOF_MOCK_LLM` | Force mock mode (`1`).                                        |
 | `GITHUB_TOKEN`        | Optional. Raises GitHub REST rate limit 60 → 5000/hr.         |
@@ -113,14 +121,16 @@ npm run worker
 | `MODEL_VALIDATOR`     | Default `claude-opus-4-7`.                                    |
 | `NEXT_PUBLIC_APP_URL` | Base URL used when publishing profile URLs.                   |
 | `SKILLPROOF_WORKER_MODE` | Set `1` to make `/api/analyze` enqueue only; run `npm run worker`. |
-| `ALLOW_LOCAL_COMMANDS` | In production, `/api/local/command` is blocked unless set to `1`. |
+| `SKILLPROOF_TERMINAL_ENABLED` | Production terminal execution is disabled unless explicitly set to `1`. |
+| `SKILLPROOF_EVALUATOR_RUNTIME_ENABLED` | Enables SkillRun/EvidenceFinding provenance runtime. |
+| `SKILLPROOF_PUBLIC_REPORTS_ENABLED` | Set `0` to disable anonymous public-profile report downloads. |
 
 ---
 
 ## Local demo mode vs mock mode
 
 - **Real LLM mode** — set `ANTHROPIC_API_KEY`. Workers + validators call Claude.
-- **Mock / heuristic mode** — no key, or `SKILLPROOF_MOCK_LLM=1`. Mission Control surfaces a
+- **Mock / heuristic mode** — no key, or `SKILLPROOF_MOCK_LLM=1`. Run pages surface a
   yellow "Mock / Heuristic mode active" banner and tags every score with a `Heuristic` or `Mock`
   badge. Scores are deterministic and confidence is reduced. The product never pretends
   fallback scores are fully verified.
@@ -129,6 +139,33 @@ npm run worker
   challenge submission, employer verifier). Used by the landing page **Open Demo Mission**
   button so the hackathon demo survives GitHub rate limits and missing CLIs. Clearly labeled
   as sample data.
+- **Evaluator runtime** — versioned evaluator skills run as auditable skill packs. Scores without evidence are rejected or lowered by validation, and AI Collaboration Score is shown only when evidence exists; otherwise it is explicitly marked insufficient.
+
+---
+
+## Hackathon demo script
+
+Theme line: **SkillProof AI builds proof, not claims.**
+
+1. Login as the seeded candidate and open `/candidate/dashboard`.
+2. Start a new verification run from a GitHub repo. Point out ownership status, commit snapshot, evaluator version, and mock/heuristic warning if no LLM key is configured.
+3. Open `/candidate/runs/[id]`. Show evaluator skill progress, EvidenceFinding-backed score, skill graph, validation summary, AI Collaboration Score or "AI collaboration evidence insufficient."
+4. Open the sandbox terminal from the run. Run an allowlisted command. For `npm test` or `npm run build`, show the explicit approval prompt. Add the existing command run to the proof transcript and point out it did not rerun.
+5. Publish the profile, then open `/profile/[slug]`. Show public-safe evidence only, trust badges, and redacted terminal proof if included.
+6. Login as employer. Search candidates, open the candidate detail page, show trust badges: Verified Repo Owner, Evidence-Backed, Terminal Proof Included, Tests Detected, AI Collaboration Reviewed, Public-Safe Report, Mock Mode Warning when relevant.
+7. Generate `/employer/interview-kit/[profileId]` with focus areas for debugging, AI collaboration, architecture, and testing. Questions reference evidence, not resume claims.
+8. Login as college/admin if needed. Show tenant-safe cohort/student pages and admin run trace with SkillRun provenance, provider/model metadata, hashes, failures, and validator notes.
+
+Clean local setup:
+
+```bash
+npm install
+npm run db:push
+npm run db:seed-users
+npm run db:seed-registry
+npm run db:seed-prompts
+npm run dev
+```
 
 ---
 
@@ -149,9 +186,13 @@ npm run worker
 | ✅ Wired    | Hardened command policy: destructive patterns block before allowlist; approval only lifts allowlisted commands. |
 | ✅ Wired    | `parseRepoUrl` rejects spoof hosts like `github.com.evil.com`. |
 | ✅ Wired    | Simple database-backed worker (`npm run worker`) processes pending missions. |
+| ✅ Wired    | `/api/runs/[id]` is authenticated and role-gated; employers use public/employer-safe profile APIs, not raw run data. |
+| ✅ Wired    | Terminal command execution requires auth, run ownership/admin access, approval for installs/package scripts, cwd jail, output limits, redaction, audit logs, and stored `TerminalCommandRun` rows. |
+| ✅ Wired    | Saving to the proof transcript marks an existing command run as evidence; it does not rerun the command. |
+| ✅ Wired    | Evaluator skill registry seeds 12 versioned skill manifests; 5 core skills run in the prototype pipeline. |
 | ⏳ Future   | Private repo support via local folder upload — currently public GitHub URLs only. CLI mode keeps private code on the candidate's machine when used. |
 | ⏳ Future   | Distributed queue/Redis deployment. Current worker is a single-process DB poller for prototypes. |
-| ⏳ Future   | Cryptographic signed badge embed.                                      |
+| ⏳ Future   | Full evaluator lab and advanced admin analytics.                       |
 
 ---
 
@@ -186,7 +227,7 @@ checkbox before installing dependencies. When approved it detects the lockfile a
 - `bun install --frozen-lockfile`
 
 After install it runs available scripts: `test`, `build`, `typecheck`/`type-check`, and `lint`.
-If install is not approved or scripts are missing, Mission Control records explicit
+If install is not approved or scripts are missing, SkillProof records explicit
 `pending approval` / `skipped` terminal evidence. Skipped commands are never shown as proof.
 
 ### Required tools
@@ -204,7 +245,7 @@ If install is not approved or scripts are missing, Mission Control records expli
 
 ### Configure provider commands
 
-Edit `skillproof.local.json` at the project root, or use the **Edit** button on `/local-setup`.
+Runtime source of truth is the DB provider registry (`/admin/providers` and `/admin/agents`). `skillproof.local.json` remains only a local fallback/override for CLI defaults when DB rows are unavailable.
 
 ```json
 {
@@ -236,8 +277,9 @@ If `{{prompt}}` is not present in `args`, the prompt is piped via stdin instead.
   reads, `node -e`, and `python -c`.
 - Requires explicit approval: global `-g` installs and arbitrary `npx <package>` runs. Approved
   package-manager dependency installs are only run by the local proof policy.
-- `/api/local/command` is jailed to `.skillproof/runs/<run_id>` and is disabled in production
-  unless `ALLOW_LOCAL_COMMANDS=1`.
+- `/api/local/command` requires authentication, run ownership/admin access, is jailed to
+  `.skillproof/runs/<run_id>`, and is disabled in production unless
+  `SKILLPROOF_TERMINAL_ENABLED=1`.
 - Terminal output is redacted for token shapes before persistence: `sk-…`, `sk-ant-…`, `ghp_…`,
   `github_pat_…`, JWT-shaped strings, `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GITHUB_TOKEN`
   assignments.
@@ -249,7 +291,7 @@ If `{{prompt}}` is not present in `args`, the prompt is piped via stdin instead.
 - The Proof Runner clones via HTTPS into `.skillproof/runs/<run_id>`. Make sure the directory is
   writable. Add `.skillproof/` to `.gitignore` (done by default).
 - CLI flags for `claude` / `codex` change over time. If your CLI exits non-zero on `--version`,
-  edit `skillproof.local.json` accordingly.
+  edit the DB provider registry accordingly; keep `skillproof.local.json` only as local fallback.
 - The Ollama provider expects a JSON-capable model at `localhost:11434`. Pull one with
   `ollama pull llama3.1:8b`.
 - Ownership verification via `gh` requires `gh auth login` and matches the authenticated user's
@@ -263,13 +305,14 @@ If `{{prompt}}` is not present in `args`, the prompt is piped via stdin instead.
 | Method | Path                          | Purpose                                              |
 | ------ | ----------------------------- | ---------------------------------------------------- |
 | POST   | `/api/analyze`                | Start a mission. Body: `repo_url`, `candidate_name`, `github_username?`, `target_role`, `candidate_level`, `job_description?`, `execution_mode?` (`api`/`cli`/`hybrid`/`mock`) |
-| GET    | `/api/runs/[id]`              | Poll mission status. Returns scores, events, contract, coverage, authenticity, employer verifier, plan, terminal evidence, provider matrix, ownership status. |
+| GET    | `/api/runs/[id]`              | Authenticated raw-run API. Candidate/college get safe summaries; admin gets internals; employer is forbidden and must use profile APIs. |
 | POST   | `/api/interview/evaluate`     | Score an interview answer; persists 5 dimension scores, recomputes overall, updates verification level. |
 | POST   | `/api/challenge/evaluate`     | Score an AI Collaboration Challenge submission (`tool_used`, `proposed_diff`, `explanation`). |
 | POST   | `/api/profile/publish`        | Create a public profile slug for a completed run.    |
 | GET    | `/api/report/export?run_id=…` | Download the Markdown SkillProof Report.             |
 | GET    | `/api/local/tools`            | Detect installed CLIs (git, gh, claude, codex, ollama, optional copilot). Returns versions, auth, capabilities, recommended mode. |
-| POST   | `/api/local/command`          | Run a safe terminal command. Body: `command`, `args`, `cwd?`, `mission_id?`, `approved?`, `saveAsEvidence?`, `usedFor?`. Returns `403 approval_required` for gated commands. |
+| POST   | `/api/local/command`          | Run a safe terminal command. Body: `command`, `args`, `cwd?`, `mission_id`/`runId`, `approved?`, `saveAsEvidence?`, `usedFor?`. Stores a `TerminalCommandRun`; returns `403 approval_required` for gated commands. |
+| POST   | `/api/local/terminal-runs/[id]/save` | Mark an existing stored command run as proof transcript evidence without rerunning it. |
 | GET    | `/api/local/providers?mode=…` | List provider availability + matrix for an execution mode. |
 | POST   | `/api/local/providers`        | Save `skillproof.local.json` provider config.        |
 | POST   | `/api/local/providers/test`   | Run a tiny JSON probe against a single provider. Body: `provider_id`, `prompt?`. Returns parsed JSON, raw output, model, token estimate, or error. |
@@ -353,7 +396,7 @@ See [DEMO.md](DEMO.md) for the hackathon demo script.
 
 Foundations only — not fully wired. Use these as the starting points when you migrate the project off the hackathon stack.
 
-- **GitHub OAuth (link-only).** Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to enable `Connect GitHub` on `/candidate/settings`. The OAuth flow links a GitHub account to an existing email; first-time signup via GitHub is intentionally disabled until a NextAuth Account adapter is wired. Linking calls `upgradeOwnershipFromOauth` to promote matching runs from `self_declared` to `github_oauth_owner_match`.
+- **GitHub OAuth (prototype account linking).** Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to enable GitHub login/linking. `allowDangerousEmailAccountLinking` is documented in code as a prototype risk. Linking records the verified GitHub login, but repo ownership is promoted only when the verified login matches the repo owner or another explicit ownership signal exists.
 - **Signed badges.** Set `BADGE_SIGNING_SECRET` (≥16 chars) and `/api/badge/[slug].svg` will require `?sig=v1.<hmac>`. With the secret unset, badges work without signatures (current default).
 - **Postgres migration.** `prisma/schema.postgres.prisma` is a copy of the active schema with `provider = "postgresql"`. To switch:
   ```bash
@@ -372,7 +415,7 @@ Foundations only — not fully wired. Use these as the starting points when you 
 _Placeholders — to be added before submission._
 
 - Landing page
-- Mission Control with validation contract coverage
+- Candidate/admin run detail with validation contract coverage
 - Evidence Locker
 - Public verified profile
 - Employer Verifier preview

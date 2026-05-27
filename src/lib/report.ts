@@ -1,5 +1,7 @@
 // Markdown report builder. Pure function — no DB access here.
 
+import { redactText } from "@/lib/evaluator-runtime/redaction";
+
 type Score = {
   skillName: string;
   score: number;
@@ -139,13 +141,13 @@ export function buildMarkdownReport(run: RunBundle, options: ReportOptions = {})
       if (!publicView && t.cwd) lines.push(`- cwd: \`${t.cwd}\``);
       if (!publicView && t.stdoutSummary) {
         lines.push("```");
-        lines.push(String(t.stdoutSummary).slice(0, 1500));
+        lines.push(redactText(String(t.stdoutSummary), 1500));
         lines.push("```");
       }
       if (!publicView && t.stderrSummary) {
         lines.push("_stderr:_");
         lines.push("```");
-        lines.push(String(t.stderrSummary).slice(0, 800));
+        lines.push(redactText(String(t.stderrSummary), 800));
         lines.push("```");
       }
       lines.push("");
@@ -221,16 +223,16 @@ export function buildMarkdownReport(run: RunBundle, options: ReportOptions = {})
         const range = e.line_start ? `:${e.line_start}${e.line_end && e.line_end !== e.line_start ? `-${e.line_end}` : ""}` : e.line ? `:${e.line}` : "";
         const file = e.file ? `\`${e.file}${range}\` — ` : "";
         const source = e.source ? `_${e.source}_ — ` : "";
-        lines.push(`- ${file}${source}${e.reason}`);
-        if (e.snippet) {
+        lines.push(`- ${file}${source}${redactText(e.reason ?? "", 500)}`);
+        if (e.snippet && !publicView) {
           lines.push("  ```");
-          lines.push(String(e.snippet).slice(0, 800).replace(/\n/g, "\n  "));
+          lines.push(redactText(String(e.snippet), 800).replace(/\n/g, "\n  "));
           lines.push("  ```");
         }
-        if (e.validator_note) lines.push(`  - validator: ${e.validator_note}`);
+        if (e.validator_note) lines.push(`  - validator: ${redactText(e.validator_note, 300)}`);
       }
     }
-    if (s.validatorNotes) lines.push(`- _validator: ${s.validatorNotes}_`);
+    if (s.validatorNotes) lines.push(`- _validator: ${redactText(s.validatorNotes, 300)}_`);
     lines.push("");
   }
 
@@ -267,7 +269,7 @@ export function buildMarkdownReport(run: RunBundle, options: ReportOptions = {})
       } else {
         lines.push("**Answer:**");
         lines.push("");
-        lines.push("> " + (q.answer ?? "").replace(/\n/g, "\n> "));
+        lines.push("> " + redactText(q.answer ?? "", 2000).replace(/\n/g, "\n> "));
         lines.push("");
       }
       if (q.answerScore != null) lines.push(`**Score:** ${q.answerScore}/100`);

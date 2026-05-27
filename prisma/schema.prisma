@@ -12,29 +12,30 @@ datasource db {
 // via @/lib/auth/roles. Keep strings here for portability.
 
 model User {
-  id              String              @id @default(cuid())
-  email           String              @unique
-  name            String              @default("")
-  passwordHash    String              @default("")
-  role            String              @default("candidate") // candidate|employer|college_admin|college_member|admin|super_admin
-  primaryTenantId String?
-  githubUsername  String?
-  image           String?
-  emailVerified   DateTime?
-  status          String              @default("active") // active|suspended
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  primaryTenant   Tenant?             @relation("UserPrimaryTenant", fields: [primaryTenantId], references: [id])
-  memberships     TenantMembership[]
-  candidate       Candidate?
-  runsCreated     AnalysisRun[]       @relation("RunCreator")
-  profilesOwned   PublicProfile[]     @relation("ProfileOwner")
-  auditLogs       AuditLog[]
-  promptVersions  PromptVersion[]
-  employerShortlists EmployerShortlist[]
-  savedSearches   SavedSearch[]
-  accounts        Account[]
-  sessions        Session[]
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String               @default("")
+  passwordHash        String               @default("")
+  role                String               @default("candidate") // candidate|employer|college_admin|college_member|admin|super_admin
+  primaryTenantId     String?
+  githubUsername      String?
+  image               String?
+  emailVerified       DateTime?
+  status              String               @default("active") // active|suspended
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  primaryTenant       Tenant?              @relation("UserPrimaryTenant", fields: [primaryTenantId], references: [id])
+  memberships         TenantMembership[]
+  candidate           Candidate?
+  runsCreated         AnalysisRun[]        @relation("RunCreator")
+  profilesOwned       PublicProfile[]      @relation("ProfileOwner")
+  auditLogs           AuditLog[]
+  terminalCommandRuns TerminalCommandRun[] @relation("TerminalCommandActor")
+  promptVersions      PromptVersion[]
+  employerShortlists  EmployerShortlist[]
+  savedSearches       SavedSearch[]
+  accounts            Account[]
+  sessions            Session[]
 }
 
 model Account {
@@ -75,20 +76,20 @@ model VerificationToken {
 }
 
 model Tenant {
-  id          String              @id @default(cuid())
-  slug        String              @unique
-  name        String
-  kind        String              // college|employer|platform
-  status      String              @default("active")
-  metadata    String?             // JSON
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
-  memberships TenantMembership[]
-  primaryFor  User[]              @relation("UserPrimaryTenant")
-  runs        AnalysisRun[]
-  auditLogs   AuditLog[]
-  cohorts     Cohort[]
-  invites     TenantInvite[]
+  id           String             @id @default(cuid())
+  slug         String             @unique
+  name         String
+  kind         String // college|employer|platform
+  status       String             @default("active")
+  metadata     String? // JSON
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  memberships  TenantMembership[]
+  primaryFor   User[]             @relation("UserPrimaryTenant")
+  runs         AnalysisRun[]
+  auditLogs    AuditLog[]
+  cohorts      Cohort[]
+  invites      TenantInvite[]
   talentShares TalentPoolShare[]
 }
 
@@ -96,7 +97,7 @@ model TenantMembership {
   id        String   @id @default(cuid())
   userId    String
   tenantId  String
-  role      String   // admin|member|mentor|officer
+  role      String // admin|member|mentor|officer
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -106,18 +107,18 @@ model TenantMembership {
 }
 
 model AuditLog {
-  id           String   @id @default(cuid())
-  actorUserId  String?
-  tenantId     String?
-  action       String
-  targetType   String?
-  targetId     String?
-  metadata     String?  // JSON
-  ip           String?
-  userAgent    String?
-  createdAt    DateTime @default(now())
-  actor        User?    @relation(fields: [actorUserId], references: [id])
-  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
+  id          String   @id @default(cuid())
+  actorUserId String?
+  tenantId    String?
+  action      String
+  targetType  String?
+  targetId    String?
+  metadata    String? // JSON
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation(fields: [actorUserId], references: [id])
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
 
   @@index([actorUserId])
   @@index([tenantId])
@@ -132,47 +133,47 @@ model AuditLog {
 // adapters in @/lib/providers/reasoning.ts map it to provider-native controls.
 
 model ProviderConfig {
-  id              String   @id @default(cuid())
-  providerId      String   @unique // anthropic_api|claude_cli|codex_cli|ollama|copilot_cli|mock
-  label           String
-  kind            String   // api|cli|local|mock
-  enabled         Boolean  @default(true)
-  defaultModel    String?
-  baseUrl         String?
-  command         String?
-  argsTemplate    String?  // JSON string[]
-  apiKeyEnv       String?  // name of env var holding key
-  capabilities    String?  // JSON: { reasoning, jsonMode, streaming, models? }
-  lastTestedAt    DateTime?
-  lastTestStatus  String?  // ok|fail|unavailable
-  lastTestModel   String?
-  lastTestRaw     String?
-  lastTestJsonOk  Boolean?
+  id                String    @id @default(cuid())
+  providerId        String    @unique // anthropic_api|claude_cli|codex_cli|ollama|copilot_cli|mock
+  label             String
+  kind              String // api|cli|local|mock
+  enabled           Boolean   @default(true)
+  defaultModel      String?
+  baseUrl           String?
+  command           String?
+  argsTemplate      String? // JSON string[]
+  apiKeyEnv         String? // name of env var holding key
+  capabilities      String? // JSON: { reasoning, jsonMode, streaming, models? }
+  lastTestedAt      DateTime?
+  lastTestStatus    String? // ok|fail|unavailable
+  lastTestModel     String?
+  lastTestRaw       String?
+  lastTestJsonOk    Boolean?
   lastTestLatencyMs Int?
-  lastTestError   String?
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  lastTestError     String?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 model AgentConfig {
-  id                String   @id @default(cuid())
-  agentName         String   @unique // orchestrator|architecture|code-quality|...
-  providerId        String   // matches ProviderConfig.providerId
-  model             String
-  reasoningBudget   String   @default("medium") // none|low|medium|high|max
-  temperature       Float    @default(0.2)
-  maxTokens         Int      @default(1500)
-  jsonMode          Boolean  @default(true)
-  fallbackProvider  String?
-  fallbackModel     String?
-  fallbackStrategy  String   @default("mock") // mock|retry|skip
-  timeoutMs         Int      @default(60000)
-  retryCount        Int      @default(1)
-  enabled           Boolean  @default(true)
-  costTier          String   @default("medium") // low|medium|high
-  qualityTier       String   @default("medium") // low|medium|high
-  updatedAt         DateTime @updatedAt
+  id               String   @id @default(cuid())
+  agentName        String   @unique // orchestrator|architecture|code-quality|...
+  providerId       String // matches ProviderConfig.providerId
+  model            String
+  reasoningBudget  String   @default("medium") // none|low|medium|high|max
+  temperature      Float    @default(0.2)
+  maxTokens        Int      @default(1500)
+  jsonMode         Boolean  @default(true)
+  fallbackProvider String?
+  fallbackModel    String?
+  fallbackStrategy String   @default("mock") // mock|retry|skip
+  timeoutMs        Int      @default(60000)
+  retryCount       Int      @default(1)
+  enabled          Boolean  @default(true)
+  costTier         String   @default("medium") // low|medium|high
+  qualityTier      String   @default("medium") // low|medium|high
+  updatedAt        DateTime @updatedAt
 }
 
 model PromptVersion {
@@ -193,31 +194,31 @@ model PromptVersion {
 // ---------- Existing domain models (Candidate / Repository / AnalysisRun / etc.) ----------
 
 model Candidate {
-  id             String          @id @default(cuid())
-  userId         String?         @unique
-  name           String
-  email          String?         @unique
-  githubUsername String?
-  createdAt      DateTime        @default(now())
-  user           User?           @relation(fields: [userId], references: [id])
-  repositories   Repository[]
-  runs           AnalysisRun[]
-  profiles       PublicProfile[]
+  id                String                   @id @default(cuid())
+  userId            String?                  @unique
+  name              String
+  email             String?                  @unique
+  githubUsername    String?
+  createdAt         DateTime                 @default(now())
+  user              User?                    @relation(fields: [userId], references: [id])
+  repositories      Repository[]
+  runs              AnalysisRun[]
+  profiles          PublicProfile[]
   cohortMemberships CohortStudent[]
-  reverifications ReVerificationSnapshot[]
+  reverifications   ReVerificationSnapshot[]
 }
 
 model Subscription {
-  id                   String   @id @default(cuid())
+  id                   String    @id @default(cuid())
   ownerUserId          String
   tenantId             String?
-  plan                 String   @default("free") // free|pro|team|enterprise
-  status               String   @default("inactive") // inactive|trialing|active|past_due|canceled
+  plan                 String    @default("free") // free|pro|team|enterprise
+  status               String    @default("inactive") // inactive|trialing|active|past_due|canceled
   currentPeriodEnd     DateTime?
   stripeCustomerId     String?
-  stripeSubscriptionId String?  @unique
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  stripeSubscriptionId String?   @unique
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([ownerUserId])
   @@index([tenantId])
@@ -225,7 +226,7 @@ model Subscription {
 }
 
 model ReVerificationSnapshot {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   candidateId   String
   repoId        String
   previousRunId String
@@ -233,7 +234,7 @@ model ReVerificationSnapshot {
   previousScore Int?
   nextScore     Int?
   deltaJson     String?
-  createdAt     DateTime @default(now())
+  createdAt     DateTime  @default(now())
   candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
 
   @@index([candidateId])
@@ -267,39 +268,39 @@ model CohortStudent {
 }
 
 model TenantInvite {
-  id               String   @id @default(cuid())
+  id               String    @id @default(cuid())
   tenantId         String
   email            String
-  role             String   // candidate|college_member|mentor
+  role             String // candidate|college_member|mentor
   cohortId         String?
-  token            String   @unique
+  token            String    @unique
   expiresAt        DateTime
   acceptedAt       DateTime?
   acceptedByUserId String?
   createdById      String
-  createdAt        DateTime @default(now())
-  tenant           Tenant   @relation(fields: [tenantId], references: [id])
-  cohort           Cohort?  @relation(fields: [cohortId], references: [id])
+  createdAt        DateTime  @default(now())
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  cohort           Cohort?   @relation(fields: [cohortId], references: [id])
 
   @@index([tenantId, email])
 }
 
 model TalentPoolShare {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   tenantId    String
   cohortId    String?
-  token       String   @unique
+  token       String    @unique
   filters     String?
   expiresAt   DateTime?
   createdById String
-  createdAt   DateTime @default(now())
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
 }
 
 model Repository {
-  id              String         @id @default(cuid())
+  id              String        @id @default(cuid())
   candidateId     String?
   repoUrl         String
   repoName        String
@@ -307,13 +308,13 @@ model Repository {
   primaryLanguage String?
   framework       String?
   analyzedAt      DateTime?
-  createdAt       DateTime       @default(now())
-  candidate       Candidate?     @relation(fields: [candidateId], references: [id])
+  createdAt       DateTime      @default(now())
+  candidate       Candidate?    @relation(fields: [candidateId], references: [id])
   runs            AnalysisRun[]
 }
 
 model AnalysisRun {
-  id                   String              @id @default(cuid())
+  id                   String                  @id @default(cuid())
   candidateId          String?
   createdByUserId      String?
   tenantId             String?
@@ -321,38 +322,42 @@ model AnalysisRun {
   targetRole           String
   candidateLevel       String?
   jobDescription       String?
-  status               String              @default("pending") // pending|running|completed|failed
+  status               String                  @default("pending") // pending|running|completed|failed
   statusMessage        String?
   overallScore         Int?
   roleFit              String?
-  verificationLevel    String              @default("repo_only") // repo_only|repo_interview_verified
+  verificationLevel    String                  @default("repo_only") // repo_only|repo_interview_verified
   tokenEstimateRaw     Int?
   tokenEstimateUsed    Int?
-  validationContract   String?             // JSON
-  contextPack          String?             // JSON
-  repoIntelligence     String?             // JSON RepoIntelligenceIndex
-  validationCoverage   String?             // JSON ValidationAssertionResult[]
-  validationSummary    String?             // JSON AssertionCoverageSummary
-  authenticitySignals  String?             // JSON AuthenticityOutput
-  improvementPlan      String?             // JSON ImprovementPlan
-  employerVerifier     String?             // JSON EmployerVerifier
-  aiCollaboration      String?             // JSON AICollabEvaluation
-  profileSummary       String?             // JSON ProfileOutput
-  executionMode        String              @default("api") // api|cli|hybrid|mock
-  localInstallApproved Boolean             @default(false)
-  terminalEvidence     String?             // JSON TerminalEvidence[]
-  providerMatrix       String?             // JSON role -> provider id
-  ownershipStatus      String?             // JSON { owner_match, repo_token_verified, self_declared }
-  createdAt            DateTime            @default(now())
+  validationContract   String? // JSON
+  contextPack          String? // JSON
+  repoIntelligence     String? // JSON RepoIntelligenceIndex
+  validationCoverage   String? // JSON ValidationAssertionResult[]
+  validationSummary    String? // JSON AssertionCoverageSummary
+  authenticitySignals  String? // JSON AuthenticityOutput
+  improvementPlan      String? // JSON ImprovementPlan
+  employerVerifier     String? // JSON EmployerVerifier
+  aiCollaboration      String? // JSON AICollabEvaluation
+  profileSummary       String? // JSON ProfileOutput
+  executionMode        String                  @default("api") // api|cli|hybrid|mock
+  localInstallApproved Boolean                 @default(false)
+  terminalEvidence     String? // JSON TerminalEvidence[]
+  providerMatrix       String? // JSON role -> provider id
+  ownershipStatus      String? // JSON { owner_match, repo_token_verified, self_declared }
+  createdAt            DateTime                @default(now())
   completedAt          DateTime?
-  candidate            Candidate?          @relation(fields: [candidateId], references: [id])
-  createdBy            User?               @relation("RunCreator", fields: [createdByUserId], references: [id])
-  tenant               Tenant?             @relation(fields: [tenantId], references: [id])
-  repository           Repository          @relation(fields: [repoId], references: [id])
+  candidate            Candidate?              @relation(fields: [candidateId], references: [id])
+  createdBy            User?                   @relation("RunCreator", fields: [createdByUserId], references: [id])
+  tenant               Tenant?                 @relation(fields: [tenantId], references: [id])
+  repository           Repository              @relation(fields: [repoId], references: [id])
   events               AgentEvent[]
   scores               SkillScore[]
   questions            InterviewQuestion[]
   profiles             PublicProfile[]
+  skillRuns            SkillRun[]
+  evidenceFindings     EvidenceFinding[]
+  harnessSnapshot      HarnessContextSnapshot?
+  terminalCommandRuns  TerminalCommandRun[]
 
   @@index([candidateId])
   @@index([createdByUserId])
@@ -360,87 +365,231 @@ model AnalysisRun {
   @@index([status])
 }
 
+model EvaluatorSkill {
+  id                  String     @id @default(cuid())
+  slug                String     @unique
+  name                String
+  category            String
+  version             String
+  description         String?
+  sourcePath          String
+  enabled             Boolean    @default(true)
+  riskLevel           String     @default("low")
+  requiredInputsJson  String?
+  outputSchemaJson    String?
+  toolPermissionsJson String?
+  candidateSafe       Boolean    @default(true)
+  employerSafe        Boolean    @default(true)
+  adminOnly           Boolean    @default(false)
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  skillRuns           SkillRun[]
+
+  @@index([category])
+  @@index([enabled])
+}
+
+model SkillRun {
+  id                  String            @id @default(cuid())
+  runId               String
+  skillId             String
+  skillVersion        String
+  agentId             String?
+  providerId          String?
+  requestedModel      String?
+  actualModel         String?
+  status              String
+  startedAt           DateTime
+  endedAt             DateTime?
+  durationMs          Int?
+  inputHash           String
+  outputHash          String?
+  evidenceIdsJson     String?
+  promptVersionId     String?
+  toolPermissionsJson String?
+  tokenUsageJson      String?
+  costEstimateJson    String?
+  fallbackReason      String?
+  retryHistoryJson    String?
+  error               String?
+  adminTraceJson      String?
+  candidateSummary    String?
+  employerSummary     String?
+  createdAt           DateTime          @default(now())
+  run                 AnalysisRun       @relation(fields: [runId], references: [id], onDelete: Cascade)
+  skill               EvaluatorSkill?   @relation(fields: [skillId], references: [slug])
+  evidenceFindings    EvidenceFinding[]
+
+  @@index([runId])
+  @@index([skillId])
+  @@index([status])
+}
+
+model EvidenceFinding {
+  id            String              @id @default(cuid())
+  runId         String
+  skillRunId    String?
+  category      String
+  claim         String
+  evidenceType  String
+  filePath      String?
+  lineStart     Int?
+  lineEnd       Int?
+  commitSha     String?
+  commandRunId  String?
+  confidence    Float
+  severity      String?
+  candidateSafe Boolean             @default(true)
+  employerSafe  Boolean             @default(false)
+  publicSafe    Boolean             @default(false)
+  adminOnly     Boolean             @default(false)
+  redactedText  String
+  rawTextHash   String?
+  createdAt     DateTime            @default(now())
+  run           AnalysisRun         @relation(fields: [runId], references: [id], onDelete: Cascade)
+  skillRun      SkillRun?           @relation(fields: [skillRunId], references: [id], onDelete: SetNull)
+  commandRun    TerminalCommandRun? @relation(fields: [commandRunId], references: [id], onDelete: SetNull)
+
+  @@index([runId])
+  @@index([skillRunId])
+  @@index([category])
+  @@index([candidateSafe])
+  @@index([employerSafe])
+  @@index([publicSafe])
+}
+
+model HarnessContextSnapshot {
+  id                      String      @id @default(cuid())
+  runId                   String      @unique
+  repoUrl                 String
+  repoOwner               String
+  repoName                String
+  defaultBranch           String?
+  commitSha               String?
+  fileTreeHash            String?
+  selectedFilesHash       String?
+  packageManager          String?
+  runtimeDetected         String?
+  frameworkDetected       String?
+  testFrameworkDetected   String?
+  lockfileDetected        Boolean     @default(false)
+  executionMode           String
+  workerMode              String?
+  terminalEnabled         Boolean     @default(false)
+  sandboxed               Boolean     @default(true)
+  evaluatorRuntimeVersion String
+  validatorVersion        String
+  createdAt               DateTime    @default(now())
+  run                     AnalysisRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+}
+
+model TerminalCommandRun {
+  id               String            @id @default(cuid())
+  command          String
+  args             String?
+  cwd              String
+  exitCode         Int?
+  stdoutSummary    String
+  stderrSummary    String
+  durationMs       Int
+  outputHash       String
+  usedFor          String
+  ranAt            DateTime
+  actorUserId      String?
+  runId            String?
+  savedAsEvidence  Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  actor            User?             @relation("TerminalCommandActor", fields: [actorUserId], references: [id])
+  run              AnalysisRun?      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  evidenceFindings EvidenceFinding[]
+
+  @@index([actorUserId])
+  @@index([runId])
+  @@index([savedAsEvidence])
+  @@index([ranAt])
+}
+
 model AgentEvent {
   id          String      @id @default(cuid())
   runId       String
   agentName   String
-  status      String      // pending|running|completed|failed
+  status      String // pending|running|completed|failed
   startedAt   DateTime?
   completedAt DateTime?
-  output      String?     // JSON Handoff
+  output      String? // JSON Handoff
   notes       String?
   order       Int
   run         AnalysisRun @relation(fields: [runId], references: [id])
 }
 
 model SkillScore {
-  id              String      @id @default(cuid())
-  runId           String
-  skillName       String
-  score           Int
-  confidence      Float       @default(0.8)
-  scoreSource     String      @default("llm") // llm|heuristic|mock|pending
-  evidence        String      // JSON Evidence[]
-  validatorNotes  String?
-  run             AnalysisRun @relation(fields: [runId], references: [id])
+  id             String      @id @default(cuid())
+  runId          String
+  skillName      String
+  score          Int
+  confidence     Float       @default(0.8)
+  scoreSource    String      @default("llm") // llm|heuristic|mock|pending
+  evidence       String // JSON Evidence[]
+  validatorNotes String?
+  run            AnalysisRun @relation(fields: [runId], references: [id])
 }
 
 model InterviewQuestion {
-  id              String            @id @default(cuid())
+  id              String      @id @default(cuid())
   runId           String
   question        String
   sourceFile      String?
   lineStart       Int?
   lineEnd         Int?
-  expectedSignals String?           // JSON string[]
-  redFlags        String?           // JSON string[]
-  scoringRubric   String?           // JSON InterviewQuestion.scoring_rubric
+  expectedSignals String? // JSON string[]
+  redFlags        String? // JSON string[]
+  scoringRubric   String? // JSON InterviewQuestion.scoring_rubric
   answer          String?
   answerScore     Int?
   feedback        String?
-  dimensionScores String?           // JSON {communication, debugging, architecture_explanation, testing_reasoning, understanding_of_own_code}
-  run             AnalysisRun       @relation(fields: [runId], references: [id])
+  dimensionScores String? // JSON {communication, debugging, architecture_explanation, testing_reasoning, understanding_of_own_code}
+  run             AnalysisRun @relation(fields: [runId], references: [id])
 }
 
 model PublicProfile {
-  id          String      @id @default(cuid())
-  candidateId String?
-  ownerUserId String?
-  runId       String
-  slug        String      @unique
-  visibility  String      @default("public") // public|unlisted|private
-  interviewKit String?     // JSON cached employer interview kit
-  includeTerminalProof Boolean @default(false)
-  createdAt   DateTime    @default(now())
-  candidate   Candidate?  @relation(fields: [candidateId], references: [id])
-  owner       User?       @relation("ProfileOwner", fields: [ownerUserId], references: [id])
-  run         AnalysisRun @relation(fields: [runId], references: [id])
-  shortlistItems EmployerShortlistItem[]
+  id                   String                  @id @default(cuid())
+  candidateId          String?
+  ownerUserId          String?
+  runId                String
+  slug                 String                  @unique
+  visibility           String                  @default("public") // public|unlisted|private
+  interviewKit         String? // JSON cached employer interview kit
+  includeTerminalProof Boolean                 @default(false)
+  createdAt            DateTime                @default(now())
+  candidate            Candidate?              @relation(fields: [candidateId], references: [id])
+  owner                User?                   @relation("ProfileOwner", fields: [ownerUserId], references: [id])
+  run                  AnalysisRun             @relation(fields: [runId], references: [id])
+  shortlistItems       EmployerShortlistItem[]
 
   @@index([ownerUserId])
   @@index([visibility])
 }
 
 model EmployerShortlist {
-  id          String   @id @default(cuid())
+  id          String                  @id @default(cuid())
   ownerUserId String
   tenantId    String?
   name        String
   notes       String?
-  createdAt   DateTime @default(now())
-  owner       User     @relation(fields: [ownerUserId], references: [id])
+  createdAt   DateTime                @default(now())
+  owner       User                    @relation(fields: [ownerUserId], references: [id])
   items       EmployerShortlistItem[]
 
   @@index([ownerUserId])
 }
 
 model EmployerShortlistItem {
-  id              String   @id @default(cuid())
+  id              String            @id @default(cuid())
   shortlistId     String
   publicProfileId String
-  position        Int      @default(0)
+  position        Int               @default(0)
   note            String?
-  addedAt         DateTime @default(now())
+  addedAt         DateTime          @default(now())
   shortlist       EmployerShortlist @relation(fields: [shortlistId], references: [id], onDelete: Cascade)
   profile         PublicProfile     @relation(fields: [publicProfileId], references: [id])
 

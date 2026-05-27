@@ -30,6 +30,9 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
       scores: true,
       questions: true,
       profiles: true,
+      skillRuns: { orderBy: { startedAt: "asc" } },
+      evidenceFindings: { where: { candidateSafe: true, adminOnly: false }, orderBy: { createdAt: "asc" } },
+      harnessSnapshot: true,
     },
   });
   if (!run) notFound();
@@ -50,7 +53,15 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
     score: s.score === -1 ? null : s.score,
     confidence: s.confidence,
     source: s.scoreSource,
-    evidence: safeJsonParse<any[]>(s.evidence, []),
+    evidence: safeJsonParse<any[]>(s.evidence, []).map((e) => ({
+      file: e.file,
+      line_start: e.line_start ?? e.line,
+      line_end: e.line_end,
+      reason: e.reason,
+      source: e.source,
+      confidence: e.confidence,
+      validator_note: e.validator_note,
+    })),
     validator_notes: s.validatorNotes,
   }));
   const ownership = safeJsonParse<any>(run.ownershipStatus, null);
@@ -59,6 +70,7 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
   const improvementPlan = safeJsonParse<any>(run.improvementPlan, null);
   const employerVerifier = safeJsonParse<any>(run.employerVerifier, null);
   const ai = safeJsonParse<any>(run.aiCollaboration, null);
+  const aiScore = scores.find((s) => s.skill === "AI Collaboration")?.score ?? null;
   const completedCount = run.events.filter((e) => e.status === "completed").length;
   const publicProfile = run.profiles.find((p) => p.visibility === "public") ?? run.profiles[0] ?? null;
   const isMockLike =
@@ -78,6 +90,7 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
         <Badge tone={run.verificationLevel === "repo_interview_verified" ? "good" : "default"}>
           {run.verificationLevel.replace(/_/g, " ")}
         </Badge>
+        {run.harnessSnapshot?.commitSha && <Badge>commit {run.harnessSnapshot.commitSha.slice(0, 7)}</Badge>}
         {ownership?.confidence === "verified" && <Badge tone="good">Ownership verified</Badge>}
         {ownership?.confidence === "self_declared" && <Badge tone="warn">Self-declared ownership</Badge>}
         {!ownership && <Badge tone="default">Ownership not measured</Badge>}
@@ -100,9 +113,9 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
           <CardBody>
             <div className="text-xs uppercase tracking-wide text-muted">Mission progress</div>
             <div className="mt-1 text-3xl font-bold text-ink">
-              {completedCount}/{run.events.length || 0}
+              {run.skillRuns.filter((s) => s.status === "completed" || s.status === "warning").length || completedCount}/{run.skillRuns.length || run.events.length || 0}
             </div>
-            <p className="mt-1 text-sm text-muted">Agents completed without exposing raw handoffs.</p>
+            <p className="mt-1 text-sm text-muted">Evaluator skills completed without exposing raw handoffs.</p>
           </CardBody>
         </Card>
         <Card>
@@ -134,25 +147,48 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
         </Card>
       )}
 
+      {run.harnessSnapshot && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Evaluation snapshot</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="grid gap-3 text-sm md:grid-cols-4">
+              <SnapshotItem label="Commit" value={run.harnessSnapshot.commitSha ? run.harnessSnapshot.commitSha.slice(0, 12) : "not captured"} />
+              <SnapshotItem label="Evaluator" value={run.harnessSnapshot.evaluatorRuntimeVersion} />
+              <SnapshotItem label="Framework" value={run.harnessSnapshot.frameworkDetected ?? "not detected"} />
+              <SnapshotItem label="Tests" value={run.harnessSnapshot.testFrameworkDetected ?? "not detected"} />
+            </div>
+            <p className="mt-3 text-xs text-muted">
+              This score was generated from commit {run.harnessSnapshot.commitSha ? run.harnessSnapshot.commitSha.slice(0, 7) : "not captured"} using SkillProof evaluator version {run.harnessSnapshot.evaluatorRuntimeVersion}.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle>Agent trace</CardTitle>
+          <CardTitle>Evaluator skill progress</CardTitle>
         </CardHeader>
         <CardBody>
-          {run.events.length === 0 ? (
-            <ScaffoldNotice detail="No agent events have been recorded yet." />
+          {run.skillRuns.length === 0 ? (
+            <ScaffoldNotice detail="No evaluator skill runs have been recorded yet." />
           ) : (
             <ol className="grid gap-2 md:grid-cols-2">
-              {run.events.map((event) => (
-                <li key={event.id} className="rounded-md border border-border bg-panel2/40 p-3">
+              {run.skillRuns.map((skillRun) => (
+                <li key={skillRun.id} className="rounded-md border border-border bg-panel2/40 p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="font-mono text-xs text-ink">{event.agentName}</div>
-                    <Badge tone={event.status === "completed" ? "good" : event.status === "failed" ? "bad" : "warn"}>
-                      {event.status}
+                    <div className="font-mono text-xs text-ink">{skillRun.skillId}</div>
+                    <Badge tone={skillRun.status === "completed" ? "good" : skillRun.status === "failed" ? "bad" : "warn"}>
+                      {skillRun.status}
                     </Badge>
                   </div>
-                  <p className="mt-2 text-xs text-muted">{candidateAgentSummary(event.agentName)}</p>
-                  {event.notes && <p className="mt-1 text-xs text-muted">Finding: {event.notes}</p>}
+                  <p className="mt-2 text-xs text-muted">{skillRun.candidateSummary ?? candidateAgentSummary(skillRun.agentId ?? skillRun.skillId)}</p>
+                  <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted">
+                    <span>v{skillRun.skillVersion}</span>
+                    {skillRun.durationMs != null && <span>{skillRun.durationMs}ms</span>}
+                    {skillRun.evidenceIdsJson && <span>{safeJsonParse<string[]>(skillRun.evidenceIdsJson, []).length} findings</span>}
+                  </div>
                 </li>
               ))}
             </ol>
@@ -166,7 +202,20 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
             <CardTitle>Evidence locker</CardTitle>
           </CardHeader>
           <CardBody>
-            {scores.length === 0 ? (
+            {run.evidenceFindings.length > 0 ? (
+              <ul className="space-y-2">
+                {run.evidenceFindings.slice(0, 12).map((finding) => (
+                  <li key={finding.id} className="rounded-md border border-border bg-panel2/40 p-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge>{finding.category}</Badge>
+                      {finding.severity && <Badge tone={finding.severity === "critical" || finding.severity === "high" ? "bad" : finding.severity === "medium" ? "warn" : "default"}>{finding.severity}</Badge>}
+                      <span className="text-xs text-muted">{Math.round(finding.confidence * 100)}% confidence</span>
+                    </div>
+                    <p className="mt-2 text-ink">{finding.redactedText}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : scores.length === 0 ? (
               <ScaffoldNotice detail="No skill scores have been written yet." />
             ) : (
               <EvidenceLocker scores={scores} />
@@ -273,6 +322,8 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
                 </div>
                 <p className="text-muted">{ai.feedback}</p>
               </div>
+            ) : aiScore == null ? (
+              <ScaffoldNotice detail="AI collaboration evidence insufficient." />
             ) : (
               <ScaffoldNotice detail="Submit a small AI-collaboration challenge to prove review discipline, test awareness, and maturity." />
             )}
@@ -313,6 +364,15 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
         </Card>
       )}
     </RoleShell>
+  );
+}
+
+function SnapshotItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-border bg-panel2/40 p-3">
+      <div className="text-xs uppercase text-muted">{label}</div>
+      <div className="mt-1 font-mono text-sm text-ink">{value}</div>
+    </div>
   );
 }
 

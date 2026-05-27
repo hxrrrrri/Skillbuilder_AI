@@ -50,6 +50,9 @@ function buildProviders() {
       GitHubProvider({
         clientId: process.env.GITHUB_CLIENT_ID,
         clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        // Prototype account linking convenience. This links login identity only;
+        // repo ownership still requires GitHub login/owner match, collaborator
+        // verification, repo token proof, or another explicit verified signal.
         allowDangerousEmailAccountLinking: true,
       }),
     );
@@ -60,6 +63,8 @@ function buildProviders() {
       GoogleProvider({
         clientId: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        // Prototype-only convenience. Never use Google email to mark GitHub
+        // repository ownership verified.
         allowDangerousEmailAccountLinking: true,
       }),
     );

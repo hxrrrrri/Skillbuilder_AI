@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth/session";
+import { getCurrentUser, requireRole } from "@/lib/auth/session";
 import { getEmployerProfileBundle, summarizeEmployerProfile } from "@/lib/employer/profiles";
 import { safeJsonParse } from "@/lib/utils";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
@@ -17,6 +17,7 @@ export default async function EmployerInterviewKitPage({
 }) {
   const user = await getCurrentUser();
   if (!user) redirect(`/login?callbackUrl=/employer/interview-kit/${params.publicProfileId}`);
+  await requireRole("employer");
   const bundle = await getEmployerProfileBundle(params.publicProfileId);
   if (!bundle) notFound();
   const summary = summarizeEmployerProfile(bundle);
@@ -47,6 +48,16 @@ export default async function EmployerInterviewKitPage({
                 </Badge>
                 <Badge>{kit.target_role}</Badge>
                 <Badge>{kit.model}</Badge>
+                {summary.evaluatorVersion && <Badge>{summary.evaluatorVersion}</Badge>}
+                {summary.evaluatedCommitSha && <Badge>{summary.evaluatedCommitSha.slice(0, 7)}</Badge>}
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <Metric label="Employer-safe evidence" value={summary.evidenceCount} />
+                <Metric label="Terminal proof" value={summary.terminalProofCount} />
+                <Metric label="AI collaboration" value={summary.aiCollabScore == null ? "Insufficient" : summary.aiCollabScore} />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {summary.trustBadges.map((badge) => <Badge key={badge}>{badge}</Badge>)}
               </div>
               <Section title="Project-specific" items={kit.sections?.project_specific ?? []} />
               <Section title="Debugging" items={kit.sections?.debugging ?? []} />
@@ -58,6 +69,15 @@ export default async function EmployerInterviewKitPage({
         </CardBody>
       </Card>
     </RoleShell>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: number | string | null }) {
+  return (
+    <div className="rounded-md border border-border bg-bg/55 p-3">
+      <p className="text-xs uppercase tracking-wide text-muted">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-ink">{value ?? "None"}</p>
+    </div>
   );
 }
 

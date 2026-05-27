@@ -1,0 +1,28 @@
+[project]
+name = "Skillbuilder_AI"
+
+[indexing]
+include = ["**/*"]
+exclude = [".git/**", ".devgraph/**", "node_modules/**", "dist/**", "build/**", ".venv/**", "__pycache__/**", "*.pyc", "*.lock"]
+respect_gitignore = true
+
+[storage]
+path = ".devgraph"
+
+[review]
+default_base = "origin/main"
+max_depth = 2
+token_budget = "normal"
+
+[privacy]
+store_env_values = false
+allow_llm_enrichment = false
+
+[dashboard]
+port = 38987
+
+[retrieval]
+embeddings_enabled = false
+embedding_provider = "disabled"
+embedding_dimensions = 384
+embedding_model = "sentence-transformers/all-MiniLM-L6-v2"

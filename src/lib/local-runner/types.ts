@@ -47,6 +47,7 @@ export type CommandRun = {
 };
 
 export type TerminalEvidence = {
+  commandRunId?: string;
   command: string;
   cwd: string;
   exitCode: number | null;

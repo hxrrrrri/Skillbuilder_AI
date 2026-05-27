@@ -80,6 +80,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       events: { orderBy: { order: "asc" } },
       scores: true,
       questions: true,
+      skillRuns: { orderBy: { startedAt: "asc" } },
+      evidenceFindings: true,
+      harnessSnapshot: true,
     },
   });
   if (!run) {
@@ -138,6 +141,34 @@ function buildAdminRunPayload(run: any) {
       notes: e.notes,
       output: safeJsonParse(e.output, null),
     })),
+    skill_runs: (run.skillRuns ?? []).map((s: any) => ({
+      id: s.id,
+      skill_id: s.skillId,
+      skill_version: s.skillVersion,
+      agent_id: s.agentId,
+      provider_id: s.providerId,
+      requested_model: s.requestedModel,
+      actual_model: s.actualModel,
+      status: s.status,
+      started_at: s.startedAt,
+      ended_at: s.endedAt,
+      duration_ms: s.durationMs,
+      input_hash: s.inputHash,
+      output_hash: s.outputHash,
+      evidence_ids: safeJsonParse(s.evidenceIdsJson, []),
+      prompt_version_id: s.promptVersionId,
+      tool_permissions: safeJsonParse(s.toolPermissionsJson, null),
+      token_usage: safeJsonParse(s.tokenUsageJson, null),
+      cost_estimate: safeJsonParse(s.costEstimateJson, null),
+      fallback_reason: s.fallbackReason,
+      retry_history: safeJsonParse(s.retryHistoryJson, null),
+      error: s.error,
+      admin_trace: safeJsonParse(s.adminTraceJson, null),
+      candidate_summary: s.candidateSummary,
+      employer_summary: s.employerSummary,
+    })),
+    evidence_findings: run.evidenceFindings ?? [],
+    harness_snapshot: run.harnessSnapshot,
     scores: run.scores.map((s: any) => ({
       skill: s.skillName,
       score: s.score === -1 ? null : s.score,
@@ -186,12 +217,21 @@ function buildLimitedRunPayload(
   run: any,
   reason: "creator" | "candidate_owner" | "tenant_member",
 ) {
+  const isCandidateView = reason === "creator" || reason === "candidate_owner";
   const scores = run.scores.map((s: any) => ({
     skill: s.skillName,
     score: s.score === -1 ? null : s.score,
     confidence: s.confidence,
     source: s.scoreSource,
-    evidence: safeJsonParse(s.evidence, []),
+    evidence: safeJsonParse<any[]>(s.evidence, []).map((e) => ({
+      file: e.file,
+      line_start: e.line_start ?? e.line,
+      line_end: e.line_end,
+      reason: e.reason,
+      source: e.source,
+      confidence: e.confidence,
+      validator_note: e.validator_note,
+    })),
     validator_notes: s.validatorNotes,
   }));
   const terminalEvidence = safeJsonParse<any[]>(run.terminalEvidence, []);
@@ -199,7 +239,6 @@ function buildLimitedRunPayload(
   const aiCollaboration = safeJsonParse(run.aiCollaboration, null);
   const validationSummary = safeJsonParse(run.validationSummary, null);
   const providerMatrix = safeJsonParse(run.providerMatrix, null);
-  const isCandidateView = reason === "creator" || reason === "candidate_owner";
 
   return {
     id: run.id,
@@ -224,6 +263,42 @@ function buildLimitedRunPayload(
       total: run.events.length,
     },
     events: run.events.map(summarizeAgentEvent),
+    skill_runs: (run.skillRuns ?? []).map((s: any) => ({
+      id: s.id,
+      skill_id: s.skillId,
+      skill_version: s.skillVersion,
+      status: s.status,
+      started_at: s.startedAt,
+      ended_at: s.endedAt,
+      duration_ms: s.durationMs,
+      evidence_ids: safeJsonParse(s.evidenceIdsJson, []),
+      candidate_summary: s.candidateSummary,
+      employer_summary: reason === "tenant_member" ? s.employerSummary : undefined,
+    })),
+    evidence_findings: (run.evidenceFindings ?? [])
+      .filter((f: any) => !f.adminOnly && (isCandidateView ? f.candidateSafe : f.employerSafe))
+      .map((f: any) => ({
+        id: f.id,
+        category: f.category,
+        claim: f.claim,
+        evidence_type: f.evidenceType,
+        file_path: f.filePath,
+        line_start: f.lineStart,
+        line_end: f.lineEnd,
+        confidence: f.confidence,
+        severity: f.severity,
+        redacted_text: f.redactedText,
+      })),
+    harness_snapshot: run.harnessSnapshot
+      ? {
+          commit_sha: run.harnessSnapshot.commitSha,
+          evaluator_runtime_version: run.harnessSnapshot.evaluatorRuntimeVersion,
+          validator_version: run.harnessSnapshot.validatorVersion,
+          execution_mode: run.harnessSnapshot.executionMode,
+          framework_detected: run.harnessSnapshot.frameworkDetected,
+          test_framework_detected: run.harnessSnapshot.testFrameworkDetected,
+        }
+      : null,
     scores,
     questions: isCandidateView
       ? run.questions.map((q: any) => ({
@@ -369,6 +444,7 @@ function summarizeTerminalEvidence(rows: any[]) {
 
 function sanitizeTerminalEvidence(t: any) {
   return {
+    commandRunId: t.commandRunId ?? null,
     command: String(t.command ?? ""),
     cwd: String(t.cwd ?? ""),
     exitCode: typeof t.exitCode === "number" ? t.exitCode : null,

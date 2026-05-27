@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
+    terminalCommandRun: {
+      create: vi.fn(),
+    },
   },
 }));
 
@@ -62,6 +65,7 @@ describe("/api/local/command", () => {
       durationMs: 12,
       status: "completed",
     });
+    mocks.prisma.terminalCommandRun.create.mockResolvedValue({ id: "run-1" });
   });
 
   afterEach(() => {
@@ -81,6 +85,23 @@ describe("/api/local/command", () => {
     expect(mocks.runCommand).not.toHaveBeenCalled();
   });
 
+  it("requires authentication before command execution", async () => {
+    mocks.getCurrentUser.mockResolvedValue(null);
+    const { POST } = await import("./route");
+    const res = await POST(makeReq({ command: "git", args: ["status"], mission_id: "r1" }));
+    expect(res.status).toBe(401);
+    expect(mocks.runCommand).not.toHaveBeenCalled();
+  });
+
+  it("rejects commands without a run id", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(makeReq({ command: "git", args: ["status"] }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toBe("missing_run_id");
+    expect(mocks.runCommand).not.toHaveBeenCalled();
+  });
+
   it("blocks rm -rf with clear policy error and audits the block", async () => {
     const { POST } = await import("./route");
     const res = await POST(makeReq({ command: "rm", args: ["-rf", "/"], mission_id: "r1" }));
@@ -91,8 +112,8 @@ describe("/api/local/command", () => {
     expect(mocks.runCommand).not.toHaveBeenCalled();
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "terminal.command",
-        metadata: expect.objectContaining({ outcome: "blocked" }),
+        action: "terminal.command.blocked",
+        metadata: expect.objectContaining({ reason: expect.stringMatching(/rm -rf/i) }),
       }),
     );
   });
@@ -134,8 +155,8 @@ describe("/api/local/command", () => {
     expect(data.error).toBe("approval_required");
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "terminal.command",
-        metadata: expect.objectContaining({ outcome: "approval_required" }),
+        action: "terminal.command.approval_required",
+        metadata: expect.objectContaining({ reason: "curl|sh download-execute" }),
       }),
     );
   });
@@ -176,6 +197,11 @@ describe("/api/local/command", () => {
     const res = await POST(makeReq({ command: "git", args: ["status"], mission_id: "r1" }));
     expect(res.status).toBe(200);
     expect(mocks.runCommand).toHaveBeenCalled();
+    expect(mocks.prisma.terminalCommandRun.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ id: "run-1", runId: "r1", actorUserId: "admin" }),
+      }),
+    );
   });
 
   it("writes an audit record with sha256 of the redacted output, not the output itself", async () => {
@@ -192,7 +218,7 @@ describe("/api/local/command", () => {
     expect(res.status).toBe(200);
 
     const successAuditCalls = mocks.writeAuditLog.mock.calls.filter(
-      ([entry]) => entry.action === "terminal.command" && entry.metadata?.outcome === undefined,
+      ([entry]) => entry.action === "terminal.command.executed",
     );
     expect(successAuditCalls.length).toBeGreaterThan(0);
     const audit = successAuditCalls.at(-1)![0];

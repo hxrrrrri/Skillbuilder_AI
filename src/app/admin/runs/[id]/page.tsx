@@ -25,6 +25,9 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
       createdBy: true,
       tenant: true,
       profiles: true,
+      skillRuns: { orderBy: { startedAt: "asc" } },
+      evidenceFindings: { orderBy: { createdAt: "asc" } },
+      harnessSnapshot: true,
     },
   });
   if (!run) notFound();
@@ -139,6 +142,90 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
                 output: safeJsonParse(e.output, null),
               }))}
             />
+          )}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Evaluator skill traces ({run.skillRuns.length})</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {run.skillRuns.length === 0 ? (
+            <ScaffoldNotice detail="No SkillRun provenance rows have been recorded yet." />
+          ) : (
+            <ul className="space-y-2">
+              {run.skillRuns.map((s) => {
+                const trace = safeJsonParse<any>(s.adminTraceJson, null);
+                const evidenceIds = safeJsonParse<string[]>(s.evidenceIdsJson, []);
+                return (
+                  <li key={s.id} className="rounded-md border border-border bg-panel2/40 p-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                      <Badge tone={s.status === "completed" ? "good" : s.status === "failed" ? "bad" : "warn"}>{s.status}</Badge>
+                      <code className="text-ink">{s.skillId}</code>
+                      <Badge>v{s.skillVersion}</Badge>
+                      {s.providerId && <Badge>{s.providerId}</Badge>}
+                      {s.actualModel && <Badge>{s.actualModel}</Badge>}
+                      {s.durationMs != null && <span className="text-muted">{s.durationMs}ms</span>}
+                      <span className="font-mono text-muted">in:{s.inputHash.slice(0, 10)}</span>
+                      {s.outputHash && <span className="font-mono text-muted">out:{s.outputHash.slice(0, 10)}</span>}
+                    </div>
+                    <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
+                      <KV k="Candidate summary" v={s.candidateSummary ?? "—"} />
+                      <KV k="Employer summary" v={s.employerSummary ?? "—"} />
+                      <KV k="Evidence produced" v={String(evidenceIds.length)} />
+                    </div>
+                    {s.error && <p className="mt-2 text-xs text-bad">{s.error}</p>}
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs text-muted">admin trace JSON</summary>
+                      <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-bg/40 p-3 text-[11px] text-muted">
+                        {JSON.stringify(trace, null, 2)}
+                      </pre>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
+
+      {run.harnessSnapshot && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Harness context snapshot</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-panel2/40 p-3 text-[11px] text-muted">
+              {JSON.stringify(run.harnessSnapshot, null, 2)}
+            </pre>
+          </CardBody>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Evidence findings ({run.evidenceFindings.length})</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {run.evidenceFindings.length === 0 ? (
+            <ScaffoldNotice detail="No EvidenceFinding rows have been recorded yet." />
+          ) : (
+            <ul className="space-y-2">
+              {run.evidenceFindings.map((f) => (
+                <li key={f.id} className="rounded border border-border bg-panel2/40 p-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge>{f.category}</Badge>
+                    <Badge>{f.evidenceType}</Badge>
+                    {f.severity && <Badge tone={f.severity === "critical" || f.severity === "high" ? "bad" : f.severity === "medium" ? "warn" : "default"}>{f.severity}</Badge>}
+                    <span className="text-muted">{Math.round(f.confidence * 100)}%</span>
+                    <span className="font-mono text-muted">{f.rawTextHash?.slice(0, 12)}</span>
+                  </div>
+                  <p className="mt-2 text-ink">{f.redactedText}</p>
+                  {f.filePath && <p className="mt-1 font-mono text-muted">{f.filePath}:{f.lineStart ?? "?"}</p>}
+                </li>
+              ))}
+            </ul>
           )}
         </CardBody>
       </Card>

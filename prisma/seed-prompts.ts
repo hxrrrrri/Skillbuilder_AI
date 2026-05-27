@@ -9,6 +9,7 @@ const PROMPT_SOURCES: Record<string, string> = {
   "code-quality": "src/agents/code-quality.ts",
   testing: "src/agents/testing.ts",
   security: "src/agents/security.ts",
+  "ai-collaboration": "src/agents/ai-collaboration.ts",
   "git-evidence": "src/agents/git-evidence.ts",
   documentation: "src/agents/documentation.ts",
   authenticity: "src/agents/authenticity.ts",

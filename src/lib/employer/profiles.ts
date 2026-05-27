@@ -82,6 +82,20 @@ export type EmployerProfileBundle = {
       owner: string;
       repoName: string;
     };
+    harnessSnapshot?: {
+      commitSha: string | null;
+      evaluatorRuntimeVersion: string;
+      validatorVersion: string;
+      executionMode: string;
+      createdAt: Date;
+    } | null;
+    evidenceFindings?: Array<{
+      id: string;
+      employerSafe: boolean;
+      publicSafe: boolean;
+      evidenceType: string;
+      category: string;
+    }>;
     scores: ScoreRow[];
     questions: QuestionRow[];
   };
@@ -109,6 +123,11 @@ export type EmployerProfileSummary = {
   interviewVerified: boolean;
   mockOrHeuristic: boolean;
   aiCollabScore: number | null;
+  evidenceCount: number;
+  terminalProofCount: number;
+  evaluatedCommitSha: string | null;
+  evaluatorVersion: string | null;
+  trustBadges: string[];
 };
 
 export type InterviewKit = {
@@ -147,7 +166,8 @@ function bestEvidence(bundle: EmployerProfileBundle): Array<{ file?: string; rea
   return bundle.run.scores
     .flatMap((s) => safeJsonParse<any[]>(s.evidence, []))
     .filter((e) => typeof e?.reason === "string")
-    .slice(0, 5);
+    .slice(0, 5)
+    .map((e) => ({ file: e.file, reason: e.reason, source: e.source }));
 }
 
 function ownershipStatus(bundle: EmployerProfileBundle): EmployerProfileSummary["ownership"] {
@@ -185,6 +205,19 @@ export function summarizeEmployerProfile(bundle: EmployerProfileBundle): Employe
     .slice(0, 5)
     .map((s) => s.skillName);
   const ai = safeJsonParse<any>(bundle.run.aiCollaboration, null);
+  const terminal = safeJsonParse<TerminalEvidence[]>(bundle.run.terminalEvidence, []);
+  const evidenceCount =
+    bundle.run.evidenceFindings?.filter((f) => f.employerSafe).length ??
+    bundle.run.scores.reduce((sum, s) => sum + safeJsonParse<any[]>(s.evidence, []).length, 0);
+  const terminalProofCount = terminal.filter((t) => t.exitCode === 0).length;
+  const trustBadges = buildTrustBadges({
+    ownership: ownershipStatus(bundle),
+    evidenceCount,
+    terminalProofCount,
+    testingDetected: (scores.Testing ?? 0) > 0,
+    aiCollabScore: typeof ai?.overall_score === "number" ? ai.overall_score : scores["AI Collaboration"] ?? null,
+    mockOrHeuristic: mockOrHeuristic(bundle),
+  });
   return {
     id: bundle.id,
     slug: bundle.slug,
@@ -207,7 +240,32 @@ export function summarizeEmployerProfile(bundle: EmployerProfileBundle): Employe
     interviewVerified: bundle.run.verificationLevel === "repo_interview_verified" || bundle.run.questions.some((q) => !!q.answer),
     mockOrHeuristic: mockOrHeuristic(bundle),
     aiCollabScore: typeof ai?.overall_score === "number" ? ai.overall_score : scores["AI Collaboration"] ?? null,
+    evidenceCount,
+    terminalProofCount,
+    evaluatedCommitSha: bundle.run.harnessSnapshot?.commitSha ?? null,
+    evaluatorVersion: bundle.run.harnessSnapshot?.evaluatorRuntimeVersion ?? null,
+    trustBadges,
   };
+}
+
+function buildTrustBadges(input: {
+  ownership: EmployerProfileSummary["ownership"];
+  evidenceCount: number;
+  terminalProofCount: number;
+  testingDetected: boolean;
+  aiCollabScore: number | null;
+  mockOrHeuristic: boolean;
+}): string[] {
+  const badges: string[] = [];
+  if (input.ownership === "verified") badges.push("Verified Repo Owner");
+  if (input.evidenceCount > 0) badges.push("Evidence-Backed");
+  if (input.terminalProofCount > 0) badges.push("Terminal Proof Included");
+  if (input.testingDetected) badges.push("Tests Detected");
+  if (input.aiCollabScore != null) badges.push("AI Collaboration Reviewed");
+  badges.push("Public-Safe Report");
+  if (input.mockOrHeuristic) badges.push("Mock Mode Warning");
+  if (input.evidenceCount > 0) badges.push("Hallucination Checks Passed");
+  return badges;
 }
 
 export function filterEmployerSummaries(
@@ -264,6 +322,11 @@ export async function fetchPublicProfileBundles(where: Record<string, any> = {},
       run: {
         include: {
           repository: true,
+          harnessSnapshot: true,
+          evidenceFindings: {
+            where: { employerSafe: true, adminOnly: false },
+            select: { id: true, employerSafe: true, publicSafe: true, evidenceType: true, category: true },
+          },
           scores: true,
           questions: { select: { answer: true, answerScore: true } },
         },
@@ -280,6 +343,11 @@ export async function getEmployerProfileBundle(profileId: string) {
       run: {
         include: {
           repository: true,
+          harnessSnapshot: true,
+          evidenceFindings: {
+            where: { employerSafe: true, adminOnly: false },
+            select: { id: true, employerSafe: true, publicSafe: true, evidenceType: true, category: true },
+          },
           scores: true,
           questions: { select: { answer: true, answerScore: true } },
         },
