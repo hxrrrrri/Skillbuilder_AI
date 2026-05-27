@@ -7,12 +7,136 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ---------- Auth + RBAC + Tenants ----------
+// SQLite has no native enums; role values are validated at the application layer
+// via @/lib/auth/roles. Keep strings here for portability.
+
+model User {
+  id              String              @id @default(cuid())
+  email           String              @unique
+  name            String
+  passwordHash    String
+  role            String              // candidate|employer|college_admin|college_member|admin|super_admin
+  primaryTenantId String?
+  githubUsername  String?
+  image           String?
+  emailVerified   DateTime?
+  status          String              @default("active") // active|suspended
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  primaryTenant   Tenant?             @relation("UserPrimaryTenant", fields: [primaryTenantId], references: [id])
+  memberships     TenantMembership[]
+  candidate       Candidate?
+  runsCreated     AnalysisRun[]       @relation("RunCreator")
+  profilesOwned   PublicProfile[]     @relation("ProfileOwner")
+  auditLogs       AuditLog[]
+}
+
+model Tenant {
+  id          String              @id @default(cuid())
+  slug        String              @unique
+  name        String
+  kind        String              // college|employer|platform
+  status      String              @default("active")
+  metadata    String?             // JSON
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+  memberships TenantMembership[]
+  primaryFor  User[]              @relation("UserPrimaryTenant")
+  runs        AnalysisRun[]
+  auditLogs   AuditLog[]
+}
+
+model TenantMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  role      String   // admin|member|mentor|officer
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  actorUserId  String?
+  tenantId     String?
+  action       String
+  targetType   String?
+  targetId     String?
+  metadata     String?  // JSON
+  ip           String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  actor        User?    @relation(fields: [actorUserId], references: [id])
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id])
+
+  @@index([actorUserId])
+  @@index([tenantId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+// ---------- Provider / Agent registry (admin-managed) ----------
+// ProviderConfig persists per-provider settings (command, base URL, enabled, last test result).
+// AgentConfig persists per-agent selections (provider, model, reasoning budget, fallback).
+// Reasoning budget is the generic abstraction (none|low|medium|high|max);
+// adapters in @/lib/providers/reasoning.ts map it to provider-native controls.
+
+model ProviderConfig {
+  id              String   @id @default(cuid())
+  providerId      String   @unique // anthropic_api|claude_cli|codex_cli|ollama|copilot_cli|mock
+  label           String
+  kind            String   // api|cli|local|mock
+  enabled         Boolean  @default(true)
+  defaultModel    String?
+  baseUrl         String?
+  command         String?
+  argsTemplate    String?  // JSON string[]
+  apiKeyEnv       String?  // name of env var holding key
+  capabilities    String?  // JSON: { reasoning, jsonMode, streaming, models? }
+  lastTestedAt    DateTime?
+  lastTestStatus  String?  // ok|fail|unavailable
+  lastTestModel   String?
+  lastTestError   String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AgentConfig {
+  id                String   @id @default(cuid())
+  agentName         String   @unique // orchestrator|architecture|code-quality|...
+  providerId        String   // matches ProviderConfig.providerId
+  model             String
+  reasoningBudget   String   @default("medium") // none|low|medium|high|max
+  temperature       Float    @default(0.2)
+  maxTokens         Int      @default(1500)
+  jsonMode          Boolean  @default(true)
+  fallbackProvider  String?
+  fallbackModel     String?
+  fallbackStrategy  String   @default("mock") // mock|retry|skip
+  timeoutMs         Int      @default(60000)
+  retryCount        Int      @default(1)
+  enabled           Boolean  @default(true)
+  costTier          String   @default("medium") // low|medium|high
+  qualityTier       String   @default("medium") // low|medium|high
+  updatedAt         DateTime @updatedAt
+}
+
+// ---------- Existing domain models (Candidate / Repository / AnalysisRun / etc.) ----------
+
 model Candidate {
   id             String          @id @default(cuid())
+  userId         String?         @unique
   name           String
   email          String?         @unique
   githubUsername String?
   createdAt      DateTime        @default(now())
+  user           User?           @relation(fields: [userId], references: [id])
   repositories   Repository[]
   runs           AnalysisRun[]
   profiles       PublicProfile[]
@@ -35,6 +159,8 @@ model Repository {
 model AnalysisRun {
   id                   String              @id @default(cuid())
   candidateId          String?
+  createdByUserId      String?
+  tenantId             String?
   repoId               String
   targetRole           String
   candidateLevel       String?
@@ -64,11 +190,18 @@ model AnalysisRun {
   createdAt            DateTime            @default(now())
   completedAt          DateTime?
   candidate            Candidate?          @relation(fields: [candidateId], references: [id])
+  createdBy            User?               @relation("RunCreator", fields: [createdByUserId], references: [id])
+  tenant               Tenant?             @relation(fields: [tenantId], references: [id])
   repository           Repository          @relation(fields: [repoId], references: [id])
   events               AgentEvent[]
   scores               SkillScore[]
   questions            InterviewQuestion[]
   profiles             PublicProfile[]
+
+  @@index([candidateId])
+  @@index([createdByUserId])
+  @@index([tenantId])
+  @@index([status])
 }
 
 model AgentEvent {
@@ -116,10 +249,15 @@ model InterviewQuestion {
 model PublicProfile {
   id          String      @id @default(cuid())
   candidateId String?
+  ownerUserId String?
   runId       String
   slug        String      @unique
-  visibility  String      @default("public")
+  visibility  String      @default("public") // public|unlisted|private
   createdAt   DateTime    @default(now())
   candidate   Candidate?  @relation(fields: [candidateId], references: [id])
+  owner       User?       @relation("ProfileOwner", fields: [ownerUserId], references: [id])
   run         AnalysisRun @relation(fields: [runId], references: [id])
+
+  @@index([ownerUserId])
+  @@index([visibility])
 }

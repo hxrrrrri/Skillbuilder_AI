@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { buildProviderRegistry } from "@/lib/providers/provider-router";
 import type { ProviderId } from "@/lib/providers/types";
+import { adminOrAnonymous, isNextResponse } from "@/lib/auth/guards-api";
+import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +17,9 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
+  const auth = await adminOrAnonymous();
+  if (isNextResponse(auth)) return auth;
+
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await req.json());
@@ -43,6 +48,21 @@ export async function POST(req: Request) {
       { system: "Reply with ONLY the JSON object requested. No commentary.", user: prompt, maxTokens: 200, temperature: 0 },
       `{"ok":boolean,"provider":string}`,
     );
+    await writeAuditLog({
+      action: "admin.providers.test",
+      actorUserId: auth.user?.id ?? null,
+      tenantId: null,
+      targetType: "provider",
+      targetId: body.provider_id,
+      metadata: {
+        json_ok: res.json !== null,
+        model: res.model ?? null,
+        input_tokens: res.inputTokens ?? null,
+        output_tokens: res.outputTokens ?? null,
+      },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+    });
     return NextResponse.json({
       provider_id: body.provider_id,
       available: true,

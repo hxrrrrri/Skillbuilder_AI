@@ -5,7 +5,24 @@
       "Bash(DATABASE_URL=\"file:./dev.db\" npx prisma db push --skip-generate)",
       "Bash(npx prisma *)",
       "Bash(npm run *)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(tasklist)",
+      "Bash(taskkill /F /PID 22348 /PID 26536)",
+      "Bash(cmd.exe /c \"taskkill /F /PID 22348 /PID 26536\")",
+      "Bash(cmd //c \"taskkill /F /PID 22348\")",
+      "Bash(cmd //c \"taskkill /F /PID 26536\")",
+      "Bash(cmd //c \"wmic process where \\\\\"name='node.exe'\\\\\" get processid,commandline\")",
+      "Bash(cmd //c \"powershell -NoProfile -Command \\\\\"Get-CimInstance Win32_Process -Filter \\\\\\\\\\\\\"name='node.exe'\\\\\\\\\\\\\" | Select-Object ProcessId, CommandLine | Format-List\\\\\"\")",
+      "Bash(cmd //c \"powershell -NoProfile -ExecutionPolicy Bypass -File .tmp-find-locker.ps1\")",
+      "Bash(cmd //c \"taskkill /F /PID 16052\")",
+      "Bash(cmd //c \"taskkill /F /PID 25304\")",
+      "Bash(sleep 2 && npx prisma generate 2>&1 | tail -8 && rm -f node_modules/.prisma/client/query_engine-windows.dll.node.tmp*)",
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(32\\).toString\\('base64'\\)\\)\")",
+      "Bash(cmd //c \"taskkill /F /PID 27504\")",
+      "Bash(cmd //c \"taskkill /F /PID 26496\")"
+    ],
+    "additionalDirectories": [
+      "C:\\project_github\\Skillbuilder_AI\\node_modules\\.prisma\\client"
     ]
   }
 }

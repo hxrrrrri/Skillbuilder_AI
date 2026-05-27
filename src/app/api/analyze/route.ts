@@ -3,6 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { parseRepoUrl } from "@/lib/utils";
 import { preCreateEvents, runMission } from "@/agents/mission-runner";
+import { getCurrentUser } from "@/lib/auth/session";
+import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,12 +33,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_repo_url" }, { status: 400 });
   }
 
-  const candidate = await prisma.candidate.create({
-    data: {
-      name: body.candidate_name,
-      githubUsername: body.github_username ?? null,
-    },
-  });
+  const sessionUser = await getCurrentUser();
+
+  // If the signed-in user is a candidate, reuse their Candidate row; otherwise create anonymous.
+  let candidate;
+  if (sessionUser && sessionUser.role === "candidate") {
+    candidate = await prisma.candidate.upsert({
+      where: { userId: sessionUser.id },
+      update: {
+        name: body.candidate_name,
+        githubUsername: body.github_username ?? undefined,
+      },
+      create: {
+        userId: sessionUser.id,
+        name: body.candidate_name,
+        email: sessionUser.email,
+        githubUsername: body.github_username ?? null,
+      },
+    });
+  } else {
+    candidate = await prisma.candidate.create({
+      data: {
+        name: body.candidate_name,
+        githubUsername: body.github_username ?? null,
+      },
+    });
+  }
 
   const repository = await prisma.repository.create({
     data: {
@@ -50,6 +72,8 @@ export async function POST(req: Request) {
   const run = await prisma.analysisRun.create({
     data: {
       candidateId: candidate.id,
+      createdByUserId: sessionUser?.id ?? null,
+      tenantId: sessionUser?.primaryTenantId ?? null,
       repoId: repository.id,
       targetRole: body.target_role,
       candidateLevel: body.candidate_level,
@@ -58,6 +82,21 @@ export async function POST(req: Request) {
       executionMode: body.execution_mode,
       localInstallApproved: body.local_install_approved,
     },
+  });
+
+  await writeAuditLog({
+    action: "run.started",
+    actorUserId: sessionUser?.id ?? null,
+    tenantId: sessionUser?.primaryTenantId ?? null,
+    targetType: "run",
+    targetId: run.id,
+    metadata: {
+      repo: `${parsed.owner}/${parsed.repo}`,
+      target_role: body.target_role,
+      execution_mode: body.execution_mode,
+    },
+    ip: req.headers.get("x-forwarded-for") ?? null,
+    userAgent: req.headers.get("user-agent") ?? null,
   });
 
   await preCreateEvents(run.id);

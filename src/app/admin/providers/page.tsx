@@ -1,0 +1,87 @@
+import { requireAdminPage } from "@/lib/auth/guards";
+import { listProviderConfigs } from "@/lib/providers/registry";
+import { listProviderAvailability } from "@/lib/providers/provider-router";
+import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
+import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ADMIN_NAV } from "../_nav";
+import { ProviderTable } from "./provider-table";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminProvidersPage() {
+  await requireAdminPage("/admin/providers");
+
+  const [providers, availability] = await Promise.all([
+    listProviderConfigs(),
+    listProviderAvailability(),
+  ]);
+  const liveAvailability = Object.fromEntries(availability.map((a) => [a.id, a.available]));
+
+  const rows = providers.map((p) => ({
+    id: p.id,
+    providerId: p.providerId,
+    label: p.label,
+    kind: p.kind,
+    enabled: p.enabled,
+    defaultModel: p.defaultModel,
+    baseUrl: p.baseUrl,
+    command: p.command,
+    apiKeyEnv: p.apiKeyEnv,
+    notes: p.notes,
+    capabilities: parseJson(p.capabilities) as {
+      reasoning?: boolean;
+      jsonMode?: boolean;
+      streaming?: boolean;
+      models?: string[];
+    } | null,
+    lastTestedAt: p.lastTestedAt ? p.lastTestedAt.toISOString() : null,
+    lastTestStatus: p.lastTestStatus,
+    lastTestModel: p.lastTestModel,
+    lastTestError: p.lastTestError,
+    liveAvailable: !!liveAvailability[p.providerId],
+  }));
+
+  const apiKeyPresent = !!process.env.ANTHROPIC_API_KEY;
+  const mockForced = process.env.SKILLPROOF_MOCK_LLM === "1";
+
+  return (
+    <RoleShell
+      title="Providers"
+      subtitle="Persisted in the database. Edits live in the registry; runtime selection still reads skillproof.local.json until the runtime-wire slice lands."
+      navLinks={ADMIN_NAV}
+      activeHref="/admin/providers"
+    >
+      <div className="flex flex-wrap gap-2 text-xs">
+        <Badge tone={apiKeyPresent ? "good" : "warn"}>
+          ANTHROPIC_API_KEY: {apiKeyPresent ? "present" : "missing"}
+        </Badge>
+        <Badge tone={mockForced ? "warn" : "default"}>
+          SKILLPROOF_MOCK_LLM: {mockForced ? "ON (forced mock)" : "off"}
+        </Badge>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Provider registry ({rows.length})</CardTitle>
+        </CardHeader>
+        <CardBody>
+          {rows.length === 0 ? (
+            <ScaffoldNotice detail="Registry is empty. Run `npm run db:seed-registry` to populate." />
+          ) : (
+            <ProviderTable rows={rows} />
+          )}
+        </CardBody>
+      </Card>
+    </RoleShell>
+  );
+}
+
+function parseJson(s: string | null): unknown {
+  if (!s) return null;
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}

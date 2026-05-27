@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { slugify } from "@/lib/utils";
+import { getCurrentUser } from "@/lib/auth/session";
+import { writeAuditLog } from "@/lib/auth/audit";
+import { isAdminRole } from "@/lib/auth/roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +12,7 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   run_id: z.string(),
   name: z.string().min(2).max(80).optional(),
+  visibility: z.enum(["public", "unlisted", "private"]).default("public"),
 });
 
 export async function POST(req: Request) {
@@ -28,8 +32,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "run_incomplete", status: run.status }, { status: 409 });
   }
 
+  const sessionUser = await getCurrentUser();
+  const isOwner =
+    !!sessionUser &&
+    (run.createdByUserId === sessionUser.id ||
+      (run.candidate?.userId && run.candidate.userId === sessionUser.id));
+  const isAnonymousRun = !run.createdByUserId && !run.candidate?.userId;
+
+  if (!isOwner && !isAnonymousRun && (!sessionUser || !isAdminRole(sessionUser.role))) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
   const baseSlug = slugify(
-    `${body.name ?? run.candidate?.name ?? run.repository.owner}-${run.repository.repoName}`
+    `${body.name ?? run.candidate?.name ?? run.repository.owner}-${run.repository.repoName}`,
   );
   let slug = baseSlug || "skillproof";
   let n = 1;
@@ -41,9 +56,21 @@ export async function POST(req: Request) {
     data: {
       runId: run.id,
       candidateId: run.candidateId ?? null,
+      ownerUserId: sessionUser?.id ?? run.candidate?.userId ?? null,
       slug,
-      visibility: "public",
+      visibility: body.visibility,
     },
+  });
+
+  await writeAuditLog({
+    action: "profile.publish",
+    actorUserId: sessionUser?.id ?? null,
+    tenantId: run.tenantId ?? sessionUser?.primaryTenantId ?? null,
+    targetType: "profile",
+    targetId: profile.id,
+    metadata: { run_id: run.id, slug, visibility: body.visibility },
+    ip: req.headers.get("x-forwarded-for") ?? null,
+    userAgent: req.headers.get("user-agent") ?? null,
   });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
