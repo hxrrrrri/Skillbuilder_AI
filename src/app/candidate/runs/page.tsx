@@ -42,7 +42,7 @@ export default async function CandidateRunsPage() {
                 <li key={r.id} className="flex items-center justify-between py-3">
                   <div>
                     <Link
-                      href={`/mission/${r.id}`}
+                      href={`/candidate/runs/${r.id}`}
                       className="font-mono text-sm text-ink hover:text-accent"
                     >
                       {r.repository.owner}/{r.repository.repoName}

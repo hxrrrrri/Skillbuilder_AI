@@ -47,7 +47,7 @@ export default async function CollegeStudentsPage() {
                 return (
                   <li key={key} className="flex items-center justify-between py-3">
                     <div>
-                      <Link href={`/mission/${top.id}`} className="text-sm text-ink hover:text-accent">
+                      <Link href={`/college/students/${top.candidateId ?? key}`} className="text-sm text-ink hover:text-accent">
                         {top.candidate?.name ?? "Unknown student"}
                       </Link>
                       <div className="mt-0.5 font-mono text-xs text-muted">

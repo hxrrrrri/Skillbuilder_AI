@@ -129,7 +129,7 @@ export default async function CollegeDashboard() {
               {runs.slice(0, 12).map((r) => (
                 <li key={r.id} className="flex items-center justify-between py-3">
                   <div>
-                    <Link href={`/mission/${r.id}`} className="text-sm text-ink hover:text-accent">
+                    <Link href={r.candidateId ? `/college/students/${r.candidateId}` : "/college/students"} className="text-sm text-ink hover:text-accent">
                       {r.candidate?.name ?? "Unknown candidate"}
                     </Link>
                     <div className="mt-0.5 font-mono text-xs text-muted">

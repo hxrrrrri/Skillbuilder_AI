@@ -55,6 +55,10 @@ export type TerminalEvidence = {
   durationMs: number;
   usedFor: "install" | "testing" | "build" | "git" | "security" | "ownership" | "agent" | "typecheck" | "lint";
   statusLabel?: "install_pending_approval" | "install_completed" | "skipped" | "passed" | "failed";
+  outputSha256?: string;
+  redactionWarning?: boolean;
+  evidenceSource?: "sandbox_terminal" | "local_proof_runner";
+  includeInReport?: boolean;
 };
 
 export type PolicyDecision = {

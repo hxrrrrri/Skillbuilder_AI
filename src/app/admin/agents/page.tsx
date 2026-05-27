@@ -81,9 +81,12 @@ export default async function AdminAgentsPage() {
       ) : (
         <Card>
           <CardHeader>
-            <CardTitle>Pipeline agents ({rows.length})</CardTitle>
+            <CardTitle>Effective runtime config ({rows.length})</CardTitle>
           </CardHeader>
           <CardBody>
+            <p className="mb-3 text-xs text-muted">
+              These rows are read from the database registry at runtime. Local JSON can only fill gaps when registry rows are missing.
+            </p>
             <AgentTable
               rows={rows}
               providers={providerOptions}

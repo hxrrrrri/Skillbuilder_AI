@@ -67,8 +67,12 @@ export default function Landing() {
         }),
       });
       const data = await r.json();
+      if (r.status === 401) {
+        router.push(`/login?callbackUrl=${encodeURIComponent("/candidate/new-verification")}`);
+        return;
+      }
       if (!r.ok) throw new Error(data?.detail ?? data?.error ?? "failed");
-      router.push(`/mission/${data.run_id}`);
+      router.push(`/candidate/runs/${data.run_id}`);
     } catch (e: any) {
       setError(e.message ?? "Failed to start mission.");
       setLoading(false);

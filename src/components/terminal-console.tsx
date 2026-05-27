@@ -13,6 +13,8 @@ type Run = {
   stderr: string;
   durationMs: number;
   status: string;
+  outputSha256?: string;
+  redactionWarning?: boolean;
 };
 
 type Props = {
@@ -136,6 +138,8 @@ export function TerminalConsole({ missionId, cwd, defaultCommand, enableSaveAsEv
             <Badge tone={latest.exitCode === 0 ? "good" : "bad"}>exit {latest.exitCode ?? "?"}</Badge>
             <Badge>{latest.status}</Badge>
             <span className="text-muted">{latest.durationMs}ms</span>
+            {latest.outputSha256 && <span className="font-mono text-muted">sha256:{latest.outputSha256.slice(0, 16)}</span>}
+            {latest.redactionWarning && <Badge tone="warn">redacted</Badge>}
             <span className="ml-auto flex gap-2">
               <button className="text-accent hover:underline" onClick={copyOutput}>copy</button>
               {enableSaveAsEvidence && missionId && (

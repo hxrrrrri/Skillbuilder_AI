@@ -31,6 +31,8 @@ export default async function AdminRunTerminalPage({ params }: { params: { id: s
     stdoutSummary: String(e.stdoutSummary ?? ""),
     stderrSummary: String(e.stderrSummary ?? ""),
     usedFor: (e.usedFor as any) ?? "agent",
+    outputSha256: e.outputSha256 ?? null,
+    redactionWarning: !!e.redactionWarning,
   }));
 
   const profile = run.profiles[0];

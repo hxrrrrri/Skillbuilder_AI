@@ -8,6 +8,9 @@ import { safeJsonParse } from "@/lib/utils";
 import type { AICollabEvaluation, MissionState } from "@/agents/types";
 import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
 import type { ProviderMatrix } from "@/lib/providers/types";
+import { getCurrentUser } from "@/lib/auth/session";
+import { evaluateRunAccess } from "@/lib/auth/guards-api";
+import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -98,6 +101,33 @@ export async function POST(req: Request) {
   const run = await prisma.analysisRun.findUnique({ where: { id: body.run_id } });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
 
+  // Authorization: only owners/creators/admins/tenant members may submit challenge results.
+  const access = await prisma.analysisRun.findUnique({
+    where: { id: body.run_id },
+    select: { id: true, candidateId: true, createdByUserId: true, tenantId: true, candidate: { select: { userId: true } } },
+  });
+  if (!access) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
+  const sessionUser = await getCurrentUser();
+  const decision = evaluateRunAccess(sessionUser, {
+    candidateId: access.candidateId,
+    createdByUserId: access.createdByUserId,
+    tenantId: access.tenantId,
+    candidateUserId: access.candidate?.userId ?? null,
+  });
+  if (!decision.ok) {
+    await writeAuditLog({
+      action: "challenge.evaluate.denied",
+      actorUserId: sessionUser?.id ?? null,
+      tenantId: access.tenantId ?? null,
+      targetType: "AnalysisRun",
+      targetId: access.id,
+      metadata: { reason: decision.reason },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+    }).catch(() => {});
+    return decision.response;
+  }
+
   const baseline = heuristicScore(body);
   const mode: ExecutionMode = (run.executionMode as ExecutionMode) ?? "api";
 
@@ -121,7 +151,7 @@ export async function POST(req: Request) {
     ownership_status: safeJsonParse(run.ownershipStatus ?? null, null),
   };
 
-  const user = `Challenge prompt: ${body.challenge_prompt}
+  const promptUser = `Challenge prompt: ${body.challenge_prompt}
 Tool the candidate says they used: ${body.tool_used}
 Target files: ${body.target_files.join(", ") || "(not supplied)"}
 Expected capabilities: ${body.expected_capabilities.join(", ") || "(not supplied)"}
@@ -146,7 +176,7 @@ Return the JSON now.`;
     agentName: "ai-collaboration-evaluator",
     role: "validator",
     system: SYSTEM,
-    user,
+    user: promptUser,
     schemaHint: SCHEMA_HINT,
     maxTokens: 900,
     fallback: () => baseline,

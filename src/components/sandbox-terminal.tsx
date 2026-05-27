@@ -39,6 +39,8 @@ export type SandboxTimelineEntry = {
   stdoutSummary: string;
   stderrSummary: string;
   usedFor: SandboxPaletteEntry["usedFor"];
+  outputSha256?: string | null;
+  redactionWarning?: boolean;
   savedAsEvidence: boolean;
   ranAt: string;
 };
@@ -54,6 +56,8 @@ type Props = {
     stdoutSummary: string;
     stderrSummary: string;
     usedFor: SandboxPaletteEntry["usedFor"];
+    outputSha256?: string | null;
+    redactionWarning?: boolean;
   }>;
   canPublishToProfile: boolean;
   palette?: SandboxPaletteEntry[];
@@ -85,6 +89,8 @@ export function SandboxTerminal({
       stdoutSummary: e.stdoutSummary,
       stderrSummary: e.stderrSummary,
       usedFor: e.usedFor,
+      outputSha256: e.outputSha256 ?? null,
+      redactionWarning: !!e.redactionWarning,
       savedAsEvidence: true,
       ranAt: "(previously saved)",
     })),
@@ -140,6 +146,8 @@ export function SandboxTerminal({
           usedFor: entry.usedFor,
           savedAsEvidence: opts.saveAsEvidence,
           ranAt: data.completedAt ?? new Date().toISOString(),
+          outputSha256: data.outputSha256 ?? null,
+          redactionWarning: !!data.redactionWarning,
         };
         setTimeline((t) => [tlEntry, ...t]);
       } catch (err: any) {
@@ -257,6 +265,8 @@ export function SandboxTerminal({
                     <Badge>{t.usedFor}</Badge>
                     <code className="text-ink">{[t.command, ...t.args].join(" ") || t.paletteLabel}</code>
                     <span className="text-muted">{t.durationMs}ms</span>
+                    {t.outputSha256 && <span className="font-mono text-muted">sha256:{t.outputSha256.slice(0, 16)}</span>}
+                    {t.redactionWarning && <Badge tone="warn">redacted</Badge>}
                     <span className="ml-auto flex items-center gap-2">
                       {t.savedAsEvidence ? (
                         <Badge tone="good">in proof transcript</Badge>

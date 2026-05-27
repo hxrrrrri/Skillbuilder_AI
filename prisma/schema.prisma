@@ -146,6 +146,9 @@ model ProviderConfig {
   lastTestedAt    DateTime?
   lastTestStatus  String?  // ok|fail|unavailable
   lastTestModel   String?
+  lastTestRaw     String?
+  lastTestJsonOk  Boolean?
+  lastTestLatencyMs Int?
   lastTestError   String?
   notes           String?
   createdAt       DateTime @default(now())

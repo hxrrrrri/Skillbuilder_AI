@@ -65,7 +65,7 @@ export default async function AdminDashboard() {
               {recentRuns.map((r) => (
                 <li key={r.id} className="flex items-center justify-between py-2 text-sm">
                   <div>
-                    <Link href={`/mission/${r.id}`} className="font-mono text-ink hover:text-accent">
+                    <Link href={`/admin/runs/${r.id}`} className="font-mono text-ink hover:text-accent">
                       {r.repository.owner}/{r.repository.repoName}
                     </Link>
                     <div className="text-xs text-muted">

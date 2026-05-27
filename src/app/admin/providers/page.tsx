@@ -38,6 +38,9 @@ export default async function AdminProvidersPage() {
     lastTestedAt: p.lastTestedAt ? p.lastTestedAt.toISOString() : null,
     lastTestStatus: p.lastTestStatus,
     lastTestModel: p.lastTestModel,
+    lastTestRaw: p.lastTestRaw,
+    lastTestJsonOk: p.lastTestJsonOk,
+    lastTestLatencyMs: p.lastTestLatencyMs,
     lastTestError: p.lastTestError,
     liveAvailable: !!liveAvailability[p.providerId],
   }));
@@ -48,7 +51,7 @@ export default async function AdminProvidersPage() {
   return (
     <RoleShell
       title="Providers"
-      subtitle="Persisted in the database. Edits live in the registry; runtime selection still reads skillproof.local.json until the runtime-wire slice lands."
+      subtitle="Persisted in the database and used by runtime selection. skillproof.local.json is only a local fallback/override when DB rows are unavailable."
       navLinks={ADMIN_NAV}
       activeHref="/admin/providers"
     >

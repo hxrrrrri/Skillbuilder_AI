@@ -62,7 +62,6 @@ export default async function PublicProfile({ params }: { params: { slug: string
   const plan = safeJsonParse<any>(run.improvementPlan, null);
   const ai = safeJsonParse<any>(run.aiCollaboration, null);
   const ownership = safeJsonParse<any>(run.ownershipStatus, null);
-  const providerMatrix = safeJsonParse<Record<string, any>>(run.providerMatrix, {});
   const showTerminalProof = profile.includeTerminalProof === true;
   const terminalEvidence = showTerminalProof
     ? safeJsonParse<any[]>(run.terminalEvidence, [])
@@ -152,7 +151,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
         </section>
       )}
 
-      {(terminalEvidence.length > 0 || Object.keys(providerMatrix).length > 0 || ownership) && (
+      {(terminalEvidence.length > 0 || ownership) && (
         <section>
           <Card>
             <CardHeader>
@@ -186,22 +185,6 @@ export default async function PublicProfile({ params }: { params: { slug: string
                       {ownership.notes.map((n: string, i: number) => <li key={i}>{n}</li>)}
                     </ul>
                   )}
-                </div>
-              )}
-
-              {Object.keys(providerMatrix).length > 0 && (
-                <div>
-                  <div className="text-xs uppercase text-muted">Provider matrix</div>
-                  <div className="mt-1 grid gap-2 md:grid-cols-5">
-                    {Object.entries(providerMatrix)
-                      .filter(([role]) => role !== "agents")
-                      .map(([role, prov]) => (
-                      <div key={role} className="rounded border border-border p-2 text-xs">
-                        <div className="text-muted">{role}</div>
-                        <div className="mt-1 font-mono">{String(prov)}</div>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
 
@@ -259,7 +242,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
         <section>
           <Card>
             <CardHeader>
-              <CardTitle>Authenticity Signals (raw)</CardTitle>
+          <CardTitle>Authenticity Signals</CardTitle>
             </CardHeader>
             <CardBody>
               <AuthenticityCard data={authenticity} />
@@ -288,7 +271,9 @@ export default async function PublicProfile({ params }: { params: { slug: string
                       {q.sourceFile && (
                         <div className="mt-1 text-xs font-mono text-muted">↳ {q.sourceFile}</div>
                       )}
-                      <p className="mt-2 text-sm text-ink/80">{q.answer}</p>
+                      <p className="mt-2 text-sm text-muted">
+                        Interview answer submitted and scored. Full answer text is private to the candidate.
+                      </p>
                       {dim && (
                         <div className="mt-2 grid grid-cols-2 gap-1 text-xs md:grid-cols-5">
                           {Object.entries(dim).map(([k, v]) => (
@@ -355,7 +340,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
 
       <footer className="text-center text-xs text-muted">
         Verified by SkillProof AI · {new Date(profile.createdAt).toLocaleDateString()} ·{" "}
-        <a className="text-accent hover:underline" href={`/api/report/export?run_id=${run.id}`}>
+        <a className="text-accent hover:underline" href={`/api/report/export?profile_id=${profile.id}`}>
           Download Report.md
         </a>
       </footer>

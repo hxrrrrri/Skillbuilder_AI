@@ -55,6 +55,8 @@ export default async function CandidateRunTerminalPage({ params }: { params: { i
     stdoutSummary: String(e.stdoutSummary ?? ""),
     stderrSummary: String(e.stderrSummary ?? ""),
     usedFor: (e.usedFor as any) ?? "agent",
+    outputSha256: e.outputSha256 ?? null,
+    redactionWarning: !!e.redactionWarning,
   }));
 
   const profile = run.profiles[0];
@@ -73,7 +75,7 @@ export default async function CandidateRunTerminalPage({ params }: { params: { i
         </Badge>
         <Badge>{run.executionMode}</Badge>
         <Link
-          href={`/mission/${run.id}`}
+          href={`/candidate/runs/${run.id}`}
           className="text-accent hover:underline"
         >
           ← back to mission

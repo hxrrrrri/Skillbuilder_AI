@@ -8,6 +8,9 @@ import { isMockMode } from "@/lib/claude";
 import type { MissionState } from "@/agents/types";
 import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
 import type { ProviderMatrix } from "@/lib/providers/types";
+import { getCurrentUser } from "@/lib/auth/session";
+import { evaluateRunAccess } from "@/lib/auth/guards-api";
+import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,6 +30,34 @@ export async function POST(req: Request) {
 
   const q = await prisma.interviewQuestion.findUnique({ where: { id: body.question_id } });
   if (!q) return NextResponse.json({ error: "question_not_found" }, { status: 404 });
+  // Authorization: only allow the run owner / creator / admin / tenant to submit
+  // interview answers. Load minimal run fields for access checks.
+  const runAccess = await prisma.analysisRun.findUnique({
+    where: { id: q.runId },
+    select: { id: true, candidateId: true, createdByUserId: true, tenantId: true, candidate: { select: { userId: true } } },
+  });
+  if (!runAccess) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
+
+  const user = await getCurrentUser();
+  const decision = evaluateRunAccess(user, {
+    candidateId: runAccess.candidateId,
+    createdByUserId: runAccess.createdByUserId,
+    tenantId: runAccess.tenantId,
+    candidateUserId: runAccess.candidate?.userId ?? null,
+  });
+  if (!decision.ok) {
+    await writeAuditLog({
+      action: "interview.answer.denied",
+      actorUserId: user?.id ?? null,
+      tenantId: runAccess.tenantId ?? null,
+      targetType: "InterviewQuestion",
+      targetId: q.id,
+      metadata: { reason: decision.reason },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+    }).catch(() => {});
+    return decision.response;
+  }
 
   const run = await prisma.analysisRun.findUnique({ where: { id: q.runId } });
   const mode: ExecutionMode = (run?.executionMode as ExecutionMode) ?? "api";

@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { getFile } from "@/lib/github";
 import { safeJsonParse } from "@/lib/utils";
 import type { OwnershipStatus } from "@/agents/types";
+import { getCurrentUser } from "@/lib/auth/session";
+import { evaluateRunAccess } from "@/lib/auth/guards-api";
+import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +28,28 @@ export async function POST(req: Request) {
     include: { candidate: true, repository: true },
   });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
+
+  // Only authorized users may trigger ownership verification for a run.
+  const user = await getCurrentUser();
+  const decision = evaluateRunAccess(user, {
+    candidateId: run.candidateId,
+    createdByUserId: run.createdByUserId,
+    tenantId: run.tenantId,
+    candidateUserId: run.candidate?.userId ?? null,
+  });
+  if (!decision.ok) {
+    await writeAuditLog({
+      action: "ownership.verify.denied",
+      actorUserId: user?.id ?? null,
+      tenantId: run.tenantId ?? null,
+      targetType: "AnalysisRun",
+      targetId: run.id,
+      metadata: { reason: decision.reason },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+    }).catch(() => {});
+    return decision.response;
+  }
 
   const username = run.candidate?.githubUsername ?? null;
   const token = username ? `skillproof:${username}:${run.id}:${run.id.slice(-8)}` : null;

@@ -23,6 +23,9 @@ type Row = {
   lastTestedAt: string | null;
   lastTestStatus: string | null;
   lastTestModel: string | null;
+  lastTestRaw: string | null;
+  lastTestJsonOk: boolean | null;
+  lastTestLatencyMs: number | null;
   lastTestError: string | null;
   liveAvailable: boolean;
 };
@@ -188,7 +191,7 @@ function ProviderRow({ row }: { row: Row }) {
             }
           />
           <KV
-            k="Known models"
+            k="Registry models"
             v={row.capabilities?.models?.length ? row.capabilities.models.join(", ") : "—"}
           />
           <KV
@@ -196,6 +199,8 @@ function ProviderRow({ row }: { row: Row }) {
             v={row.lastTestedAt ? new Date(row.lastTestedAt).toLocaleString() : "never"}
           />
           <KV k="Last test model" v={row.lastTestModel ?? "—"} />
+          <KV k="JSON parse" v={row.lastTestJsonOk == null ? "—" : row.lastTestJsonOk ? "ok" : "failed"} />
+          <KV k="Latency" v={row.lastTestLatencyMs == null ? "—" : `${row.lastTestLatencyMs}ms`} />
           {row.lastTestError && (
             <div className="col-span-full mt-1 text-bad">
               <span className="font-semibold uppercase tracking-wide text-[10px]">last error</span>:{" "}
@@ -206,6 +211,16 @@ function ProviderRow({ row }: { row: Row }) {
             <div className="col-span-full text-muted">
               <span className="font-semibold uppercase tracking-wide text-[10px]">notes</span>: {row.notes}
             </div>
+          )}
+          {row.lastTestRaw && (
+            <details className="col-span-full rounded border border-border bg-bg/40 p-2">
+              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-muted">
+                last raw output
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] text-muted">
+                {row.lastTestRaw}
+              </pre>
+            </details>
           )}
         </div>
       )}

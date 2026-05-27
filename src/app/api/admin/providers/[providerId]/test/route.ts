@@ -21,6 +21,7 @@ export async function POST(req: Request, { params }: { params: { providerId: str
     await recordProviderTest(params.providerId, {
       status: "unavailable",
       error: "unknown provider id",
+      jsonOk: false,
     });
     return NextResponse.json({ error: "unknown_provider" }, { status: 400 });
   }
@@ -30,6 +31,7 @@ export async function POST(req: Request, { params }: { params: { providerId: str
     await recordProviderTest(params.providerId, {
       status: "unavailable",
       error: "provider not available — check setup",
+      jsonOk: false,
     });
     return NextResponse.json({
       provider_id: params.providerId,
@@ -41,6 +43,7 @@ export async function POST(req: Request, { params }: { params: { providerId: str
 
   const prompt = `Return {"ok": true, "provider": "${params.providerId}"}`;
   try {
+    const started = Date.now();
     const res = await provider.runJson(
       {
         system: "Reply with ONLY the JSON object requested. No commentary.",
@@ -50,11 +53,15 @@ export async function POST(req: Request, { params }: { params: { providerId: str
       },
       `{"ok":boolean,"provider":string}`,
     );
+    const latencyMs = Date.now() - started;
     const ok = res.json !== null;
     await recordProviderTest(params.providerId, {
       status: ok ? "ok" : "fail",
       model: res.model ?? null,
       error: ok ? null : "provider returned no valid JSON",
+      raw: res.raw,
+      jsonOk: ok,
+      latencyMs,
     });
     await writeAuditLog({
       action: "admin.provider.test",
@@ -62,7 +69,7 @@ export async function POST(req: Request, { params }: { params: { providerId: str
       tenantId: null,
       targetType: "provider",
       targetId: params.providerId,
-      metadata: { ok, model: res.model ?? null, input_tokens: res.inputTokens, output_tokens: res.outputTokens },
+      metadata: { ok, model: res.model ?? null, input_tokens: res.inputTokens, output_tokens: res.outputTokens, latency_ms: latencyMs },
       ip: req.headers.get("x-forwarded-for") ?? null,
       userAgent: req.headers.get("user-agent") ?? null,
     });
@@ -72,6 +79,8 @@ export async function POST(req: Request, { params }: { params: { providerId: str
       json: res.json,
       raw: res.raw.slice(0, 4000),
       model: res.model,
+      json_parse_success: ok,
+      latency_ms: latencyMs,
       inputTokens: res.inputTokens,
       outputTokens: res.outputTokens,
       error: ok ? null : "provider returned no valid JSON",
@@ -80,6 +89,8 @@ export async function POST(req: Request, { params }: { params: { providerId: str
     await recordProviderTest(params.providerId, {
       status: "fail",
       error: err?.message ?? String(err),
+      raw: "",
+      jsonOk: false,
     });
     return NextResponse.json({
       provider_id: params.providerId,

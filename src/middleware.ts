@@ -31,5 +31,14 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: ["/admin/:path*", "/candidate/:path*", "/employer/:path*", "/college/:path*"],
+  // Mission pages render run data fetched from `/api/runs/[id]`, which now requires
+  // an authenticated session. We include the prefix here so unauthenticated visitors
+  // get a clean redirect to /login instead of a broken "failed to fetch" UI.
+  matcher: [
+    "/admin/:path*",
+    "/candidate/:path*",
+    "/employer/:path*",
+    "/college/:path*",
+    "/mission/:path*",
+  ],
 };

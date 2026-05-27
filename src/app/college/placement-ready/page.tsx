@@ -45,7 +45,7 @@ export default async function CollegePlacementReadyPage() {
                 <li key={row.run_id} className="py-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <Link href={`/mission/${row.run_id}`} className="text-sm font-semibold text-ink hover:text-accent">
+                      <Link href={row.candidate_id ? `/college/students/${row.candidate_id}` : "/college/students"} className="text-sm font-semibold text-ink hover:text-accent">
                         {row.candidate_name}
                       </Link>
                       <p className="font-mono text-xs text-muted">{row.repo} · score {row.score ?? "not scored"}</p>

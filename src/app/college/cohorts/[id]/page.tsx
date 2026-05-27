@@ -78,7 +78,7 @@ export default async function CollegeCohortDetailPage({ params }: { params: { id
                       </div>
                     </div>
                     {latest && (
-                      <Link href={`/mission/${latest.id}`} className="mt-2 inline-flex font-mono text-xs text-accent hover:text-ink">
+                      <Link href={`/college/students/${row.candidate.id}`} className="mt-2 inline-flex font-mono text-xs text-accent hover:text-ink">
                         {latest.repository.owner}/{latest.repository.repoName} · {latest.status}
                       </Link>
                     )}

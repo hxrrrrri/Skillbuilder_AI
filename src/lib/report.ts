@@ -49,6 +49,11 @@ type RunBundle = {
   questions: Question[];
 };
 
+type ReportOptions = {
+  publicView?: boolean;
+  includeTerminalProof?: boolean;
+};
+
 function safe<T>(s: string | null, fb: T): T {
   if (!s) return fb;
   try {
@@ -58,7 +63,8 @@ function safe<T>(s: string | null, fb: T): T {
   }
 }
 
-export function buildMarkdownReport(run: RunBundle): string {
+export function buildMarkdownReport(run: RunBundle, options: ReportOptions = {}): string {
+  const publicView = options.publicView === true;
   const lines: string[] = [];
   const candidateName = run.candidate?.name ?? "Anonymous Candidate";
   const repoStr = `${run.repository.owner}/${run.repository.repoName}`;
@@ -105,7 +111,7 @@ export function buildMarkdownReport(run: RunBundle): string {
       if (role === "agents") continue;
       lines.push(`| ${role} | \`${String(prov)}\` |`);
     }
-    if (providerMatrix.agents) {
+    if (providerMatrix.agents && !publicView) {
       lines.push("");
       lines.push("| Agent | Provider | Model | Reasoning | Status |");
       lines.push("|---|---|---|---|---|");
@@ -118,7 +124,8 @@ export function buildMarkdownReport(run: RunBundle): string {
     lines.push("");
   }
 
-  const terminal = safe<any[]>(run.terminalEvidence, []);
+  const allTerminal = safe<any[]>(run.terminalEvidence, []);
+  const terminal = options.includeTerminalProof === false ? [] : allTerminal;
   if (terminal.length) {
     lines.push("## Terminal Evidence");
     lines.push("");
@@ -126,13 +133,16 @@ export function buildMarkdownReport(run: RunBundle): string {
     lines.push("");
     for (const t of terminal) {
       lines.push(`### \`${t.command}\` _(${t.usedFor})_`);
-      lines.push(`- exit code: \`${t.exitCode ?? "?"}\` · ${t.durationMs}ms · cwd: \`${t.cwd}\``);
-      if (t.stdoutSummary) {
+      lines.push(`- exit code: \`${t.exitCode ?? "?"}\` · ${t.durationMs}ms`);
+      if (t.outputSha256) lines.push(`- output sha256: \`${t.outputSha256}\``);
+      if (t.redactionWarning) lines.push("- redaction: output contained token-like content and was redacted before storage");
+      if (!publicView && t.cwd) lines.push(`- cwd: \`${t.cwd}\``);
+      if (!publicView && t.stdoutSummary) {
         lines.push("```");
         lines.push(String(t.stdoutSummary).slice(0, 1500));
         lines.push("```");
       }
-      if (t.stderrSummary) {
+      if (!publicView && t.stderrSummary) {
         lines.push("_stderr:_");
         lines.push("```");
         lines.push(String(t.stderrSummary).slice(0, 800));
@@ -140,6 +150,11 @@ export function buildMarkdownReport(run: RunBundle): string {
       }
       lines.push("");
     }
+  } else if (allTerminal.length && options.includeTerminalProof === false) {
+    lines.push("## Terminal Evidence");
+    lines.push("");
+    lines.push("Terminal proof exists for this run, but the transcript is private for this report.");
+    lines.push("");
   }
 
   const contract = safe<any>(run.validationContract, null);
@@ -246,10 +261,15 @@ export function buildMarkdownReport(run: RunBundle): string {
         lines.push(`_Source file:_ \`${q.sourceFile}${range}\``);
       }
       lines.push("");
-      lines.push("**Answer:**");
-      lines.push("");
-      lines.push("> " + (q.answer ?? "").replace(/\n/g, "\n> "));
-      lines.push("");
+      if (publicView) {
+        lines.push("_Answer text is private. This public report includes only scoring and feedback._");
+        lines.push("");
+      } else {
+        lines.push("**Answer:**");
+        lines.push("");
+        lines.push("> " + (q.answer ?? "").replace(/\n/g, "\n> "));
+        lines.push("");
+      }
       if (q.answerScore != null) lines.push(`**Score:** ${q.answerScore}/100`);
       if (q.feedback) lines.push(`**Feedback:** ${q.feedback}`);
       const dims = safe<any>(q.dimensionScores, null);

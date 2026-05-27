@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { parseRepoUrl } from "@/lib/utils";
 import { preCreateEvents, runMission } from "@/agents/mission-runner";
 import { getCurrentUser } from "@/lib/auth/session";
+import { isAdminRole } from "@/lib/auth/roles";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { createSnapshotIfReVerify } from "@/lib/reverification";
 
@@ -35,10 +36,19 @@ export async function POST(req: Request) {
   }
 
   const sessionUser = await getCurrentUser();
+  if (!sessionUser) {
+    return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
+  }
+
+  // Only candidates and admins may start a run. Disallow employers/college members
+  // from initiating runs on behalf of others via the API to reduce abuse.
+  if (!isAdminRole(sessionUser.role) && sessionUser.role !== "candidate") {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
 
   // If the signed-in user is a candidate, reuse their Candidate row; otherwise create anonymous.
   let candidate;
-  if (sessionUser && sessionUser.role === "candidate") {
+  if (sessionUser.role === "candidate") {
     candidate = await prisma.candidate.upsert({
       where: { userId: sessionUser.id },
       update: {
@@ -73,8 +83,8 @@ export async function POST(req: Request) {
   const run = await prisma.analysisRun.create({
     data: {
       candidateId: candidate.id,
-      createdByUserId: sessionUser?.id ?? null,
-      tenantId: sessionUser?.primaryTenantId ?? null,
+      createdByUserId: sessionUser.id,
+      tenantId: sessionUser.primaryTenantId ?? null,
       repoId: repository.id,
       targetRole: body.target_role,
       candidateLevel: body.candidate_level,
@@ -87,8 +97,8 @@ export async function POST(req: Request) {
 
   await writeAuditLog({
     action: "run.started",
-    actorUserId: sessionUser?.id ?? null,
-    tenantId: sessionUser?.primaryTenantId ?? null,
+    actorUserId: sessionUser.id,
+    tenantId: sessionUser.primaryTenantId ?? null,
     targetType: "run",
     targetId: run.id,
     metadata: {

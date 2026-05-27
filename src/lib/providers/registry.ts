@@ -1,9 +1,8 @@
 /**
  * DB-backed provider + agent registry.
  *
- * This slice introduces persistence and an editable admin UI; the existing
- * runtime (mission-runner / provider-router) still reads from
- * skillproof.local.json. Wiring runtime to this registry is the next slice.
+ * The database registry is the primary runtime source. skillproof.local.json is
+ * only a local fallback/override when DB rows are unavailable.
  *
  * Source of truth for defaults: PIPELINE in src/agents/mission-runner.ts and
  * DEFAULTS in src/lib/providers/config.ts. The seed function below mirrors
@@ -280,7 +279,14 @@ export async function updateProviderConfig(
 
 export async function recordProviderTest(
   providerId: string,
-  result: { status: "ok" | "fail" | "unavailable"; model?: string | null; error?: string | null },
+  result: {
+    status: "ok" | "fail" | "unavailable";
+    model?: string | null;
+    error?: string | null;
+    raw?: string | null;
+    jsonOk?: boolean | null;
+    latencyMs?: number | null;
+  },
 ) {
   return prisma.providerConfig.update({
     where: { providerId },
@@ -288,6 +294,9 @@ export async function recordProviderTest(
       lastTestedAt: new Date(),
       lastTestStatus: result.status,
       lastTestModel: result.model ?? null,
+      lastTestRaw: result.raw ? result.raw.slice(0, 4000) : null,
+      lastTestJsonOk: result.jsonOk ?? null,
+      lastTestLatencyMs: result.latencyMs ?? null,
       lastTestError: result.error ?? null,
     },
   });

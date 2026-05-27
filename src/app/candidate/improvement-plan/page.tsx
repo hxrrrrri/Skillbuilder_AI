@@ -72,8 +72,8 @@ export default async function ImprovementPlanPage() {
                 <div className="flex flex-wrap items-center gap-2 text-xs">
                   <Badge>{run.targetRole}</Badge>
                   {run.overallScore != null && <Badge tone="accent">overall {run.overallScore}</Badge>}
-                  <Link href={`/mission/${run.id}`} className="text-accent hover:underline">
-                    open mission ↗
+                  <Link href={`/candidate/runs/${run.id}`} className="text-accent hover:underline">
+                    open run
                   </Link>
                 </div>
                 {plan ? (
