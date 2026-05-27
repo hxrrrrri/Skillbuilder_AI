@@ -43,3 +43,7 @@ next-env.d.ts
 # misc
 coverage
 .cache
+
+# skillproof local
+.skillproof/
+skillproof.local.json

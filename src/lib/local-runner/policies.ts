@@ -1,0 +1,102 @@
+// Command safety policy. Blocks destructive ops, allows known dev tools.
+
+import type { PolicyDecision } from "./types";
+
+const ALLOWED_COMMANDS = new Set([
+  "git",
+  "gh",
+  "npm",
+  "npx",
+  "pnpm",
+  "yarn",
+  "bun",
+  "node",
+  "python",
+  "python3",
+  "py",
+  "pytest",
+  "tsc",
+  "eslint",
+  "claude",
+  "codex",
+  "ollama",
+  "copilot",
+  "gh-copilot",
+]);
+
+// Regex patterns matched against the full command line.
+const DANGEROUS_PATTERNS: Array<{ re: RegExp; reason: string }> = [
+  { re: /\brm\s+-rf\b/i, reason: "rm -rf is destructive" },
+  { re: /\brm\s+-fr\b/i, reason: "rm -fr is destructive" },
+  { re: /\bdel\b\s+\/s/i, reason: "del /s is destructive" },
+  { re: /\bRemove-Item\b.*-Recurse.*-Force/i, reason: "Remove-Item -Recurse -Force is destructive" },
+  { re: /\bformat\b\s+[a-z]:/i, reason: "format <drive> is destructive" },
+  { re: /\bshutdown\b/i, reason: "shutdown is dangerous" },
+  { re: /\bmkfs\b/i, reason: "mkfs is destructive" },
+  { re: /\bdd\b\s+if=/i, reason: "dd if= is risky" },
+  { re: /:\(\)\s*\{\s*:\|:&\s*\};:/, reason: "fork bomb" },
+  { re: /\bcurl\b.*\|\s*(bash|sh|zsh|pwsh|powershell)/i, reason: "curl|sh download-execute" },
+  { re: /\bwget\b.*\|\s*(bash|sh)/i, reason: "wget|sh download-execute" },
+  { re: /\biwr\b.*\|\s*iex/i, reason: "PowerShell iwr|iex" },
+  { re: /Invoke-Expression/i, reason: "Invoke-Expression executes arbitrary code" },
+  { re: /Set-ExecutionPolicy/i, reason: "modifies PowerShell execution policy" },
+  { re: /\bnpm\b\s+install\s+-g\b/i, reason: "global npm install requires approval" },
+  { re: /\bnpm\b\s+i\s+-g\b/i, reason: "global npm install requires approval" },
+  { re: /\bpnpm\b\s+add\s+-g\b/i, reason: "global pnpm install requires approval" },
+  { re: /\byarn\b\s+global\s+add\b/i, reason: "global yarn install requires approval" },
+  { re: /\.ssh\b/i, reason: "ssh dir access" },
+  { re: /\bcat\b\s+.*\.env/i, reason: "reading .env may expose secrets" },
+  { re: /\benv\b\s*$/i, reason: "dumping env may expose secrets" },
+  { re: /printenv/i, reason: "printenv may expose secrets" },
+  { re: /Get-ChildItem\s+env:/i, reason: "dumping env may expose secrets" },
+];
+
+const APPROVAL_PATTERNS: Array<{ re: RegExp; reason: string }> = [
+  { re: /\bnpm\b\s+install\s+-g\b/i, reason: "global npm install" },
+  { re: /\bnpm\b\s+i\s+-g\b/i, reason: "global npm install" },
+  { re: /\bpnpm\b\s+add\s+-g\b/i, reason: "global pnpm install" },
+  { re: /\byarn\b\s+global\s+add\b/i, reason: "global yarn add" },
+  { re: /\bcurl\b.*\|\s*(bash|sh)/i, reason: "curl|sh download-execute" },
+];
+
+export type PolicyInput = {
+  command: string;
+  args?: string[];
+  approved?: boolean;
+};
+
+export function evaluatePolicy(input: PolicyInput): PolicyDecision {
+  const command = (input.command || "").trim();
+  const args = input.args ?? [];
+  const fullLine = [command, ...args].join(" ");
+
+  if (!command) {
+    return { allowed: false, reason: "empty command", requiresApproval: false };
+  }
+
+  const base = command.split(/[\\/]/).pop()!.replace(/\.(exe|cmd|bat|ps1)$/i, "").toLowerCase();
+  if (!ALLOWED_COMMANDS.has(base)) {
+    return {
+      allowed: false,
+      reason: `command "${base}" not in allowlist`,
+      requiresApproval: true,
+    };
+  }
+
+  for (const p of DANGEROUS_PATTERNS) {
+    if (p.re.test(fullLine)) {
+      const approvalMatch = APPROVAL_PATTERNS.find((a) => a.re.test(fullLine));
+      if (approvalMatch && input.approved) {
+        return { allowed: true, reason: `approved: ${approvalMatch.reason}`, requiresApproval: false };
+      }
+      if (approvalMatch) {
+        return { allowed: false, reason: p.reason, requiresApproval: true };
+      }
+      return { allowed: false, reason: p.reason, requiresApproval: false };
+    }
+  }
+
+  return { allowed: true, reason: "ok", requiresApproval: false };
+}
+
+export const POLICY_ALLOWLIST = Array.from(ALLOWED_COMMANDS);

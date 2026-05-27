@@ -74,7 +74,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     ai_collaboration: safeJsonParse(run.aiCollaboration, null),
     profile_summary: safeJsonParse(run.profileSummary, null),
     context_pack: safeJsonParse(run.contextPack, null),
-    mock_mode: !process.env.ANTHROPIC_API_KEY || process.env.SKILLPROOF_MOCK_LLM === "1",
+    execution_mode: run.executionMode,
+    terminal_evidence: safeJsonParse(run.terminalEvidence, []),
+    provider_matrix: safeJsonParse(run.providerMatrix, null),
+    ownership_status: safeJsonParse(run.ownershipStatus, null),
+    mock_mode:
+      run.executionMode === "mock" ||
+      (run.executionMode === "api" && (!process.env.ANTHROPIC_API_KEY || process.env.SKILLPROOF_MOCK_LLM === "1")),
     created_at: run.createdAt,
     completed_at: run.completedAt,
   });

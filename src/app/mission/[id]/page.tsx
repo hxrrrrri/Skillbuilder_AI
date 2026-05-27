@@ -15,6 +15,7 @@ import { EmployerVerifier } from "@/components/employer-verifier";
 import { ImprovementPlanCard } from "@/components/improvement-plan";
 import { AICollabChallenge } from "@/components/ai-collab-challenge";
 import { MockBanner } from "@/components/mock-banner";
+import { TerminalConsole } from "@/components/terminal-console";
 
 type Run = any;
 
@@ -125,6 +126,16 @@ export default function MissionPage() {
             <Badge tone={run.verification_level === "repo_interview_verified" ? "good" : "default"}>
               {run.verification_level === "repo_interview_verified" ? "Repo + Interview verified" : "Repo-only verified"}
             </Badge>
+            {run.execution_mode && (
+              <Badge tone={run.execution_mode === "api" ? "default" : "accent"}>
+                mode: {run.execution_mode}
+              </Badge>
+            )}
+            {run.ownership_status?.owner_match && <Badge tone="good">owner verified (gh)</Badge>}
+            {run.ownership_status?.repo_token_verified && <Badge tone="good">repo-token verified</Badge>}
+            {run.ownership_status?.self_declared && !run.ownership_status?.owner_match && (
+              <Badge tone="warn">self-declared</Badge>
+            )}
           </div>
           {run.status === "failed" && run.status_message && (
             <div className="mt-2 max-w-2xl text-sm text-bad">Failure: {run.status_message}</div>
@@ -183,9 +194,64 @@ export default function MissionPage() {
                 <AgentCard key={e.agent} agent={e.agent} status={e.status} notes={e.notes} />
               ))}
             </div>
+            {run.provider_matrix && (
+              <div className="mt-4">
+                <div className="text-xs uppercase tracking-wide text-muted">Provider matrix</div>
+                <div className="mt-1 grid gap-2 md:grid-cols-5">
+                  {Object.entries(run.provider_matrix).map(([role, prov]) => (
+                    <div key={role} className="rounded border border-border bg-panel2 p-2 text-xs">
+                      <div className="text-muted">{role}</div>
+                      <div className="font-mono text-ink">{String(prov)}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardBody>
         </Card>
       </section>
+
+      {(run.terminal_evidence?.length ?? 0) > 0 && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Terminal Evidence</CardTitle>
+            </CardHeader>
+            <CardBody className="space-y-3">
+              <div className="text-xs text-muted">
+                Real commands run on the candidate's machine. Token patterns redacted before persistence.
+              </div>
+              {run.terminal_evidence.map((t: any, i: number) => (
+                <details key={i} className="rounded border border-border bg-panel2 p-2 text-xs">
+                  <summary className="cursor-pointer flex flex-wrap items-center gap-2">
+                    <Badge tone={t.exitCode === 0 ? "good" : "bad"}>exit {t.exitCode ?? "?"}</Badge>
+                    <Badge>{t.usedFor}</Badge>
+                    <span className="font-mono text-ink">{t.command}</span>
+                    <span className="ml-auto text-muted">{t.durationMs}ms</span>
+                  </summary>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-black/60 p-2 text-[11px] leading-relaxed">
+                    {t.stdoutSummary}
+                    {t.stderrSummary && <span className="text-bad">{"\n" + t.stderrSummary}</span>}
+                  </pre>
+                </details>
+              ))}
+            </CardBody>
+          </Card>
+        </section>
+      )}
+
+      {run.execution_mode && run.execution_mode !== "api" && run.execution_mode !== "mock" && (
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Run a command</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <TerminalConsole missionId={run.id} enableSaveAsEvidence defaultCommand="git log --oneline -n 20" />
+            </CardBody>
+          </Card>
+        </section>
+      )}
 
       {contractAssertions.length > 0 && (
         <section>

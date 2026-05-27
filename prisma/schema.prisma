@@ -54,6 +54,10 @@ model AnalysisRun {
   employerVerifier     String?             // JSON EmployerVerifier
   aiCollaboration      String?             // JSON AICollabEvaluation
   profileSummary       String?             // JSON ProfileOutput
+  executionMode        String              @default("api") // api|cli|hybrid|mock
+  terminalEvidence     String?             // JSON TerminalEvidence[]
+  providerMatrix       String?             // JSON role -> provider id
+  ownershipStatus      String?             // JSON { owner_match, repo_token_verified, self_declared }
   createdAt            DateTime            @default(now())
   completedAt          DateTime?
   candidate            Candidate?          @relation(fields: [candidateId], references: [id])

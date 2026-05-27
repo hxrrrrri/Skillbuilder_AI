@@ -14,6 +14,7 @@ const Body = z.object({
   target_role: z.string().min(2).max(80),
   candidate_level: z.string().min(2).max(40).default("Junior"),
   job_description: z.string().max(4000).optional(),
+  execution_mode: z.enum(["api", "cli", "hybrid", "mock"]).default("api"),
 });
 
 export async function POST(req: Request) {
@@ -53,6 +54,7 @@ export async function POST(req: Request) {
       candidateLevel: body.candidate_level,
       jobDescription: body.job_description,
       status: "pending",
+      executionMode: body.execution_mode,
     },
   });
 
@@ -63,11 +65,13 @@ export async function POST(req: Request) {
     runId: run.id,
     owner: parsed.owner,
     repo: parsed.repo,
+    repoUrl: body.repo_url,
     targetRole: body.target_role,
     candidateLevel: body.candidate_level,
     candidateName: body.candidate_name,
     githubUsername: body.github_username,
     jobDescription: body.job_description,
+    executionMode: body.execution_mode,
   }).catch(async (err) => {
     console.error("[mission] failed", err);
     await prisma.analysisRun.update({

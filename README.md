@@ -114,16 +114,110 @@ npm run check
 
 ---
 
+## Execution modes
+
+SkillProof supports four execution modes — picked on the landing page and shown on each Mission.
+
+| Mode     | What it does                                                                       | Needs                                |
+| -------- | ---------------------------------------------------------------------------------- | ------------------------------------ |
+| `api`    | Cloud API mode. Workers + validators call Anthropic.                               | `ANTHROPIC_API_KEY`                  |
+| `cli`    | Local CLI mode. Uses installed local CLIs + the local Proof Runner. No API keys.   | `git`, optional `gh`, `claude`/`codex`/`ollama` |
+| `hybrid` | Best available provider per agent role. Falls back to mock when nothing works.     | any of the above                     |
+| `mock`   | Pure heuristic / deterministic. Stays on the machine.                              | nothing                              |
+
+### Local-first verification
+
+Visit [`/local-setup`](http://localhost:3000/local-setup) to see:
+
+- which CLIs are installed (`git`, `gh`, `claude`, `codex`, `ollama`, optional `copilot`)
+- auth status (e.g. `gh auth status`, Ollama model list)
+- recommended execution mode
+- the per-role **provider matrix** (`orchestrator` / `worker` / `validator` / `interview` / `profile`)
+- a sandboxed terminal where you can test safe commands
+
+The **Local Proof Runner** clones a candidate's public repo into `.skillproof/runs/<run_id>` and
+runs safe checks — `git log`, `npm/pnpm/yarn/bun test`, `build`, `typecheck`, `pytest` when
+applicable. Outputs become Terminal Evidence on Mission Control and in the Markdown report.
+
+### Required tools
+
+- `git` — strongly recommended. Without it, no local clone or local git evidence.
+
+### Optional tools
+
+- `gh` — GitHub CLI. Authenticates ownership (`gh auth status` username vs repo owner) and lets
+  the app call GitHub via the CLI instead of REST.
+- `claude` — Claude Code CLI for LLM roles in `cli`/`hybrid` mode.
+- `codex` — OpenAI Codex CLI for LLM roles.
+- `ollama` — local LLM. Recommended fallback when no API key and no Claude/Codex CLI.
+- `gh copilot` — optional Copilot CLI.
+
+### Configure provider commands
+
+Edit `skillproof.local.json` at the project root, or use the **Edit** button on `/local-setup`.
+
+```json
+{
+  "providers": {
+    "claude_cli": { "command": "claude", "args": ["-p", "{{prompt}}"], "enabled": true },
+    "codex_cli":  { "command": "codex",  "args": ["exec", "{{prompt}}"], "enabled": true },
+    "ollama":     { "model": "llama3.1:8b", "baseUrl": "http://localhost:11434", "enabled": true },
+    "copilot_cli": { "command": "gh", "args": ["copilot", "suggest", "{{prompt}}"], "enabled": false }
+  },
+  "roles": {
+    "orchestrator": ["claude_cli", "anthropic_api", "ollama", "mock"],
+    "worker":       ["ollama", "claude_cli", "codex_cli", "anthropic_api", "mock"],
+    "validator":    ["codex_cli", "anthropic_api", "claude_cli", "ollama", "mock"],
+    "interview":    ["claude_cli", "anthropic_api", "ollama", "mock"],
+    "profile":      ["anthropic_api", "claude_cli", "ollama", "mock"]
+  }
+}
+```
+
+If `{{prompt}}` is not present in `args`, the prompt is piped via stdin instead.
+
+### Security model
+
+- Local CLI mode can execute commands. SkillProof asks before destructive commands.
+- Allowlist: `git`, `gh`, `npm`/`pnpm`/`yarn`/`bun`, `node`, `python`/`pytest`, `tsc`, `eslint`,
+  `claude`, `codex`, `ollama`, optional `copilot`.
+- Blocked by default: `rm -rf`, `del /s`, `format`, `shutdown`, `mkfs`, `dd if=`, fork bombs,
+  `curl | bash`, `iwr | iex`, `Invoke-Expression`, `Set-ExecutionPolicy`, env dumps.
+- Requires explicit approval: global `-g` installs, `curl | sh` (when approved).
+- Terminal output is redacted for token shapes before persistence: `sk-…`, `sk-ant-…`, `ghp_…`,
+  `github_pat_…`, JWT-shaped strings, `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GITHUB_TOKEN`
+  assignments.
+- Private repos stay local in `cli` mode and are never sent to cloud providers unless the user
+  chooses `api` or `hybrid` mode.
+
+### Limitations
+
+- The Proof Runner clones via HTTPS into `.skillproof/runs/<run_id>`. Make sure the directory is
+  writable. Add `.skillproof/` to `.gitignore` (done by default).
+- CLI flags for `claude` / `codex` change over time. If your CLI exits non-zero on `--version`,
+  edit `skillproof.local.json` accordingly.
+- The Ollama provider expects a JSON-capable model at `localhost:11434`. Pull one with
+  `ollama pull llama3.1:8b`.
+- Ownership verification via `gh` requires `gh auth login` and matches the authenticated user's
+  login against the repo owner. A README mention of `skillproof:<your-username>` is treated as a
+  repo-token signal.
+
+---
+
 ## API routes
 
 | Method | Path                          | Purpose                                              |
 | ------ | ----------------------------- | ---------------------------------------------------- |
-| POST   | `/api/analyze`                | Start a mission. Body: `repo_url`, `candidate_name`, `github_username?`, `target_role`, `candidate_level`, `job_description?` |
-| GET    | `/api/runs/[id]`              | Poll mission status. Returns scores, events, contract, coverage, authenticity, employer verifier, plan, etc. |
+| POST   | `/api/analyze`                | Start a mission. Body: `repo_url`, `candidate_name`, `github_username?`, `target_role`, `candidate_level`, `job_description?`, `execution_mode?` (`api`/`cli`/`hybrid`/`mock`) |
+| GET    | `/api/runs/[id]`              | Poll mission status. Returns scores, events, contract, coverage, authenticity, employer verifier, plan, terminal evidence, provider matrix, ownership status. |
 | POST   | `/api/interview/evaluate`     | Score an interview answer; persists 5 dimension scores, recomputes overall, updates verification level. |
 | POST   | `/api/challenge/evaluate`     | Score an AI Collaboration Challenge submission (`tool_used`, `proposed_diff`, `explanation`). |
 | POST   | `/api/profile/publish`        | Create a public profile slug for a completed run.    |
 | GET    | `/api/report/export?run_id=…` | Download the Markdown SkillProof Report.             |
+| GET    | `/api/local/tools`            | Detect installed CLIs (git, gh, claude, codex, ollama, optional copilot). Returns versions, auth, capabilities, recommended mode. |
+| POST   | `/api/local/command`          | Run a safe terminal command. Body: `command`, `args`, `cwd?`, `mission_id?`, `approved?`, `saveAsEvidence?`, `usedFor?`. Returns `403 approval_required` for gated commands. |
+| GET    | `/api/local/providers?mode=…` | List provider availability + matrix for an execution mode. |
+| POST   | `/api/local/providers`        | Save `skillproof.local.json` provider config.        |
 
 ---
 

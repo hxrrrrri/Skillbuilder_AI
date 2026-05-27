@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
@@ -12,6 +12,8 @@ const SAMPLE_REPOS = [
   "https://github.com/openai/openai-python",
 ];
 
+type Mode = "api" | "cli" | "hybrid" | "mock";
+
 export default function Landing() {
   const [repoUrl, setRepoUrl] = useState("");
   const [candidateName, setCandidateName] = useState("");
@@ -19,9 +21,23 @@ export default function Landing() {
   const [role, setRole] = useState("Full-stack developer");
   const [level, setLevel] = useState("Junior");
   const [jd, setJd] = useState("");
+  const [executionMode, setExecutionMode] = useState<Mode>("api");
+  const [recommendedMode, setRecommendedMode] = useState<Mode | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    fetch("/api/local/tools", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d: any) => {
+        if (d?.recommendedMode) {
+          setRecommendedMode(d.recommendedMode);
+          setExecutionMode(d.recommendedMode);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   async function start() {
     setError(null);
@@ -45,6 +61,7 @@ export default function Landing() {
           target_role: role,
           candidate_level: level,
           job_description: jd || undefined,
+          execution_mode: executionMode,
         }),
       });
       const data = await r.json();
@@ -129,6 +146,38 @@ export default function Landing() {
                   value={jd}
                   onChange={(e) => setJd(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-wide text-muted">Execution mode</label>
+                <div className="mt-1 grid grid-cols-4 gap-1 text-xs">
+                  {(["api", "cli", "hybrid", "mock"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setExecutionMode(m)}
+                      className={`rounded border px-2 py-1.5 ${
+                        executionMode === m
+                          ? "border-accent text-accent"
+                          : "border-border text-muted hover:text-ink"
+                      }`}
+                    >
+                      {m === "api" && "Cloud API"}
+                      {m === "cli" && "Local CLI"}
+                      {m === "hybrid" && "Hybrid"}
+                      {m === "mock" && "Mock"}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-1 text-[11px] text-muted">
+                  {recommendedMode && (
+                    <span>
+                      Recommended: <span className="text-accent">{recommendedMode}</span> ·{" "}
+                    </span>
+                  )}
+                  <a href="/local-setup" className="text-accent hover:underline">
+                    Local setup ↗
+                  </a>
+                </div>
               </div>
               {error && <div className="text-sm text-bad">{error}</div>}
               <Button size="lg" className="w-full" onClick={start} disabled={loading}>

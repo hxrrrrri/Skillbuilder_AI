@@ -3,6 +3,9 @@
 
 import { prisma } from "@/lib/db";
 import { isMockMode } from "@/lib/claude";
+import { runProof } from "@/lib/local-runner/proof-runner";
+import { selectProviderMatrix } from "@/lib/providers/provider-router";
+import type { ExecutionMode } from "@/lib/local-runner/types";
 import type { AgentName, Handoff, MissionState, ProfileOutput, SkillGraphOutput } from "./types";
 import { runOrchestrator } from "./orchestrator";
 import { runRepoScanner } from "./repo-scanner";
@@ -78,12 +81,15 @@ export async function runMission(opts: {
   runId: string;
   owner: string;
   repo: string;
+  repoUrl?: string;
   targetRole: string;
   candidateLevel: string;
   candidateName?: string;
   githubUsername?: string;
   jobDescription?: string;
+  executionMode?: ExecutionMode;
 }) {
+  const mode: ExecutionMode = opts.executionMode ?? "api";
   const state: MissionState = {
     mission_id: `sp_${opts.runId.slice(0, 8)}`,
     run_id: opts.runId,
@@ -99,12 +105,42 @@ export async function runMission(opts: {
     authenticity: null,
     tokens_in: 0,
     tokens_out: 0,
-    mock_mode: isMockMode(),
+    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
   };
+
+  // Select provider matrix early so Mission Control can display it.
+  let providerMatrix: any = null;
+  try {
+    providerMatrix = await selectProviderMatrix(mode);
+  } catch {
+    providerMatrix = null;
+  }
+
+  // Run local proof runner first when execution mode uses CLI/hybrid.
+  let proof: Awaited<ReturnType<typeof runProof>> | null = null;
+  if ((mode === "cli" || mode === "hybrid") && opts.repoUrl) {
+    try {
+      proof = await runProof({
+        runId: opts.runId,
+        repoUrl: opts.repoUrl,
+        repoOwner: opts.owner,
+        githubUsername: opts.githubUsername ?? null,
+      });
+    } catch (err) {
+      console.error("[proof-runner] failed", err);
+    }
+  }
 
   await prisma.analysisRun.update({
     where: { id: opts.runId },
-    data: { status: "running", statusMessage: state.mock_mode ? "Heuristic/Mock mode active." : null },
+    data: {
+      status: "running",
+      statusMessage: state.mock_mode ? "Heuristic/Mock mode active." : `Execution mode: ${mode}`,
+      executionMode: mode,
+      providerMatrix: providerMatrix ? JSON.stringify(providerMatrix) : null,
+      terminalEvidence: proof ? JSON.stringify(proof.evidence) : null,
+      ownershipStatus: proof ? JSON.stringify(proof.ownership) : null,
+    },
   });
 
   const events = await prisma.agentEvent.findMany({
