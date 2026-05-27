@@ -66,6 +66,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<ArchitectureOutput>({
     state,
+    agentName: "architecture",
     role: "worker",
     system: SYSTEM,
     user,

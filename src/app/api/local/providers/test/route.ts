@@ -27,7 +27,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_body", detail: err?.message }, { status: 400 });
   }
 
-  const reg = buildProviderRegistry();
+  const reg = await buildProviderRegistry();
   const p = reg[body.provider_id as ProviderId];
   if (!p) return NextResponse.json({ error: "unknown_provider" }, { status: 400 });
 

@@ -201,6 +201,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<ProfileOutput>({
     state,
+    agentName: "profile-gen",
     role: "profile",
     system: SYSTEM,
     user,

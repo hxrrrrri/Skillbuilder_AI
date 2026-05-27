@@ -29,6 +29,8 @@ export type LLMCallOptions = {
   user: string;
   maxTokens?: number;
   temperature?: number;
+  model?: string;
+  thinkingBudgetTokens?: number | null;
 };
 
 export type LLMResult = {
@@ -39,15 +41,19 @@ export type LLMResult = {
 };
 
 export async function llmCall(opts: LLMCallOptions): Promise<LLMResult> {
-  const model = DEFAULT_MODELS[opts.role];
+  const model = opts.model || DEFAULT_MODELS[opts.role];
   const c = getClient();
-  const resp = await c.messages.create({
+  const request: any = {
     model,
     max_tokens: opts.maxTokens ?? 2048,
     temperature: opts.temperature ?? 0.2,
     system: opts.system,
     messages: [{ role: "user", content: opts.user }],
-  });
+  };
+  if (opts.thinkingBudgetTokens !== null && opts.thinkingBudgetTokens !== undefined) {
+    request.thinking = { type: "enabled", budget_tokens: opts.thinkingBudgetTokens };
+  }
+  const resp = await c.messages.create(request);
   const text = resp.content
     .filter((b) => b.type === "text")
     .map((b: any) => b.text)

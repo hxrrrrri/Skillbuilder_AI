@@ -16,7 +16,7 @@ export const mockProvider: LLMProvider = {
       provider: "mock",
       inputTokens: 0,
       outputTokens: 0,
-      model: "mock:heuristic",
+      model: prompt.model ?? "mock:heuristic",
     };
   },
 };

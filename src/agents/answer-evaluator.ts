@@ -60,6 +60,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<AnswerEvaluation>({
     state,
+    agentName: "answer-evaluator",
     role: "validator",
     system: SYSTEM,
     user,

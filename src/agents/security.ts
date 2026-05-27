@@ -83,6 +83,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<SecurityOutput>({
     state,
+    agentName: "security",
     role: "worker",
     system: SYSTEM,
     user,

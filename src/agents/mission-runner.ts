@@ -4,7 +4,8 @@
 import { prisma } from "@/lib/db";
 import { isMockMode } from "@/lib/claude";
 import { runProof } from "@/lib/local-runner/proof-runner";
-import { selectProviderMatrix } from "@/lib/providers/provider-router";
+import { AgentSkippedError, selectProviderMatrix } from "@/lib/providers/provider-router";
+import { resolveAgentConfig } from "@/lib/providers/registry";
 import type { ExecutionMode } from "@/lib/local-runner/types";
 import type { AgentName, Handoff, MissionState, OwnershipStatus, ProfileOutput, SkillGraphOutput } from "./types";
 import { runOrchestrator } from "./orchestrator";
@@ -101,6 +102,18 @@ async function completeEvent(eventId: string, handoff: Handoff) {
   });
 }
 
+async function skipEvent(eventId: string, handoff: Handoff) {
+  await prisma.agentEvent.update({
+    where: { id: eventId },
+    data: {
+      status: "skipped",
+      completedAt: new Date(),
+      output: JSON.stringify(handoff),
+      notes: handoff.issues_found.join(" | ") || "disabled in admin",
+    },
+  });
+}
+
 async function failEvent(eventId: string, err: unknown) {
   await prisma.agentEvent.update({
     where: { id: eventId },
@@ -110,6 +123,22 @@ async function failEvent(eventId: string, err: unknown) {
       notes: err instanceof Error ? err.message : String(err),
     },
   });
+}
+
+function skippedHandoff(agent: AgentName, reason: string, runtime?: Handoff["runtime"]): Handoff {
+  return {
+    agent,
+    completed: [],
+    unresolved: [reason],
+    evidence: [{ reason }],
+    issues_found: [reason],
+    runtime,
+    output: {
+      skipped: true,
+      reason,
+      runtime,
+    },
+  };
 }
 
 export async function preCreateEvents(runId: string) {
@@ -155,6 +184,7 @@ export async function runMission(opts: {
     mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
     execution_mode: mode,
     provider_matrix: null,
+    provider_runtime: {},
     terminal_evidence: [],
     ownership_status: null,
   };
@@ -230,19 +260,95 @@ export async function runMission(opts: {
   async function step<T>(name: AgentName, fn: () => Promise<Handoff<T>>): Promise<Handoff<T>> {
     const ev = events.find((e) => e.agentName === name);
     const evId = ev?.id ?? (await recordEvent(opts.runId, name, PIPELINE.indexOf(name))).id;
+    const resolved = await resolveAgentConfig(name);
+    const plannedRuntime = state.provider_matrix?.agents?.[name];
+    if (!resolved.enabled) {
+      const runtime = plannedRuntime
+        ? { ...plannedRuntime, status: "skipped" as const, note: "disabled in admin" }
+        : {
+            provider: resolved.provider,
+            model: resolved.model,
+            reasoningBudget: resolved.reasoningBudget,
+            enabled: false,
+            fallbackProvider: resolved.fallbackProvider,
+            fallbackModel: resolved.fallbackModel,
+            fallbackStrategy: resolved.fallbackStrategy,
+            temperature: resolved.temperature,
+            maxTokens: resolved.maxTokens,
+            jsonMode: resolved.jsonMode,
+            timeoutMs: resolved.timeoutMs,
+            retryCount: resolved.retryCount,
+            source: resolved.source,
+            status: "skipped" as const,
+            note: "disabled in admin",
+          };
+      if (state.provider_matrix?.agents) state.provider_matrix.agents[name] = runtime;
+      state.provider_runtime = { ...(state.provider_runtime ?? {}), [name]: runtime };
+      const handoff = skippedHandoff(name, "disabled in admin", runtime) as Handoff<T>;
+      state.handoffs.push(handoff as Handoff);
+      await skipEvent(evId, handoff as Handoff);
+      await prisma.analysisRun.update({
+        where: { id: opts.runId },
+        data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+      });
+      return handoff;
+    }
     await prisma.agentEvent.update({
       where: { id: evId },
       data: { status: "running", startedAt: new Date() },
     });
     try {
       const handoff = await fn();
-      state.handoffs.push(handoff as Handoff);
-      await completeEvent(evId, handoff as Handoff);
-      return handoff;
+      const runtime = state.provider_runtime?.[name] ?? state.provider_matrix?.agents?.[name];
+      const enriched = runtime ? ({ ...handoff, runtime } as Handoff<T>) : handoff;
+      state.handoffs.push(enriched as Handoff);
+      await completeEvent(evId, enriched as Handoff);
+      await prisma.analysisRun.update({
+        where: { id: opts.runId },
+        data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+      });
+      return enriched;
     } catch (err) {
+      if (err instanceof AgentSkippedError) {
+        const runtime = err.runtime ?? state.provider_runtime?.[name] ?? state.provider_matrix?.agents?.[name];
+        if (runtime && state.provider_matrix?.agents) state.provider_matrix.agents[name] = runtime;
+        if (runtime) state.provider_runtime = { ...(state.provider_runtime ?? {}), [name]: runtime };
+        const handoff = skippedHandoff(name, err.message || "skipped", runtime) as Handoff<T>;
+        state.handoffs.push(handoff as Handoff);
+        await skipEvent(evId, handoff as Handoff);
+        await prisma.analysisRun.update({
+          where: { id: opts.runId },
+          data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+        });
+        return handoff;
+      }
       await failEvent(evId, err);
       throw err;
     }
+  }
+
+  async function skipDueToDependency<T>(name: AgentName, reason: string): Promise<Handoff<T>> {
+    const ev = events.find((e) => e.agentName === name);
+    const evId = ev?.id ?? (await recordEvent(opts.runId, name, PIPELINE.indexOf(name))).id;
+    const runtime = state.provider_matrix?.agents?.[name];
+    const skippedRuntime = runtime ? { ...runtime, status: "skipped" as const, note: reason } : undefined;
+    if (skippedRuntime && state.provider_matrix?.agents) state.provider_matrix.agents[name] = skippedRuntime;
+    if (skippedRuntime) state.provider_runtime = { ...(state.provider_runtime ?? {}), [name]: skippedRuntime };
+    const handoff = skippedHandoff(name, reason, skippedRuntime) as Handoff<T>;
+    state.handoffs.push(handoff as Handoff);
+    await skipEvent(evId, handoff as Handoff);
+    await prisma.analysisRun.update({
+      where: { id: opts.runId },
+      data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+    });
+    return handoff;
+  }
+
+  function contextStep<T>(name: AgentName, fn: () => Promise<Handoff<T>>): Promise<Handoff<T>> {
+    if (!state.context_pack) {
+      return skipDueToDependency(name, "repo context unavailable");
+    }
+    return step(name, fn);
   }
 
   let graph: SkillGraphOutput | null = null;
@@ -251,36 +357,50 @@ export async function runMission(opts: {
     await step("orchestrator", () => runOrchestrator(state, opts.jobDescription));
     await step("repo-scanner", () => runRepoScanner(state, opts.owner, opts.repo));
 
-    await step("architecture", () => runArchitecture(state));
-    await step("code-quality", () => runCodeQuality(state));
-    await step("testing", () => runTesting(state));
-    await step("security", () => runSecurity(state));
-    await step("git-evidence", () => runGitEvidence(state));
-    await step("documentation", () => runDocumentation(state));
-    await step("authenticity", () => runAuthenticity(state));
-    await step("interview-gen", () => runInterviewGen(state));
+    await contextStep("architecture", () => runArchitecture(state));
+    await contextStep("code-quality", () => runCodeQuality(state));
+    await contextStep("testing", () => runTesting(state));
+    await contextStep("security", () => runSecurity(state));
+    await contextStep("git-evidence", () => runGitEvidence(state));
+    await contextStep("documentation", () => runDocumentation(state));
+    await contextStep("authenticity", () => runAuthenticity(state));
+    await contextStep("interview-gen", () => runInterviewGen(state));
 
-    const validatorHandoff = await step("validator", () => runValidator(state));
+    const validatorHandoff = await contextStep("validator", () => runValidator(state));
+    const validatorOut = validatorHandoff.output as any;
 
     const graphHandoff = await step("skill-graph", async () => runSkillGraph(state));
-    graph = graphHandoff.output as SkillGraphOutput;
+    const maybeGraph = graphHandoff.output as any;
+    graph = Array.isArray(maybeGraph?.skill_graph)
+      ? (maybeGraph as SkillGraphOutput)
+      : {
+          overall_score: 0,
+          role_fit: `Not measured ${state.target_role}`,
+          top_strengths: [],
+          growth_areas: [],
+          skill_graph: [],
+          not_measured: [],
+        };
 
     const profileHandoff = await step("profile-gen", () => runProfileGen(state, graph!));
-    profile = profileHandoff.output as ProfileOutput;
+    const maybeProfile = profileHandoff.output as any;
+    profile = maybeProfile?.developer_summary ? (maybeProfile as ProfileOutput) : null;
 
     // Persist scores.
     await prisma.skillScore.deleteMany({ where: { runId: opts.runId } });
-    await prisma.skillScore.createMany({
-      data: graph.skill_graph.map((s) => ({
-        runId: opts.runId,
-        skillName: s.name,
-        score: s.score ?? -1, // -1 sentinel for not measured (UI shows "—")
-        confidence: s.confidence,
-        scoreSource: s.source,
-        evidence: JSON.stringify(s.evidence),
-        validatorNotes: s.validator_notes ?? null,
-      })),
-    });
+    if (graph.skill_graph.length) {
+      await prisma.skillScore.createMany({
+        data: graph.skill_graph.map((s) => ({
+          runId: opts.runId,
+          skillName: s.name,
+          score: s.score ?? -1, // -1 sentinel for not measured (UI shows "—")
+          confidence: s.confidence,
+          scoreSource: s.source,
+          evidence: JSON.stringify(s.evidence),
+          validatorNotes: s.validator_notes ?? null,
+        })),
+      });
+    }
 
     // Persist interview questions.
     const interviewHandoff = state.handoffs.find((h) => h.agent === "interview-gen");
@@ -306,8 +426,8 @@ export async function runMission(opts: {
       data: {
         status: "completed",
         completedAt: new Date(),
-        overallScore: graph.overall_score,
-        roleFit: graph.role_fit,
+        overallScore: graph.skill_graph.length ? graph.overall_score : null,
+        roleFit: graph.skill_graph.length ? graph.role_fit : null,
         verificationLevel: "repo_only",
         tokenEstimateRaw: state.context_pack?.tokens.rawEstimate ?? 0,
         tokenEstimateUsed: state.context_pack?.tokens.packEstimate ?? 0,
@@ -328,12 +448,22 @@ export async function runMission(opts: {
           tokens: state.context_pack?.tokens,
         }),
         repoIntelligence: state.context_pack?.intelligence ? JSON.stringify(state.context_pack.intelligence) : null,
-        validationCoverage: JSON.stringify(validatorHandoff.output.assertion_coverage),
-        validationSummary: JSON.stringify(validatorHandoff.output.assertion_coverage_summary),
+        validationCoverage: JSON.stringify(validatorOut?.assertion_coverage ?? []),
+        validationSummary: JSON.stringify(
+          validatorOut?.assertion_coverage_summary ?? {
+            total: 0,
+            passed: 0,
+            failed: 0,
+            partial: 0,
+            unknown: 0,
+            evidence_coverage_percentage: 0,
+          },
+        ),
         authenticitySignals: JSON.stringify(state.authenticity ?? null),
         improvementPlan: JSON.stringify(profile?.improvement_plan ?? null),
         employerVerifier: JSON.stringify(profile?.employer_verifier ?? null),
         profileSummary: JSON.stringify(profile ?? null),
+        providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
       },
     });
   } catch (err) {

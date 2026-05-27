@@ -50,7 +50,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
   const plan = safeJsonParse<any>(run.improvementPlan, null);
   const ai = safeJsonParse<any>(run.aiCollaboration, null);
   const ownership = safeJsonParse<any>(run.ownershipStatus, null);
-  const providerMatrix = safeJsonParse<Record<string, string>>(run.providerMatrix, {});
+  const providerMatrix = safeJsonParse<Record<string, any>>(run.providerMatrix, {});
   const terminalEvidence = safeJsonParse<any[]>(run.terminalEvidence, []);
   const mode = run.executionMode ?? "api";
   const terminalSummary = (() => {
@@ -172,10 +172,12 @@ export default async function PublicProfile({ params }: { params: { slug: string
                 <div>
                   <div className="text-xs uppercase text-muted">Provider matrix</div>
                   <div className="mt-1 grid gap-2 md:grid-cols-5">
-                    {Object.entries(providerMatrix).map(([role, prov]) => (
+                    {Object.entries(providerMatrix)
+                      .filter(([role]) => role !== "agents")
+                      .map(([role, prov]) => (
                       <div key={role} className="rounded border border-border p-2 text-xs">
                         <div className="text-muted">{role}</div>
-                        <div className="mt-1 font-mono">{prov}</div>
+                        <div className="mt-1 font-mono">{String(prov)}</div>
                       </div>
                     ))}
                   </div>

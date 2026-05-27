@@ -141,6 +141,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<ValidatorOutput>({
     state,
+    agentName: "validator",
     role: "validator",
     system: SYSTEM,
     user,

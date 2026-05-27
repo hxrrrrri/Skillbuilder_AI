@@ -91,6 +91,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<CodeQualityOutput>({
     state,
+    agentName: "code-quality",
     role: "worker",
     system: SYSTEM,
     user,

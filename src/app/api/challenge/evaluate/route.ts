@@ -143,6 +143,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<AICollabEvaluation>({
     state,
+    agentName: "ai-collaboration-evaluator",
     role: "validator",
     system: SYSTEM,
     user,

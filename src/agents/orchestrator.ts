@@ -116,6 +116,7 @@ Produce the validation contract JSON now.`;
 
   const res = await runAgentJson<ValidationContract>({
     state,
+    agentName: "orchestrator",
     role: "orchestrator",
     system: SYSTEM,
     user,

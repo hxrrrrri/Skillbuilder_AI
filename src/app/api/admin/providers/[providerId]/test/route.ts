@@ -15,7 +15,7 @@ export async function POST(req: Request, { params }: { params: { providerId: str
   const existing = await getProviderConfig(params.providerId);
   if (!existing) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const reg = buildProviderRegistry();
+  const reg = await buildProviderRegistry();
   const provider = reg[params.providerId as ProviderId];
   if (!provider) {
     await recordProviderTest(params.providerId, {

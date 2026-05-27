@@ -31,8 +31,9 @@ export function TraceEventList({ events }: { events: Event[] }) {
               "rounded-md border bg-panel2/40 transition",
               e.status === "running" && "border-warn/40",
               e.status === "completed" && "border-accent/30",
+              e.status === "skipped" && "border-warn/30",
               e.status === "failed" && "border-bad/40",
-              (e.status === "pending" || !["running", "completed", "failed"].includes(e.status)) && "border-border",
+              (e.status === "pending" || !["running", "completed", "failed", "skipped"].includes(e.status)) && "border-border",
             )}
           >
             <button

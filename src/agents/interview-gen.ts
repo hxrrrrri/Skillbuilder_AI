@@ -105,6 +105,7 @@ Generate the JSON now.`;
 
   const res = await runAgentJson<InterviewGenOutput>({
     state,
+    agentName: "interview-gen",
     role: "interview",
     system: SYSTEM,
     user,

@@ -233,13 +233,30 @@ export default function MissionPage({ params }: { params: { id: string } }) {
               <div className="mt-4">
                 <div className="text-xs uppercase tracking-wide text-muted">Provider matrix</div>
                 <div className="mt-1 grid gap-2 md:grid-cols-5">
-                  {Object.entries(run.provider_matrix).map(([role, prov]) => (
+                  {Object.entries(run.provider_matrix)
+                    .filter(([role]) => role !== "agents")
+                    .map(([role, prov]) => (
                     <div key={role} className="rounded border border-border bg-panel2 p-2 text-xs">
                       <div className="text-muted">{role}</div>
                       <div className="font-mono text-ink">{String(prov)}</div>
                     </div>
                   ))}
                 </div>
+                {run.provider_matrix.agents && (
+                  <details className="mt-3 text-xs">
+                    <summary className="cursor-pointer text-muted">per-agent runtime config</summary>
+                    <div className="mt-2 grid gap-2 md:grid-cols-3">
+                      {Object.entries(run.provider_matrix.agents).map(([agent, cfg]: any) => (
+                        <div key={agent} className="rounded border border-border bg-panel2/70 p-2">
+                          <div className="font-mono text-muted">{agent}</div>
+                          <div className="mt-1 font-mono text-ink">{cfg.actualProvider ?? cfg.provider}</div>
+                          <div className="text-muted">{cfg.actualModel ?? cfg.model} · reasoning {cfg.reasoningBudget}</div>
+                          {cfg.status && <Badge tone={cfg.status === "skipped" ? "warn" : "default"}>{cfg.status}</Badge>}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
               </div>
             )}
             <div className="mt-4 grid gap-2 md:grid-cols-4">

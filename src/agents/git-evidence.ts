@@ -92,6 +92,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<GitEvidenceOutput>({
     state,
+    agentName: "git-evidence",
     role: "worker",
     system: SYSTEM,
     user,

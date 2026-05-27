@@ -90,6 +90,7 @@ Return JSON now.`;
 
   const res = await runAgentJson<AuthenticityOutput>({
     state,
+    agentName: "authenticity",
     role: "worker",
     system: SYSTEM,
     user,

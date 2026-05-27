@@ -52,7 +52,7 @@ export function makeCliProvider(opts: {
         provider: opts.id,
         inputTokens: Math.ceil(combined.length / 4),
         outputTokens: Math.ceil(raw.length / 4),
-        model: `${opts.id}:${tpl.command}`,
+        model: prompt.model ? `${opts.id}:${prompt.model}` : `${opts.id}:${tpl.command}`,
       };
     },
   };

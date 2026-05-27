@@ -79,6 +79,7 @@ Return the JSON now.`;
 
   const res = await runAgentJson<DocumentationOutput>({
     state,
+    agentName: "documentation",
     role: "worker",
     system: SYSTEM,
     user,

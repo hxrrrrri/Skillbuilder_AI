@@ -95,14 +95,25 @@ export function buildMarkdownReport(run: RunBundle): string {
   }
   lines.push("");
 
-  const providerMatrix = safe<Record<string, string>>(run.providerMatrix, {});
+  const providerMatrix = safe<Record<string, any>>(run.providerMatrix, {});
   if (Object.keys(providerMatrix).length) {
     lines.push("## Provider Matrix");
     lines.push("");
     lines.push("| Role | Provider |");
     lines.push("|---|---|");
     for (const [role, prov] of Object.entries(providerMatrix)) {
-      lines.push(`| ${role} | \`${prov}\` |`);
+      if (role === "agents") continue;
+      lines.push(`| ${role} | \`${String(prov)}\` |`);
+    }
+    if (providerMatrix.agents) {
+      lines.push("");
+      lines.push("| Agent | Provider | Model | Reasoning | Status |");
+      lines.push("|---|---|---|---|---|");
+      for (const [agent, cfg] of Object.entries(providerMatrix.agents as Record<string, any>)) {
+        lines.push(
+          `| ${agent} | \`${cfg.actualProvider ?? cfg.provider}\` | \`${cfg.actualModel ?? cfg.model}\` | ${cfg.reasoningBudget ?? "none"} | ${cfg.status ?? "planned"} |`,
+        );
+      }
     }
     lines.push("");
   }

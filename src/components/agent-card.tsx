@@ -23,7 +23,7 @@ export function AgentCard({
   notes,
 }: {
   agent: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "skipped";
   notes?: string | null;
 }) {
   const meta = LABELS[agent] ?? { title: agent, subtitle: "" };
@@ -33,6 +33,7 @@ export function AgentCard({
         "rounded-lg border border-border bg-panel/70 p-4 transition",
         status === "running" && "ring-1 ring-warn/40",
         status === "completed" && "border-accent/30",
+        status === "skipped" && "border-warn/30",
         status === "failed" && "border-bad/40"
       )}
     >

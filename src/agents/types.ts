@@ -2,7 +2,7 @@
 // Structured handoff is how agents pass state — never raw blobs of memory.
 
 import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
-import type { ProviderMatrix } from "@/lib/providers/types";
+import type { ProviderMatrix, ProviderMatrixAgentEntry } from "@/lib/providers/types";
 import type { RepoIntelligenceIndex } from "@/lib/repo-intelligence";
 
 export type AgentName =
@@ -100,6 +100,7 @@ export type Handoff<T = unknown> = {
   issues_found: string[];
   next_recommended?: AgentName;
   assertion_results?: ValidationAssertionResult[];
+  runtime?: ProviderMatrixAgentEntry;
   output: T;
 };
 
@@ -360,6 +361,7 @@ export type MissionState = {
   mock_mode: boolean;
   execution_mode: ExecutionMode;
   provider_matrix?: ProviderMatrix | null;
+  provider_runtime?: Record<string, ProviderMatrixAgentEntry>;
   terminal_evidence?: TerminalEvidence[];
   ownership_status?: OwnershipStatus | null;
 };

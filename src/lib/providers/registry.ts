@@ -11,8 +11,8 @@
  */
 
 import { prisma } from "@/lib/db";
-import type { ProviderId } from "./types";
-import { REASONING_BUDGETS, type ReasoningBudget } from "./reasoning";
+import type { FallbackStrategy, ProviderId, ProviderMatrixAgentEntry } from "./types";
+import { REASONING_BUDGETS, isReasoningBudget, type ReasoningBudget } from "./reasoning";
 
 export const PROVIDER_DEFAULTS: Array<{
   providerId: ProviderId;
@@ -136,6 +136,13 @@ type AgentDefault = {
   costTier: "low" | "medium" | "high";
   qualityTier: "low" | "medium" | "high";
   enabled: boolean;
+};
+
+export type ResolvedAgentConfig = ProviderMatrixAgentEntry & {
+  agentName: string;
+  source: "db" | "default";
+  costTier: "low" | "medium" | "high";
+  qualityTier: "low" | "medium" | "high";
 };
 
 export const AGENT_DEFAULTS: AgentDefault[] = [
@@ -294,6 +301,102 @@ export async function listAgentConfigs() {
 
 export async function getAgentConfig(agentName: string) {
   return prisma.agentConfig.findUnique({ where: { agentName } });
+}
+
+const PROVIDER_IDS = PROVIDER_DEFAULTS.map((p) => p.providerId);
+
+function isProviderId(value: unknown): value is ProviderId {
+  return typeof value === "string" && (PROVIDER_IDS as readonly string[]).includes(value);
+}
+
+function defaultForAgent(agentName: string): AgentDefault {
+  const known = AGENT_DEFAULTS.find((a) => a.agentName === agentName);
+  if (known) return known;
+  return {
+    agentName: agentName as AgentName,
+    providerId: "mock",
+    model: "mock-1",
+    reasoningBudget: "none",
+    temperature: 0,
+    maxTokens: 100,
+    jsonMode: true,
+    fallbackProvider: null,
+    fallbackStrategy: "mock",
+    costTier: "low",
+    qualityTier: "low",
+    enabled: true,
+  };
+}
+
+function coerceTier(value: unknown): "low" | "medium" | "high" {
+  return value === "low" || value === "medium" || value === "high" ? value : "medium";
+}
+
+function normalizeAgentConfig(
+  row: {
+    agentName: string;
+    providerId: string;
+    model: string;
+    reasoningBudget: string;
+    temperature: number;
+    maxTokens: number;
+    jsonMode: boolean;
+    fallbackProvider: string | null;
+    fallbackModel?: string | null;
+    fallbackStrategy: string;
+    timeoutMs?: number;
+    retryCount?: number;
+    enabled: boolean;
+    costTier?: string;
+    qualityTier?: string;
+  },
+  source: "db" | "default",
+): ResolvedAgentConfig {
+  const fallback = defaultForAgent(row.agentName);
+  const providerId = isProviderId(row.providerId) ? row.providerId : fallback.providerId;
+  const fallbackProvider =
+    row.fallbackProvider && isProviderId(row.fallbackProvider) ? row.fallbackProvider : null;
+  const fallbackStrategy: FallbackStrategy = isFallbackStrategy(row.fallbackStrategy)
+    ? row.fallbackStrategy
+    : fallback.fallbackStrategy;
+  return {
+    agentName: row.agentName,
+    provider: providerId,
+    model: row.model || fallback.model,
+    reasoningBudget: isReasoningBudget(row.reasoningBudget) ? row.reasoningBudget : fallback.reasoningBudget,
+    enabled: row.enabled,
+    fallbackProvider,
+    fallbackModel: row.fallbackModel ?? null,
+    fallbackStrategy,
+    temperature: Number.isFinite(row.temperature) ? row.temperature : fallback.temperature,
+    maxTokens: Number.isFinite(row.maxTokens) ? row.maxTokens : fallback.maxTokens,
+    jsonMode: row.jsonMode,
+    timeoutMs: Number.isFinite(row.timeoutMs) ? row.timeoutMs! : 60_000,
+    retryCount: Number.isFinite(row.retryCount) ? row.retryCount! : 1,
+    costTier: coerceTier(row.costTier ?? fallback.costTier),
+    qualityTier: coerceTier(row.qualityTier ?? fallback.qualityTier),
+    source,
+    status: "planned",
+  };
+}
+
+export async function resolveAgentConfig(agentName: string): Promise<ResolvedAgentConfig> {
+  try {
+    const existing = await getAgentConfig(agentName);
+    if (existing) return normalizeAgentConfig(existing, "db");
+  } catch (err) {
+    console.error("[provider-registry] failed to resolve agent config", agentName, err);
+  }
+  const fallback = defaultForAgent(agentName);
+  return normalizeAgentConfig(
+    {
+      ...fallback,
+      fallbackModel: null,
+      timeoutMs: 60_000,
+      retryCount: 1,
+    },
+    "default",
+  );
 }
 
 export async function updateAgentConfig(

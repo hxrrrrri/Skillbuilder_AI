@@ -54,6 +54,7 @@ textarea {
 .dot-pending { background: #34312d; }
 .dot-running { background: #e8a55a; box-shadow: 0 0 0 4px rgba(232, 165, 90, 0.18); animation: pulse 1.5s infinite; }
 .dot-completed { background: #7fcf93; }
+.dot-skipped { background: #9b8d7a; }
 .dot-failed { background: #e15f5f; }
 
 @keyframes pulse {
