@@ -24,6 +24,18 @@ const ALLOWED_COMMANDS = new Set([
   "gh-copilot",
 ]);
 
+// Approved npx packages — anything else hits approval gate.
+const NPX_ALLOWED_PACKAGES = new Set([
+  "tsc",
+  "eslint",
+  "prettier",
+  "vitest",
+  "jest",
+  "playwright",
+  "next",
+  "prisma",
+]);
+
 // Hard-blocked patterns. Never approved.
 const DESTRUCTIVE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
   { re: /\brm\s+-rf\b/i, reason: "rm -rf is destructive" },
@@ -40,10 +52,14 @@ const DESTRUCTIVE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
   { re: /Invoke-Expression/i, reason: "Invoke-Expression executes arbitrary code" },
   { re: /Set-ExecutionPolicy/i, reason: "modifies PowerShell execution policy" },
   { re: /\bcat\b\s+.*\.env\b/i, reason: "reading .env may expose secrets" },
+  { re: /\btype\b\s+.*\.env\b/i, reason: "reading .env may expose secrets" },
+  { re: /\bmore\b\s+.*\.env\b/i, reason: "reading .env may expose secrets" },
   { re: /Get-Content\b\s+.*\.env\b/i, reason: "reading .env may expose secrets" },
   { re: /\benv\b\s*$/i, reason: "dumping env may expose secrets" },
   { re: /printenv\b/i, reason: "printenv may expose secrets" },
   { re: /Get-ChildItem\s+env:/i, reason: "dumping env may expose secrets" },
+  { re: /\bprocess\.env\b/i, reason: "node code reading process.env may expose secrets" },
+  { re: /\bos\.environ\b/i, reason: "python code reading os.environ may expose secrets" },
   { re: /\.ssh\b/i, reason: "ssh dir access" },
 ];
 
@@ -63,6 +79,44 @@ export type PolicyInput = {
   approved?: boolean;
 };
 
+function baseName(command: string): string {
+  return command
+    .split(/[\\/]/)
+    .pop()!
+    .replace(/\.(exe|cmd|bat|ps1)$/i, "")
+    .toLowerCase();
+}
+
+// Interpreter escape hatches: node -e, python -c, etc. are hard-blocked.
+function checkInterpreterEscape(base: string, args: string[]): { hit: boolean; reason: string } {
+  const isNode = base === "node";
+  const isPython = base === "python" || base === "python3" || base === "py";
+  if (!isNode && !isPython) return { hit: false, reason: "" };
+
+  for (const a of args) {
+    if (isNode && (a === "-e" || a === "--eval" || a === "-p" || a === "--print")) {
+      return { hit: true, reason: "node -e/-p evaluates arbitrary code" };
+    }
+    if (isPython && a === "-c") {
+      return { hit: true, reason: "python -c evaluates arbitrary code" };
+    }
+  }
+  return { hit: false, reason: "" };
+}
+
+// npx <pkg> — only known-safe packages allowed without approval.
+function checkNpxPackage(base: string, args: string[]): { hit: boolean; reason: string } {
+  if (base !== "npx") return { hit: false, reason: "" };
+  // skip flags to find the first positional package
+  const pkg = args.find((a) => !a.startsWith("-"));
+  if (!pkg) return { hit: true, reason: "npx requires explicit package" };
+  const root = pkg.replace(/^@[^/]+\//, "").split("@")[0];
+  if (!NPX_ALLOWED_PACKAGES.has(root) && !NPX_ALLOWED_PACKAGES.has(pkg)) {
+    return { hit: true, reason: `npx ${pkg} not on allowed package list` };
+  }
+  return { hit: false, reason: "" };
+}
+
 export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   const command = (input.command || "").trim();
   const args = input.args ?? [];
@@ -80,7 +134,7 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
   }
 
   // 2. Allowlist check. Unknown commands rejected — no arbitrary shell execution.
-  const base = command.split(/[\\/]/).pop()!.replace(/\.(exe|cmd|bat|ps1)$/i, "").toLowerCase();
+  const base = baseName(command);
   if (!ALLOWED_COMMANDS.has(base)) {
     return {
       allowed: false,
@@ -89,7 +143,23 @@ export function evaluatePolicy(input: PolicyInput): PolicyDecision {
     };
   }
 
-  // 3. Approval-required patterns — gated by `approved` flag, but only for allowlisted base commands.
+  // 3. Interpreter escape hatches are blocked. These can read env, files, or network
+  // even when the visible command looks harmless.
+  const esc = checkInterpreterEscape(base, args);
+  if (esc.hit) {
+    return { allowed: false, reason: esc.reason, requiresApproval: false };
+  }
+
+  // 4. npx package allowlist.
+  const nx = checkNpxPackage(base, args);
+  if (nx.hit) {
+    if (input.approved) {
+      return { allowed: true, reason: `approved: ${nx.reason}`, requiresApproval: false };
+    }
+    return { allowed: false, reason: nx.reason, requiresApproval: true };
+  }
+
+  // 5. Approval-required patterns — gated by `approved` flag.
   for (const p of APPROVAL_PATTERNS) {
     if (p.re.test(fullLine)) {
       if (input.approved) {

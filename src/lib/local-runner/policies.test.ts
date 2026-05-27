@@ -56,6 +56,18 @@ describe("evaluatePolicy", () => {
     expect(evaluatePolicy({ command: "node", args: ["-e", "printenv"] }).allowed).toBe(false);
   });
 
+  it("blocks node -e even if approved", () => {
+    const d = evaluatePolicy({ command: "node", args: ["-e", "console.log(process.env)"], approved: true });
+    expect(d.allowed).toBe(false);
+    expect(d.requiresApproval).toBe(false);
+  });
+
+  it("blocks python -c even if approved", () => {
+    const d = evaluatePolicy({ command: "python", args: ["-c", "import os; print(os.environ)"], approved: true });
+    expect(d.allowed).toBe(false);
+    expect(d.requiresApproval).toBe(false);
+  });
+
   it("blocks reading .env file", () => {
     expect(evaluatePolicy({ command: "node", args: ["-e", "cat .env"] }).allowed).toBe(false);
   });
@@ -72,5 +84,12 @@ describe("evaluatePolicy", () => {
   it("allows git status / log / shortlog", () => {
     expect(evaluatePolicy({ command: "git", args: ["log", "--oneline"] }).allowed).toBe(true);
     expect(evaluatePolicy({ command: "git", args: ["shortlog", "-sn"] }).allowed).toBe(true);
+  });
+
+  it("requires approval for arbitrary npx packages", () => {
+    const d = evaluatePolicy({ command: "npx", args: ["some-random-package"] });
+    expect(d.allowed).toBe(false);
+    expect(d.requiresApproval).toBe(true);
+    expect(evaluatePolicy({ command: "npx", args: ["some-random-package"], approved: true }).allowed).toBe(true);
   });
 });

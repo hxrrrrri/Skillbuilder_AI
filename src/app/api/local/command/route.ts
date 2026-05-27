@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { evaluatePolicy } from "@/lib/local-runner/policies";
 import { runCommand, summarize } from "@/lib/local-runner/terminal";
+import { resolveSafeRunCwd } from "@/lib/local-runner/workspace";
 import type { TerminalEvidence } from "@/lib/local-runner/types";
 
 export const runtime = "nodejs";
@@ -16,10 +17,18 @@ const Body = z.object({
   requiresApproval: z.boolean().optional(),
   approved: z.boolean().optional(),
   saveAsEvidence: z.boolean().optional(),
-  usedFor: z.enum(["testing", "build", "git", "security", "ownership", "agent", "typecheck"]).optional(),
+  usedFor: z.enum(["install", "testing", "build", "git", "security", "ownership", "agent", "typecheck", "lint"]).optional(),
 });
 
 export async function POST(req: Request) {
+  // 1. Production guard. Hosted profiles must never execute local commands.
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_LOCAL_COMMANDS !== "1") {
+    return NextResponse.json(
+      { error: "disabled_in_production", reason: "local command execution disabled in production" },
+      { status: 403 },
+    );
+  }
+
   let body: z.infer<typeof Body>;
   try {
     body = Body.parse(await req.json());
@@ -27,6 +36,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_body", detail: err?.message }, { status: 400 });
   }
 
+  // 2. cwd jail. Only paths inside .skillproof/runs/ are allowed.
+  const safeCwd = resolveSafeRunCwd(body.cwd, body.mission_id);
+  if (!safeCwd.ok) {
+    return NextResponse.json({ error: "cwd_blocked", reason: safeCwd.reason }, { status: 403 });
+  }
+
+  // 3. Policy check on command + args.
   const policy = evaluatePolicy({ command: body.command, args: body.args, approved: !!body.approved });
   if (!policy.allowed && policy.requiresApproval) {
     return NextResponse.json({ error: "approval_required", reason: policy.reason }, { status: 403 });
@@ -38,7 +54,7 @@ export async function POST(req: Request) {
   const run = await runCommand({
     command: body.command,
     args: body.args,
-    cwd: body.cwd,
+    cwd: safeCwd.cwd,
     approved: !!body.approved,
     timeoutMs: 120_000,
   });

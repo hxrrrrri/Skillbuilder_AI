@@ -53,7 +53,8 @@ export type TerminalEvidence = {
   stdoutSummary: string;
   stderrSummary: string;
   durationMs: number;
-  usedFor: "testing" | "build" | "git" | "security" | "ownership" | "agent" | "typecheck";
+  usedFor: "install" | "testing" | "build" | "git" | "security" | "ownership" | "agent" | "typecheck" | "lint";
+  statusLabel?: "install_pending_approval" | "install_completed" | "skipped" | "passed" | "failed";
 };
 
 export type PolicyDecision = {
@@ -61,4 +62,15 @@ export type PolicyDecision = {
   reason: string;
   requiresApproval: boolean;
   redactedCommand?: string;
+};
+
+export type LocalProofPolicy = {
+  allowInstall: boolean;
+  installRequiresApproval: boolean;
+  installApproved: boolean;
+  maxInstallMs: number;
+  maxCommandMs: number;
+  networkAllowed: boolean;
+  packageManagersAllowed: Array<"npm" | "pnpm" | "yarn" | "bun">;
+  workspaceRoot: string;
 };

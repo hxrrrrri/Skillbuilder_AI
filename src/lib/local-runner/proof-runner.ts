@@ -1,11 +1,12 @@
 // Local Proof Runner — clones a repo into .skillproof/runs/<id> and runs
-// safe checks (git log, package-manager test/build/typecheck, pytest, security greps).
-// Never auto-installs dependencies. Never deletes workspaces destructively.
+// safe checks (git log, package-manager install/test/build/typecheck/lint,
+// pytest, security greps). Installs are policy-gated and never silent.
 
 import fs from "node:fs";
 import path from "node:path";
 import { runCommand, summarize } from "./terminal";
-import type { TerminalEvidence } from "./types";
+import { runsRoot } from "./workspace";
+import type { LocalProofPolicy, TerminalEvidence } from "./types";
 
 export type ProofResult = {
   workspace: string;
@@ -17,9 +18,11 @@ export type ProofResult = {
     hasNode: boolean;
     hasPython: boolean;
     hasNodeModules: boolean;
+    installStatus: "not_needed" | "disabled" | "pending_approval" | "completed" | "failed" | "skipped";
     hasTests: boolean;
     hasBuild: boolean;
     hasTypecheck: boolean;
+    hasLint: boolean;
     framework: string | null;
   };
   ownership: {
@@ -30,16 +33,27 @@ export type ProofResult = {
   };
 };
 
-const SKIPROOF_HOME = ".skillproof";
 const CLONE_TIMEOUT_MS = 90_000;
 const GIT_INFO_TIMEOUT_MS = 15_000;
-const TEST_TIMEOUT_MS = 180_000;
-const BUILD_TIMEOUT_MS = 240_000;
-const TYPECHECK_TIMEOUT_MS = 120_000;
+
+export function defaultLocalProofPolicy(opts?: Partial<LocalProofPolicy>): LocalProofPolicy {
+  return {
+    allowInstall: false,
+    installRequiresApproval: true,
+    installApproved: false,
+    maxInstallMs: 240_000,
+    maxCommandMs: 180_000,
+    networkAllowed: false,
+    packageManagersAllowed: ["npm", "pnpm", "yarn", "bun"],
+    workspaceRoot: runsRoot(),
+    ...opts,
+  };
+}
 
 function evidenceFrom(
   run: Awaited<ReturnType<typeof runCommand>>,
   usedFor: TerminalEvidence["usedFor"],
+  statusLabel?: TerminalEvidence["statusLabel"],
 ): TerminalEvidence {
   return {
     command: [run.command, ...run.args].join(" "),
@@ -49,12 +63,13 @@ function evidenceFrom(
     stderrSummary: summarize(run.stderr, 800),
     durationMs: run.durationMs,
     usedFor,
+    statusLabel: statusLabel ?? (run.exitCode === 0 ? "passed" : run.exitCode === null ? undefined : "failed"),
   };
 }
 
 function detectPackageManager(workspace: string): "npm" | "pnpm" | "yarn" | "bun" | null {
   if (fs.existsSync(path.join(workspace, "pnpm-lock.yaml"))) return "pnpm";
-  if (fs.existsSync(path.join(workspace, "bun.lockb"))) return "bun";
+  if (fs.existsSync(path.join(workspace, "bun.lockb")) || fs.existsSync(path.join(workspace, "bun.lock"))) return "bun";
   if (fs.existsSync(path.join(workspace, "yarn.lock"))) return "yarn";
   if (fs.existsSync(path.join(workspace, "package-lock.json"))) return "npm";
   if (fs.existsSync(path.join(workspace, "package.json"))) return "npm";
@@ -81,10 +96,6 @@ function detectFramework(pkg: any | null): string | null {
   return null;
 }
 
-function workspaceFor(runId: string): string {
-  return path.join(process.cwd(), SKIPROOF_HOME, "runs", runId);
-}
-
 function pmRun(pm: "npm" | "pnpm" | "yarn" | "bun" | null, script: string): { command: string; args: string[] } | null {
   switch (pm) {
     case "pnpm":
@@ -98,6 +109,42 @@ function pmRun(pm: "npm" | "pnpm" | "yarn" | "bun" | null, script: string): { co
     default:
       return null;
   }
+}
+
+function pmInstall(pm: "npm" | "pnpm" | "yarn" | "bun" | null, workspace: string): { command: string; args: string[] } | null {
+  switch (pm) {
+    case "npm":
+      return fs.existsSync(path.join(workspace, "package-lock.json"))
+        ? { command: "npm", args: ["ci"] }
+        : { command: "npm", args: ["install"] };
+    case "pnpm":
+      return { command: "pnpm", args: ["install", "--frozen-lockfile"] };
+    case "yarn":
+      return { command: "yarn", args: ["install", "--frozen-lockfile"] };
+    case "bun":
+      return { command: "bun", args: ["install", "--frozen-lockfile"] };
+    default:
+      return null;
+  }
+}
+
+function skippedEvidence(args: {
+  command: string;
+  cwd: string;
+  usedFor: TerminalEvidence["usedFor"];
+  reason: string;
+  statusLabel?: TerminalEvidence["statusLabel"];
+}): TerminalEvidence {
+  return {
+    command: args.command,
+    cwd: args.cwd,
+    exitCode: null,
+    stdoutSummary: args.reason,
+    stderrSummary: "",
+    durationMs: 0,
+    usedFor: args.usedFor,
+    statusLabel: args.statusLabel ?? "skipped",
+  };
 }
 
 // Quick grep for obvious security risks (uses `git grep` so .gitignore is respected).
@@ -135,10 +182,13 @@ export async function runProof(opts: {
   repoUrl: string;
   githubUsername?: string | null;
   repoOwner: string;
+  ownershipToken?: string | null;
+  policy?: Partial<LocalProofPolicy>;
   timeoutMs?: number;
 }): Promise<ProofResult> {
   const evidence: TerminalEvidence[] = [];
-  const workspace = workspaceFor(opts.runId);
+  const policy = defaultLocalProofPolicy(opts.policy);
+  const workspace = path.join(policy.workspaceRoot, opts.runId);
   fs.mkdirSync(path.dirname(workspace), { recursive: true });
 
   let cloned = false;
@@ -178,9 +228,11 @@ export async function runProof(opts: {
         hasNode: false,
         hasPython: false,
         hasNodeModules: false,
+        installStatus: "skipped",
         hasTests: false,
         hasBuild: false,
         hasTypecheck: false,
+        hasLint: false,
         framework: null,
       },
       ownership: { owner_match: false, repo_token_verified: false, self_declared: !!opts.githubUsername, gh_user: null },
@@ -208,7 +260,7 @@ export async function runProof(opts: {
   const pkgPath = path.join(workspace, "package.json");
   const pkg = readJsonSafe(pkgPath);
   const hasNode = !!pkg;
-  const hasNodeModules = hasNode && fs.existsSync(path.join(workspace, "node_modules"));
+  let hasNodeModules = hasNode && fs.existsSync(path.join(workspace, "node_modules"));
   const hasPython =
     fs.existsSync(path.join(workspace, "pyproject.toml")) ||
     fs.existsSync(path.join(workspace, "requirements.txt"));
@@ -217,19 +269,68 @@ export async function runProof(opts: {
   const hasTests = !!scripts.test || fs.existsSync(path.join(workspace, "vitest.config.ts")) || fs.existsSync(path.join(workspace, "jest.config.js"));
   const hasBuild = !!scripts.build;
   const hasTypecheck = !!scripts.typecheck || !!scripts["type-check"] || fs.existsSync(path.join(workspace, "tsconfig.json"));
+  const hasLint = !!scripts.lint;
   const framework = detectFramework(pkg);
+  let installStatus: ProofResult["detected"]["installStatus"] = hasNodeModules ? "not_needed" : "skipped";
 
-  // Refuse to run JS scripts without node_modules — no auto-install.
+  // JS dependency install is policy-gated. Missing deps are never treated as proof.
   if (hasNode && !hasNodeModules) {
-    evidence.push({
-      command: "# skipped node scripts",
-      cwd: workspace,
-      exitCode: null,
-      stdoutSummary: "node_modules missing — skipping test/build/typecheck. Run `npm install` (or pnpm/yarn/bun equivalent) in the workspace and re-run the mission.",
-      stderrSummary: "",
-      durationMs: 0,
-      usedFor: "testing",
-    });
+    if (!policy.allowInstall) {
+      installStatus = "disabled";
+      evidence.push(skippedEvidence({
+        command: "# install disabled",
+        cwd: workspace,
+        usedFor: "install",
+        reason: "node_modules missing and install is disabled by local proof policy.",
+      }));
+    } else if (!policy.networkAllowed) {
+      installStatus = "skipped";
+      evidence.push(skippedEvidence({
+        command: "# install skipped",
+        cwd: workspace,
+        usedFor: "install",
+        reason: "node_modules missing but network access is disabled by local proof policy.",
+      }));
+    } else if (policy.installRequiresApproval && !policy.installApproved) {
+      installStatus = "pending_approval";
+      evidence.push(skippedEvidence({
+        command: "# install pending approval",
+        cwd: workspace,
+        usedFor: "install",
+        reason: "node_modules missing — dependency install requires candidate approval before tests/build/typecheck can run.",
+        statusLabel: "install_pending_approval",
+      }));
+    } else if (!packageManager || !policy.packageManagersAllowed.includes(packageManager)) {
+      installStatus = "skipped";
+      evidence.push(skippedEvidence({
+        command: "# install skipped",
+        cwd: workspace,
+        usedFor: "install",
+        reason: `Package manager ${packageManager ?? "unknown"} is not allowed by local proof policy.`,
+      }));
+    } else {
+      const install = pmInstall(packageManager, workspace);
+      if (install) {
+        const r = await runCommand({
+          ...install,
+          cwd: workspace,
+          timeoutMs: policy.maxInstallMs,
+          approved: true,
+          env: { CI: "1" },
+        });
+        installStatus = r.exitCode === 0 ? "completed" : "failed";
+        evidence.push(evidenceFrom(r, "install", r.exitCode === 0 ? "install_completed" : "failed"));
+        hasNodeModules = fs.existsSync(path.join(workspace, "node_modules"));
+      }
+    }
+    if (!hasNodeModules) {
+      evidence.push(skippedEvidence({
+        command: "# skipped node scripts",
+        cwd: workspace,
+        usedFor: "testing",
+        reason: "Dependencies missing — test/build/typecheck/lint were skipped and must not be treated as terminal proof.",
+      }));
+    }
   }
 
   // testing
@@ -240,19 +341,26 @@ export async function runProof(opts: {
       const t = await runCommand({
         ...cmd,
         cwd: workspace,
-        timeoutMs: TEST_TIMEOUT_MS,
+        timeoutMs: policy.maxCommandMs,
         approved: true,
         env: { CI: "1" },
       });
       evidence.push(evidenceFrom(t, "testing"));
     }
+  } else if (hasNode && hasNodeModules) {
+    evidence.push(skippedEvidence({
+      command: "# no npm test script",
+      cwd: workspace,
+      usedFor: "testing",
+      reason: "No test script detected in package.json.",
+    }));
   } else if (hasPython) {
     // Only run pytest if it's importable; non-fatal if not.
     const py = await runCommand({
       command: "python",
       args: ["-m", "pytest", "-q", "--maxfail=5"],
       cwd: workspace,
-      timeoutMs: TEST_TIMEOUT_MS,
+      timeoutMs: policy.maxCommandMs,
       approved: true,
     });
     evidence.push(evidenceFrom(py, "testing"));
@@ -265,11 +373,18 @@ export async function runProof(opts: {
       const b = await runCommand({
         ...cmd,
         cwd: workspace,
-        timeoutMs: BUILD_TIMEOUT_MS,
+        timeoutMs: policy.maxCommandMs,
         approved: true,
       });
       evidence.push(evidenceFrom(b, "build"));
     }
+  } else if (hasNode && hasNodeModules) {
+    evidence.push(skippedEvidence({
+      command: "# no build script",
+      cwd: workspace,
+      usedFor: "build",
+      reason: "No build script detected in package.json.",
+    }));
   }
 
   // typecheck — prefer script. If only tsconfig and local tsc exists, use it; otherwise skip.
@@ -280,7 +395,7 @@ export async function runProof(opts: {
       const tc = await runCommand({
         ...cmd,
         cwd: workspace,
-        timeoutMs: TYPECHECK_TIMEOUT_MS,
+        timeoutMs: policy.maxCommandMs,
         approved: true,
       });
       evidence.push(evidenceFrom(tc, "typecheck"));
@@ -292,11 +407,46 @@ export async function runProof(opts: {
         command: localTsc,
         args: ["--noEmit"],
         cwd: workspace,
-        timeoutMs: TYPECHECK_TIMEOUT_MS,
+        timeoutMs: policy.maxCommandMs,
         approved: true,
       });
       evidence.push(evidenceFrom(tc, "typecheck"));
+    } else {
+      evidence.push(skippedEvidence({
+        command: "# typecheck skipped",
+        cwd: workspace,
+        usedFor: "typecheck",
+        reason: "tsconfig.json exists but no local tsc binary was found.",
+      }));
     }
+  } else if (hasNode && hasNodeModules) {
+    evidence.push(skippedEvidence({
+      command: "# no typecheck script",
+      cwd: workspace,
+      usedFor: "typecheck",
+      reason: "No typecheck script or tsconfig.json detected.",
+    }));
+  }
+
+  if (hasNode && hasNodeModules && hasLint) {
+    const cmd = pmRun(packageManager, "lint");
+    if (cmd) {
+      const lint = await runCommand({
+        ...cmd,
+        cwd: workspace,
+        timeoutMs: policy.maxCommandMs,
+        approved: true,
+        env: { CI: "1" },
+      });
+      evidence.push(evidenceFrom(lint, "lint"));
+    }
+  } else if (hasNode && hasNodeModules) {
+    evidence.push(skippedEvidence({
+      command: "# no lint script",
+      cwd: workspace,
+      usedFor: "lint",
+      reason: "No lint script detected in package.json.",
+    }));
   }
 
   // Security grep scans.
@@ -331,8 +481,14 @@ export async function runProof(opts: {
       .find((p) => fs.existsSync(p));
     if (readme && opts.githubUsername) {
       const txt = fs.readFileSync(readme, "utf8");
-      const tag = `skillproof:${opts.githubUsername}`;
+      const tag = opts.ownershipToken ?? `skillproof:${opts.githubUsername}`;
       if (txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
+    }
+    const verifyFile = path.join(workspace, ".skillproof-verify.json");
+    if (!repo_token_verified && fs.existsSync(verifyFile)) {
+      const txt = fs.readFileSync(verifyFile, "utf8");
+      const tag = opts.ownershipToken ?? (opts.githubUsername ? `skillproof:${opts.githubUsername}` : "");
+      if (tag && txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
     }
   } catch {}
 
@@ -341,7 +497,7 @@ export async function runProof(opts: {
     cloned: true,
     reused,
     evidence,
-    detected: { packageManager, hasNode, hasPython, hasNodeModules, hasTests, hasBuild, hasTypecheck, framework },
+    detected: { packageManager, hasNode, hasPython, hasNodeModules, installStatus, hasTests, hasBuild, hasTypecheck, hasLint, framework },
     ownership: {
       owner_match,
       repo_token_verified,

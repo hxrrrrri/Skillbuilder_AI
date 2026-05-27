@@ -63,7 +63,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
       child = spawn(command, args, {
         cwd,
         env: { ...process.env, ...opts.env },
-        shell: opts.shell ?? (process.platform === "win32"),
+        shell: opts.shell ?? false,
         windowsHide: true,
       });
     } catch (err: any) {

@@ -103,7 +103,7 @@ export function TerminalConsole({ missionId, cwd, defaultCommand, enableSaveAsEv
   }
 
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-[#0b0f14] p-3 font-mono text-sm text-ink/90">
+    <div className="space-y-2 rounded-lg border border-border bg-[#171512] p-3 font-mono text-sm text-ink/90 shadow-inner shadow-black/20">
       <div className="flex items-center gap-2">
         <span className="text-accent">$</span>
         <input
@@ -150,7 +150,7 @@ export function TerminalConsole({ missionId, cwd, defaultCommand, enableSaveAsEv
           </div>
           <pre
             ref={outRef}
-            className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-black/60 p-2 text-xs leading-relaxed"
+            className="max-h-72 overflow-auto whitespace-pre-wrap break-words rounded border border-border bg-bg/80 p-2 text-xs leading-relaxed"
           >
             {latest.stdout}
             {latest.stderr && <span className="text-bad">{"\n" + latest.stderr}</span>}
