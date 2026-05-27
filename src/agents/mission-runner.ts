@@ -466,6 +466,13 @@ export async function runMission(opts: {
         providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
       },
     });
+
+    try {
+      const { finalizeReVerificationForRun } = await import("@/lib/reverification");
+      await finalizeReVerificationForRun(opts.runId);
+    } catch (err) {
+      console.error("[mission] finalize reverification failed", err);
+    }
   } catch (err) {
     await prisma.analysisRun.update({
       where: { id: opts.runId },

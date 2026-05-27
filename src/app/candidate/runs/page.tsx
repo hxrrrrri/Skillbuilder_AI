@@ -5,15 +5,9 @@ import { prisma } from "@/lib/db";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CANDIDATE_NAV } from "../_nav";
 
 export const dynamic = "force-dynamic";
-
-const NAV = [
-  { href: "/candidate/dashboard", label: "Dashboard" },
-  { href: "/candidate/new-verification", label: "New verification" },
-  { href: "/candidate/runs", label: "Runs" },
-  { href: "/candidate/profile", label: "Public profile" },
-];
 
 export default async function CandidateRunsPage() {
   const user = await getCurrentUser();
@@ -35,7 +29,7 @@ export default async function CandidateRunsPage() {
     <RoleShell
       title="Your verification runs"
       subtitle="Every analysis you have started, along with status and score."
-      navLinks={NAV}
+      navLinks={CANDIDATE_NAV}
       activeHref="/candidate/runs"
     >
       <Card>
@@ -58,6 +52,24 @@ export default async function CandidateRunsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/candidate/interview/${r.id}`}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      interview
+                    </Link>
+                    <Link
+                      href={`/candidate/ai-challenge/${r.id}`}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      ai-challenge
+                    </Link>
+                    <Link
+                      href={`/candidate/runs/${r.id}/terminal`}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      terminal
+                    </Link>
                     <Badge tone={r.status === "completed" ? "good" : r.status === "failed" ? "bad" : "warn"}>
                       {r.status}
                     </Badge>

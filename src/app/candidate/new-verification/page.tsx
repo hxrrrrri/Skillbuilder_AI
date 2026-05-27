@@ -2,15 +2,9 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
 import { RoleShell } from "@/components/role-shell";
 import { Card, CardBody } from "@/components/ui/card";
+import { CANDIDATE_NAV as NAV } from "../_nav";
 
 export const dynamic = "force-dynamic";
-
-const NAV = [
-  { href: "/candidate/dashboard", label: "Dashboard" },
-  { href: "/candidate/new-verification", label: "New verification" },
-  { href: "/candidate/runs", label: "Runs" },
-  { href: "/candidate/profile", label: "Public profile" },
-];
 
 export default async function NewVerificationPage() {
   const user = await getCurrentUser();

@@ -30,6 +30,9 @@ model User {
   runsCreated     AnalysisRun[]       @relation("RunCreator")
   profilesOwned   PublicProfile[]     @relation("ProfileOwner")
   auditLogs       AuditLog[]
+  promptVersions  PromptVersion[]
+  employerShortlists EmployerShortlist[]
+  savedSearches   SavedSearch[]
 }
 
 model Tenant {
@@ -45,6 +48,9 @@ model Tenant {
   primaryFor  User[]              @relation("UserPrimaryTenant")
   runs        AnalysisRun[]
   auditLogs   AuditLog[]
+  cohorts     Cohort[]
+  invites     TenantInvite[]
+  talentShares TalentPoolShare[]
 }
 
 model TenantMembership {
@@ -127,6 +133,21 @@ model AgentConfig {
   updatedAt         DateTime @updatedAt
 }
 
+model PromptVersion {
+  id           String   @id @default(cuid())
+  agentName    String
+  version      Int
+  system       String
+  instructions String?
+  isActive     Boolean  @default(false)
+  createdById  String?
+  createdAt    DateTime @default(now())
+  createdBy    User?    @relation(fields: [createdById], references: [id])
+
+  @@unique([agentName, version])
+  @@index([agentName, isActive])
+}
+
 // ---------- Existing domain models (Candidate / Repository / AnalysisRun / etc.) ----------
 
 model Candidate {
@@ -140,6 +161,99 @@ model Candidate {
   repositories   Repository[]
   runs           AnalysisRun[]
   profiles       PublicProfile[]
+  cohortMemberships CohortStudent[]
+  reverifications ReVerificationSnapshot[]
+}
+
+model Subscription {
+  id                   String   @id @default(cuid())
+  ownerUserId          String
+  tenantId             String?
+  plan                 String   @default("free") // free|pro|team|enterprise
+  status               String   @default("inactive") // inactive|trialing|active|past_due|canceled
+  currentPeriodEnd     DateTime?
+  stripeCustomerId     String?
+  stripeSubscriptionId String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([ownerUserId])
+  @@index([tenantId])
+  @@index([status])
+}
+
+model ReVerificationSnapshot {
+  id            String   @id @default(cuid())
+  candidateId   String
+  repoId        String
+  previousRunId String
+  nextRunId     String?
+  previousScore Int?
+  nextScore     Int?
+  deltaJson     String?
+  createdAt     DateTime @default(now())
+  candidate     Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId])
+  @@index([nextRunId])
+  @@index([previousRunId])
+}
+
+model Cohort {
+  id        String          @id @default(cuid())
+  tenantId  String
+  name      String
+  year      Int?
+  notes     String?
+  createdAt DateTime        @default(now())
+  tenant    Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  students  CohortStudent[]
+  invites   TenantInvite[]
+
+  @@unique([tenantId, name])
+}
+
+model CohortStudent {
+  id          String    @id @default(cuid())
+  cohortId    String
+  candidateId String
+  joinedAt    DateTime  @default(now())
+  cohort      Cohort    @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@unique([cohortId, candidateId])
+}
+
+model TenantInvite {
+  id               String   @id @default(cuid())
+  tenantId         String
+  email            String
+  role             String   // candidate|college_member|mentor
+  cohortId         String?
+  token            String   @unique
+  expiresAt        DateTime
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  createdById      String
+  createdAt        DateTime @default(now())
+  tenant           Tenant   @relation(fields: [tenantId], references: [id])
+  cohort           Cohort?  @relation(fields: [cohortId], references: [id])
+
+  @@index([tenantId, email])
+}
+
+model TalentPoolShare {
+  id          String   @id @default(cuid())
+  tenantId    String
+  cohortId    String?
+  token       String   @unique
+  filters     String?
+  expiresAt   DateTime?
+  createdById String
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
 }
 
 model Repository {
@@ -253,11 +367,49 @@ model PublicProfile {
   runId       String
   slug        String      @unique
   visibility  String      @default("public") // public|unlisted|private
+  interviewKit String?     // JSON cached employer interview kit
+  includeTerminalProof Boolean @default(false)
   createdAt   DateTime    @default(now())
   candidate   Candidate?  @relation(fields: [candidateId], references: [id])
   owner       User?       @relation("ProfileOwner", fields: [ownerUserId], references: [id])
   run         AnalysisRun @relation(fields: [runId], references: [id])
+  shortlistItems EmployerShortlistItem[]
 
   @@index([ownerUserId])
   @@index([visibility])
+}
+
+model EmployerShortlist {
+  id          String   @id @default(cuid())
+  ownerUserId String
+  tenantId    String?
+  name        String
+  notes       String?
+  createdAt   DateTime @default(now())
+  owner       User     @relation(fields: [ownerUserId], references: [id])
+  items       EmployerShortlistItem[]
+
+  @@index([ownerUserId])
+}
+
+model EmployerShortlistItem {
+  id              String   @id @default(cuid())
+  shortlistId     String
+  publicProfileId String
+  position        Int      @default(0)
+  note            String?
+  addedAt         DateTime @default(now())
+  shortlist       EmployerShortlist @relation(fields: [shortlistId], references: [id], onDelete: Cascade)
+  profile         PublicProfile     @relation(fields: [publicProfileId], references: [id])
+
+  @@unique([shortlistId, publicProfileId])
+}
+
+model SavedSearch {
+  id          String   @id @default(cuid())
+  ownerUserId String
+  name        String
+  query       String
+  createdAt   DateTime @default(now())
+  owner       User     @relation(fields: [ownerUserId], references: [id])
 }

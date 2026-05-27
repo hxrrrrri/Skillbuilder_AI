@@ -1,34 +1,27 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { COLLEGE_NAV } from "../_nav";
+import { getCollegePageContext } from "../_auth";
+import { tenantRunWhere } from "@/lib/college/tenant";
 
 export const dynamic = "force-dynamic";
 
-const NAV = [
-  { href: "/college/dashboard", label: "Dashboard" },
-  { href: "/college/students", label: "Students" },
-  { href: "/college/cohorts", label: "Cohorts", badge: "soon" },
-];
-
 export default async function CollegeStudentsPage() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login?callbackUrl=/college/students");
+  const { scope, noTenant } = await getCollegePageContext("/college/students");
 
-  if (user.tenantIds.length === 0 && !["admin", "super_admin"].includes(user.role)) {
+  if (noTenant || !scope) {
     return (
-      <RoleShell title="Students" subtitle="Tenant-scoped student roster." navLinks={NAV} activeHref="/college/students">
+      <RoleShell title="Students" subtitle="Tenant-scoped student roster." navLinks={COLLEGE_NAV} activeHref="/college/students">
         <ScaffoldNotice title="No tenant" detail="Your account is not yet associated with a college tenant." />
       </RoleShell>
     );
   }
 
-  const tenantIds = user.tenantIds.length > 0 ? user.tenantIds : undefined;
   const runs = await prisma.analysisRun.findMany({
-    where: tenantIds ? { tenantId: { in: tenantIds } } : {},
+    where: tenantRunWhere(scope),
     include: { candidate: true, repository: true },
     orderBy: { createdAt: "desc" },
   });
@@ -41,9 +34,9 @@ export default async function CollegeStudentsPage() {
   }
 
   return (
-    <RoleShell title="Students" subtitle="Tenant-scoped student roster." navLinks={NAV} activeHref="/college/students">
+    <RoleShell title="Students" subtitle="Tenant-scoped student roster." navLinks={COLLEGE_NAV} activeHref="/college/students">
       {byCandidate.size === 0 ? (
-        <ScaffoldNotice detail="No students with runs yet. Invite flow lands in the next slice." />
+        <ScaffoldNotice detail="No students with runs yet. Invite candidates into a cohort, then their verification runs appear here." />
       ) : (
         <Card>
           <CardBody>

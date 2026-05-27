@@ -4,36 +4,34 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { CANDIDATE_NAV } from "../_nav";
+import { ProfileRowActions } from "@/components/profile-row-actions";
+import { signBadge } from "@/lib/badge-signing";
+
+function withSig(url: string, slug: string): string {
+  const s = signBadge(slug);
+  return s ? `${url}?sig=${s}` : url;
+}
 
 export const dynamic = "force-dynamic";
-
-const NAV = [
-  { href: "/candidate/dashboard", label: "Dashboard" },
-  { href: "/candidate/new-verification", label: "New verification" },
-  { href: "/candidate/runs", label: "Runs" },
-  { href: "/candidate/profile", label: "Public profile" },
-];
 
 export default async function CandidateProfilePage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?callbackUrl=/candidate/profile");
 
-  const candidate = await prisma.candidate.findUnique({ where: { userId: user.id } });
-  const profiles = candidate
-    ? await prisma.publicProfile.findMany({
-        where: { candidateId: candidate.id },
-        orderBy: { createdAt: "desc" },
-        include: { run: { include: { repository: true } } },
-      })
-    : [];
+  const profiles = await prisma.publicProfile.findMany({
+    where: { ownerUserId: user.id },
+    orderBy: { createdAt: "desc" },
+    include: { run: { include: { repository: true } } },
+  });
 
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
   return (
     <RoleShell
       title="Your public profile"
-      subtitle="Control which verified profiles employers can see."
-      navLinks={NAV}
+      subtitle="Control visibility, copy share links, embed verified badges, or unpublish."
+      navLinks={CANDIDATE_NAV}
       activeHref="/candidate/profile"
     >
       <Card>
@@ -47,25 +45,26 @@ export default async function CandidateProfilePage() {
             <ul className="divide-y divide-border">
               {profiles.map((p) => {
                 const url = `${base}/profile/${p.slug}`;
+                const svgUrl = withSig(`${base}/api/badge/${p.slug}.svg`, p.slug);
                 return (
-                  <li key={p.id} className="flex items-center justify-between py-3">
-                    <div>
+                  <li key={p.id} className="space-y-2 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <Link href={`/profile/${p.slug}`} className="font-mono text-sm text-ink hover:text-accent">
                         /{p.slug}
                       </Link>
-                      <div className="mt-0.5 text-xs text-muted">
-                        {p.run.repository.owner}/{p.run.repository.repoName} · {p.visibility} ·{" "}
+                      <span className="text-xs text-muted">
+                        {p.run.repository.owner}/{p.run.repository.repoName} ·{" "}
                         {new Date(p.createdAt).toLocaleString()}
-                      </div>
+                      </span>
                     </div>
-                    <a
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-md border border-border bg-panel2 px-3 py-1 text-xs text-ink hover:border-accent/60 hover:text-accent"
-                    >
-                      Open
-                    </a>
+                    <ProfileRowActions
+                      profileId={p.id}
+                      slug={p.slug}
+                      url={url}
+                      svgUrl={svgUrl}
+                      initialVisibility={p.visibility as "public" | "unlisted" | "private"}
+                      initialIncludeTerminalProof={p.includeTerminalProof}
+                    />
                   </li>
                 );
               })}

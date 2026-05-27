@@ -349,6 +349,24 @@ See [DEMO.md](DEMO.md) for the hackathon demo script.
 
 ---
 
+## Production scaffolding (Slice 11)
+
+Foundations only — not fully wired. Use these as the starting points when you migrate the project off the hackathon stack.
+
+- **GitHub OAuth (link-only).** Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` to enable `Connect GitHub` on `/candidate/settings`. The OAuth flow links a GitHub account to an existing email; first-time signup via GitHub is intentionally disabled until a NextAuth Account adapter is wired. Linking calls `upgradeOwnershipFromOauth` to promote matching runs from `self_declared` to `github_oauth_owner_match`.
+- **Signed badges.** Set `BADGE_SIGNING_SECRET` (≥16 chars) and `/api/badge/[slug].svg` will require `?sig=v1.<hmac>`. With the secret unset, badges work without signatures (current default).
+- **Postgres migration.** `prisma/schema.postgres.prisma` is a copy of the active schema with `provider = "postgresql"`. To switch:
+  ```bash
+  mv prisma/schema.prisma prisma/schema.sqlite.prisma
+  mv prisma/schema.postgres.prisma prisma/schema.prisma
+  # set DATABASE_URL=postgres://... in .env
+  npx prisma migrate dev --name init_postgres
+  npm run db:seed-users && npm run db:seed-registry && npm run db:seed-prompts
+  ```
+  JSON columns stay `String` for portability — migrate to native `Json` after the switch. The previous SQLite `contains` lookup on `/admin/runs/[id]` is now an indexed `targetType + targetId` query.
+- **Stripe.** Schema model `Subscription` added; no SDK calls. `/admin/billing` reads existing rows. Wire Stripe webhooks + the SDK when ready.
+- **Audit retention.** `npm run db:purge-audit` deletes `AuditLog` rows older than 90 days. Override with `AUDIT_RETENTION_DAYS`. Pass `-- --dry-run` to preview without deleting.
+
 ## Screenshots
 
 _Placeholders — to be added before submission._

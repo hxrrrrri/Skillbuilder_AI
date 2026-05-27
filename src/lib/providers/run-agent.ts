@@ -3,6 +3,7 @@
 // heuristic so the pipeline never breaks when providers are missing/broken.
 
 import { AgentSkippedError, selectProviderMatrix, runWithMatrix } from "./provider-router";
+import { getActivePrompt } from "./registry";
 import type { AgentRole, ProviderId, ProviderMatrix, ProviderMatrixAgentEntry } from "./types";
 import type { MissionState, ScoreSource } from "@/agents/types";
 
@@ -40,9 +41,18 @@ async function ensureMatrix(state: MissionState): Promise<ProviderMatrix> {
   return m;
 }
 
+async function resolveSystemPrompt(agentName: string, fallbackSystem: string): Promise<string> {
+  const active = await getActivePrompt(agentName);
+  if (!active) return fallbackSystem;
+  return active.instructions?.trim()
+    ? `${active.system}\n\n${active.instructions}`
+    : active.system;
+}
+
 export async function runAgentJson<T>(opts: RunAgentOpts<T>): Promise<RunAgentResult<T>> {
   const { state, agentName, role, system, user, schemaHint, maxTokens, temperature, fallback } = opts;
   const name = agentName ?? role;
+  const effectiveSystem = await resolveSystemPrompt(name, system);
 
   // Pure mock mode: skip provider invocation entirely.
   if (state.mock_mode || state.execution_mode === "mock") {
@@ -79,7 +89,7 @@ export async function runAgentJson<T>(opts: RunAgentOpts<T>): Promise<RunAgentRe
     const res = await runWithMatrix(
       matrix,
       role,
-      { system, user, maxTokens, temperature, agentName: name },
+      { system: effectiveSystem, user, maxTokens, temperature, agentName: name },
       schemaHint,
       name,
     );

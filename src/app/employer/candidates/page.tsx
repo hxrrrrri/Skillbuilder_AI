@@ -5,14 +5,9 @@ import { prisma } from "@/lib/db";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { EMPLOYER_NAV } from "../_nav";
 
 export const dynamic = "force-dynamic";
-
-const NAV = [
-  { href: "/employer/dashboard", label: "Dashboard" },
-  { href: "/employer/search", label: "Search", badge: "soon" },
-  { href: "/employer/candidates", label: "Candidates" },
-];
 
 export default async function EmployerCandidatesPage() {
   const user = await getCurrentUser();
@@ -28,7 +23,7 @@ export default async function EmployerCandidatesPage() {
     <RoleShell
       title="Verified candidates"
       subtitle="Browse public, evidence-backed candidate profiles."
-      navLinks={NAV}
+      navLinks={EMPLOYER_NAV}
       activeHref="/employer/candidates"
     >
       {profiles.length === 0 ? (
@@ -38,7 +33,7 @@ export default async function EmployerCandidatesPage() {
           {profiles.map((p) => (
             <Card key={p.id}>
               <CardBody>
-                <Link href={`/profile/${p.slug}`} className="font-display text-lg text-ink hover:text-accent">
+                <Link href={`/employer/candidates/${p.id}`} className="font-display text-lg text-ink hover:text-accent">
                   {p.candidate?.name ?? "Anonymous candidate"}
                 </Link>
                 <div className="mt-1 text-xs text-muted">{p.run.targetRole}</div>
@@ -51,6 +46,9 @@ export default async function EmployerCandidatesPage() {
                 <div className="mt-3 text-xs font-mono text-muted">
                   {p.run.repository.owner}/{p.run.repository.repoName}
                 </div>
+                <Link href={`/profile/${p.slug}`} className="mt-2 inline-block text-xs text-accent hover:underline">
+                  Public profile
+                </Link>
               </CardBody>
             </Card>
           ))}

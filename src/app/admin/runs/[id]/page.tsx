@@ -29,8 +29,11 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
   });
   if (!run) notFound();
 
+  // Indexable lookup only — relies on AuditLog.targetType/targetId pair (both indexed).
+  // The prior fallback used `metadata: { contains: run.id }`, which was a full
+  // table scan in SQLite and unsupported on Postgres without a GIN index.
   const auditEntries = await prisma.auditLog.findMany({
-    where: { OR: [{ targetType: "run", targetId: run.id }, { metadata: { contains: run.id } }] },
+    where: { targetType: "run", targetId: run.id },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: { actor: true },
@@ -68,6 +71,9 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
         </Badge>
         {isMockMode && <Badge tone="warn">MOCK / heuristic mode</Badge>}
         {run.overallScore != null && <Badge tone="accent">score {run.overallScore}</Badge>}
+        <Link href={`/admin/runs/${run.id}/terminal`} className="text-accent hover:underline">
+          open sandbox terminal →
+        </Link>
         {run.statusMessage && <span className="text-bad">{run.statusMessage}</span>}
       </div>
 

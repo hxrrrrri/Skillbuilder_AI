@@ -17,6 +17,8 @@
     "db:studio": "prisma studio",
     "db:seed-users": "tsx prisma/seed-users.ts",
     "db:seed-registry": "tsx prisma/seed-registry.ts",
+    "db:seed-prompts": "tsx prisma/seed-prompts.ts",
+    "db:purge-audit": "tsx prisma/seed-purge-audit.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

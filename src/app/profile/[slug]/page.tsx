@@ -6,8 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { SkillRadar } from "@/components/skill-radar";
 import { EvidenceLocker } from "@/components/evidence-locker";
 import { AuthenticityCard } from "@/components/authenticity-card";
+import { RiskSignalsCard } from "@/components/risk-signals";
 import { EmployerVerifier } from "@/components/employer-verifier";
 import { ImprovementPlanCard } from "@/components/improvement-plan";
+import { getCurrentUser } from "@/lib/auth/session";
+import { isAdminRole } from "@/lib/auth/roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +32,15 @@ export default async function PublicProfile({ params }: { params: { slug: string
   });
 
   if (!profile) return notFound();
+
+  const viewer = await getCurrentUser();
+  const isOwner = !!viewer && !!profile.ownerUserId && profile.ownerUserId === viewer.id;
+  const isAdminViewer = !!viewer && isAdminRole(viewer.role);
+  if (profile.visibility === "private" && !isOwner && !isAdminViewer) {
+    return notFound();
+  }
+  const previewMode = profile.visibility !== "public" && (isOwner || isAdminViewer);
+
   const run = profile.run;
   const candidate = run.candidate;
 
@@ -51,7 +63,10 @@ export default async function PublicProfile({ params }: { params: { slug: string
   const ai = safeJsonParse<any>(run.aiCollaboration, null);
   const ownership = safeJsonParse<any>(run.ownershipStatus, null);
   const providerMatrix = safeJsonParse<Record<string, any>>(run.providerMatrix, {});
-  const terminalEvidence = safeJsonParse<any[]>(run.terminalEvidence, []);
+  const showTerminalProof = profile.includeTerminalProof === true;
+  const terminalEvidence = showTerminalProof
+    ? safeJsonParse<any[]>(run.terminalEvidence, [])
+    : ([] as any[]);
   const mode = run.executionMode ?? "api";
   const terminalSummary = (() => {
     let passed = 0;
@@ -70,6 +85,12 @@ export default async function PublicProfile({ params }: { params: { slug: string
 
   return (
     <div className="space-y-8">
+      {previewMode && (
+        <div className="rounded-lg border border-accent/50 bg-accent/10 px-4 py-3 text-xs text-ink">
+          <span className="font-semibold text-accent">Preview mode.</span> This profile is{" "}
+          <code className="rounded bg-panel2 px-1">{profile.visibility}</code> — only you (and admins) see this view.
+        </div>
+      )}
       <header className="rounded-lg border border-border bg-panel/88 p-8 shadow-glow">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="accent">Verified Profile</Badge>
@@ -219,11 +240,26 @@ export default async function PublicProfile({ params }: { params: { slug: string
         </section>
       )}
 
+      <section>
+        <Card>
+          <CardHeader>
+            <CardTitle>Risk signals</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <RiskSignalsCard
+              authenticityRisks={authenticity?.risk_signals ?? []}
+              ownershipStatus={ownership}
+              aiCollaboration={ai}
+            />
+          </CardBody>
+        </Card>
+      </section>
+
       {authenticity && (
         <section>
           <Card>
             <CardHeader>
-              <CardTitle>Authenticity Signals</CardTitle>
+              <CardTitle>Authenticity Signals (raw)</CardTitle>
             </CardHeader>
             <CardBody>
               <AuthenticityCard data={authenticity} />

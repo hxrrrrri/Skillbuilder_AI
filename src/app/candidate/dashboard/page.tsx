@@ -5,15 +5,11 @@ import { prisma } from "@/lib/db";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
+import { CANDIDATE_NAV as NAV } from "../_nav";
+import { TrajectorySpark } from "@/components/trajectory-spark";
+import { getCandidateTrajectory } from "@/lib/reverification";
 
 export const dynamic = "force-dynamic";
-
-const NAV = [
-  { href: "/candidate/dashboard", label: "Dashboard" },
-  { href: "/candidate/new-verification", label: "New verification" },
-  { href: "/candidate/runs", label: "Runs" },
-  { href: "/candidate/profile", label: "Public profile" },
-];
 
 export default async function CandidateDashboard() {
   const user = await getCurrentUser();
@@ -36,6 +32,7 @@ export default async function CandidateDashboard() {
 
   const completed = runs.filter((r) => r.status === "completed");
   const latest = completed[0] ?? runs[0] ?? null;
+  const snapshots = candidate ? await getCandidateTrajectory(candidate.id) : [];
   const publicProfile = candidate
     ? await prisma.publicProfile.findFirst({
         where: { candidateId: candidate.id, visibility: "public" },
@@ -86,6 +83,17 @@ export default async function CandidateDashboard() {
           </CardBody>
         </Card>
       </div>
+
+      {snapshots.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Skill trajectory</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <TrajectorySpark snapshots={snapshots} />
+          </CardBody>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="flex items-center justify-between">

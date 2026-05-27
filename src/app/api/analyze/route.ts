@@ -5,6 +5,7 @@ import { parseRepoUrl } from "@/lib/utils";
 import { preCreateEvents, runMission } from "@/agents/mission-runner";
 import { getCurrentUser } from "@/lib/auth/session";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { createSnapshotIfReVerify } from "@/lib/reverification";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,6 +101,7 @@ export async function POST(req: Request) {
   });
 
   await preCreateEvents(run.id);
+  await createSnapshotIfReVerify(run.id);
 
   // In-process fallback for hackathon/local demos. Set SKILLPROOF_WORKER_MODE=1
   // and run `npm run worker` to process pending missions out-of-process.
