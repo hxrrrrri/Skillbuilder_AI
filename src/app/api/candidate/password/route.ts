@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  current_password: z.string().min(1).max(200),
+  current_password: z.string().max(200).optional(),
   new_password: z.string().min(8).max(200),
 });
 
@@ -27,27 +27,33 @@ export async function POST(req: Request) {
   const dbUser = await prisma.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } });
   if (!dbUser) return NextResponse.json({ error: "user_not_found" }, { status: 404 });
 
-  const ok = await verifyPassword(body.current_password, dbUser.passwordHash);
-  if (!ok) {
-    await writeAuditLog({
-      action: "candidate.password.failed",
-      actorUserId: user.id,
-      targetType: "user",
-      targetId: user.id,
-      metadata: { reason: "current_password_mismatch" },
-    });
-    return NextResponse.json({ error: "wrong_current_password" }, { status: 403 });
+  const isInitialSet = !dbUser.passwordHash;
+  if (!isInitialSet) {
+    if (!body.current_password) {
+      return NextResponse.json({ error: "current_password_required" }, { status: 400 });
+    }
+    const ok = await verifyPassword(body.current_password, dbUser.passwordHash);
+    if (!ok) {
+      await writeAuditLog({
+        action: "candidate.password.failed",
+        actorUserId: user.id,
+        targetType: "user",
+        targetId: user.id,
+        metadata: { reason: "current_password_mismatch" },
+      });
+      return NextResponse.json({ error: "wrong_current_password" }, { status: 403 });
+    }
   }
 
   const hash = await hashPassword(body.new_password);
   await prisma.user.update({ where: { id: user.id }, data: { passwordHash: hash } });
 
   await writeAuditLog({
-    action: "candidate.password.changed",
+    action: isInitialSet ? "candidate.password.set" : "candidate.password.changed",
     actorUserId: user.id,
     targetType: "user",
     targetId: user.id,
-    metadata: {},
+    metadata: { initial: isInitialSet },
   });
 
   return NextResponse.json({ ok: true });

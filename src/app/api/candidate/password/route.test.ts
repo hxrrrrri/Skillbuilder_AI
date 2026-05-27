@@ -68,4 +68,29 @@ describe("/api/candidate/password", () => {
     expect(res.status).toBe(400);
     expect(mocks.verifyPassword).not.toHaveBeenCalled();
   });
+
+  it("allows OAuth-first user (empty hash) to set initial password without current_password", async () => {
+    mocks.prisma.user.findUnique.mockResolvedValue({ passwordHash: "" });
+    const { POST } = await import("./route");
+    const res = await POST(req({ new_password: "new-strong-pw" }));
+    expect(res.status).toBe(200);
+    expect(mocks.verifyPassword).not.toHaveBeenCalled();
+    expect(mocks.prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "u1" },
+      data: { passwordHash: "new-hash" },
+    });
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "candidate.password.set",
+        metadata: { initial: true },
+      }),
+    );
+  });
+
+  it("still requires current_password when a hash exists", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(req({ new_password: "new-strong-pw" }));
+    expect(res.status).toBe(400);
+    expect(mocks.prisma.user.update).not.toHaveBeenCalled();
+  });
 });

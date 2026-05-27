@@ -1,6 +1,8 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GitHubProvider from "next-auth/providers/github";
+import GoogleProvider from "next-auth/providers/google";
+import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/db";
 import { verifyPassword } from "./password";
 import { isRole, type Role } from "./roles";
@@ -24,6 +26,7 @@ function buildProviders() {
           include: { memberships: { select: { tenantId: true } } },
         });
         if (!user || user.status !== "active") return null;
+        if (!user.passwordHash) return null;
         if (!isRole(user.role)) return null;
 
         const ok = await verifyPassword(password, user.passwordHash);
@@ -47,6 +50,17 @@ function buildProviders() {
       GitHubProvider({
         clientId: process.env.GITHUB_CLIENT_ID,
         clientSecret: process.env.GITHUB_CLIENT_SECRET,
+        allowDangerousEmailAccountLinking: true,
+      }),
+    );
+  }
+
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    providers.push(
+      GoogleProvider({
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        allowDangerousEmailAccountLinking: true,
       }),
     );
   }
@@ -83,31 +97,46 @@ declare module "next-auth/jwt" {
 }
 
 export const authOptions: NextAuthOptions = {
+  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: { signIn: "/login" },
   providers: buildProviders(),
+  events: {
+    async createUser({ user }) {
+      try {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { role: "candidate", status: "active" },
+        });
+      } catch (err) {
+        console.error("[auth] createUser default-role update failed", err);
+      }
+    },
+  },
   callbacks: {
     async signIn({ account, profile }) {
-      if (account?.provider !== "github") return true;
-      const ghProfile = profile as
-        | { email?: string | null; login?: string; avatar_url?: string; name?: string }
-        | undefined;
-      if (!ghProfile?.email) return false; // require GitHub email to link to an existing account
-      const email = ghProfile.email.toLowerCase().trim();
-      const existing = await prisma.user.findUnique({ where: { email } });
-      if (!existing) return false; // Scaffold: linking only; first-time signup via GitHub disabled until Account adapter wired.
-      await prisma.user.update({
-        where: { id: existing.id },
-        data: {
-          githubUsername: ghProfile.login ?? existing.githubUsername,
-          image: ghProfile.avatar_url ?? existing.image,
-        },
-      });
-      if (ghProfile.login) {
-        try {
-          await upgradeOwnershipFromOauth({ userId: existing.id, githubLogin: ghProfile.login });
-        } catch (err) {
-          console.error("[auth] upgradeOwnershipFromOauth failed", err);
+      if (account?.provider === "github") {
+        const ghProfile = profile as
+          | { email?: string | null; login?: string; avatar_url?: string; name?: string }
+          | undefined;
+        const login = ghProfile?.login;
+        const email = ghProfile?.email?.toLowerCase().trim();
+        if (login && email) {
+          try {
+            const existing = await prisma.user.findUnique({ where: { email } });
+            if (existing) {
+              await prisma.user.update({
+                where: { id: existing.id },
+                data: {
+                  githubUsername: login,
+                  image: ghProfile?.avatar_url ?? existing.image,
+                },
+              });
+              await upgradeOwnershipFromOauth({ userId: existing.id, githubLogin: login });
+            }
+          } catch (err) {
+            console.error("[auth] github post-link work failed", err);
+          }
         }
       }
       return true;
@@ -115,11 +144,17 @@ export const authOptions: NextAuthOptions = {
     async jwt({ token, user, trigger, account, profile }) {
       if (user) {
         token.uid = (user as any).id as string;
-        token.role = (user as any).role;
-        token.primaryTenantId = (user as any).primaryTenantId ?? null;
-        token.tenantIds = (user as any).tenantIds ?? [];
+        const dbUser = await prisma.user.findUnique({
+          where: { id: token.uid },
+          include: { memberships: { select: { tenantId: true } } },
+        });
+        if (dbUser && isRole(dbUser.role)) {
+          token.role = dbUser.role;
+          token.primaryTenantId = dbUser.primaryTenantId;
+          token.tenantIds = dbUser.memberships.map((m) => m.tenantId);
+        }
       }
-      if (account?.provider === "github" && (profile as any)?.email && !token.uid) {
+      if (account?.provider && (profile as any)?.email && !token.uid) {
         const email = String((profile as any).email).toLowerCase().trim();
         const dbUser = await prisma.user.findUnique({
           where: { email },

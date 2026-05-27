@@ -14,7 +14,13 @@ const DEMO_ACCOUNTS = [
   { label: "Platform admin", email: "admin@skillproof.dev" },
 ];
 
-export function LoginForm() {
+export function LoginForm({
+  githubEnabled = false,
+  googleEnabled = false,
+}: {
+  githubEnabled?: boolean;
+  googleEnabled?: boolean;
+}) {
   const router = useRouter();
   const search = useSearchParams();
   const callbackUrl = search?.get("callbackUrl") ?? undefined;
@@ -50,9 +56,42 @@ export function LoginForm() {
     setPassword("demo1234");
   }
 
+  function oauthSignIn(provider: "github" | "google") {
+    signIn(provider, { callbackUrl: callbackUrl ?? "/post-login" });
+  }
+
   return (
     <Card className="mt-6">
       <CardBody>
+        {(githubEnabled || googleEnabled) && (
+          <div className="mb-4 space-y-2">
+            {githubEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => oauthSignIn("github")}
+              >
+                Continue with GitHub
+              </Button>
+            )}
+            {googleEnabled && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => oauthSignIn("google")}
+              >
+                Continue with Google
+              </Button>
+            )}
+            <div className="flex items-center gap-3 text-[11px] uppercase tracking-wide text-muted">
+              <div className="h-px flex-1 bg-border" />
+              <span>or</span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          </div>
+        )}
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-muted">Email</label>

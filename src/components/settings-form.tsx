@@ -11,11 +11,13 @@ export function SettingsForm({
   initialGithubUsername,
   email,
   githubOauthEnabled,
+  googleOauthEnabled,
 }: {
   initialName: string;
   initialGithubUsername: string;
   email: string;
   githubOauthEnabled: boolean;
+  googleOauthEnabled: boolean;
 }) {
   const [name, setName] = useState(initialName);
   const [githubUsername, setGithubUsername] = useState(initialGithubUsername);
@@ -133,26 +135,39 @@ export function SettingsForm({
           )}
         </div>
         <div className="rounded border border-border bg-panel/40 p-3 text-xs">
-          <div className="font-semibold text-ink">Connect GitHub</div>
+          <div className="font-semibold text-ink">Connect identity providers</div>
           <p className="mt-1 text-muted">
-            Verifies repo ownership via GitHub OAuth. Self-declared GitHub identities on your existing
-            runs upgrade to <code className="rounded bg-panel2 px-1">github_oauth_owner_match</code> when the
-            connected login matches.
+            Connecting GitHub verifies repo ownership and upgrades self-declared runs to{" "}
+            <code className="rounded bg-panel2 px-1">github_oauth_owner_match</code>. Google is linking only.
           </p>
-          {githubOauthEnabled ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => signIn("github", { callbackUrl: "/candidate/settings" })}
-            >
-              Connect GitHub
-            </Button>
-          ) : (
-            <Badge tone="warn" className="mt-2 inline-flex">
-              OAuth not configured — set GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET
-            </Badge>
-          )}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {githubOauthEnabled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => signIn("github", { callbackUrl: "/candidate/settings" })}
+              >
+                Connect GitHub
+              </Button>
+            ) : (
+              <Badge tone="warn" className="inline-flex">
+                GitHub OAuth not configured
+              </Badge>
+            )}
+            {googleOauthEnabled ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => signIn("google", { callbackUrl: "/candidate/settings" })}
+              >
+                Connect Google
+              </Button>
+            ) : (
+              <Badge tone="warn" className="inline-flex">
+                Google OAuth not configured
+              </Badge>
+            )}
+          </div>
         </div>
       </section>
 

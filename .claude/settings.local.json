@@ -25,7 +25,8 @@
       "Bash(cmd //c \"tasklist /FI \\\\\"IMAGENAME eq node.exe\\\\\" /FO CSV\")",
       "Bash(cmd //c \"tasklist /FI \\\\\"IMAGENAME eq node.exe\\\\\"\")",
       "Bash(powershell -NoProfile -Command \"Get-Process node -ErrorAction SilentlyContinue | Select-Object Id,CPU,WS,StartTime | Format-Table -AutoSize\")",
-      "Bash(rm -f node_modules/.prisma/client/query_engine-windows.dll.node.tmp* 2>&1; sleep 2; npx prisma generate 2>&1 | tail -4)"
+      "Bash(rm -f node_modules/.prisma/client/query_engine-windows.dll.node.tmp* 2>&1; sleep 2; npx prisma generate 2>&1 | tail -4)",
+      "Bash(rm -f node_modules/.prisma/client/query_engine-windows.dll.node.tmp* 2>&1; npx prisma generate 2>&1 | tail -5)"
     ],
     "additionalDirectories": [
       "C:\\project_github\\Skillbuilder_AI\\node_modules\\.prisma\\client",

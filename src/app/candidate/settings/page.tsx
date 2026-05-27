@@ -36,6 +36,9 @@ export default async function CandidateSettingsPage() {
             githubOauthEnabled={
               !!process.env.GITHUB_CLIENT_ID && !!process.env.GITHUB_CLIENT_SECRET
             }
+            googleOauthEnabled={
+              !!process.env.GOOGLE_CLIENT_ID && !!process.env.GOOGLE_CLIENT_SECRET
+            }
           />
         </CardBody>
       </Card>
