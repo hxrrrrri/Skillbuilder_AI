@@ -5,7 +5,7 @@ const ORIGINAL_ENV = { ...process.env };
 describe("anthropic provider reasoning budget", () => {
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...ORIGINAL_ENV, ANTHROPIC_API_KEY: "test-key", SKILLPROOF_MOCK_LLM: "0" };
+    process.env = { ...ORIGINAL_ENV, ANTHROPIC_API_KEY: "test-key" };
   });
 
   afterEach(() => {
@@ -45,5 +45,50 @@ describe("anthropic provider reasoning budget", () => {
         thinking: { type: "enabled", budget_tokens: 32768 },
       }),
     );
+  });
+
+  it("retries invalid JSON once and then fails closed", async () => {
+    const create = vi.fn()
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "not json" }],
+        usage: { input_tokens: 10, output_tokens: 4 },
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: "text", text: "still not json" }],
+        usage: { input_tokens: 8, output_tokens: 3 },
+      });
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: vi.fn().mockImplementation(() => ({
+        messages: { create },
+      })),
+    }));
+
+    const { makeAnthropicApiProvider } = await import("./anthropic");
+    const provider = makeAnthropicApiProvider({ enabled: true });
+
+    await expect(provider.runJson({ system: "system", user: "user" }, '{"ok":boolean}')).rejects.toMatchObject({
+      code: "provider_invalid_json",
+    });
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("classifies authentication failure", async () => {
+    const create = vi.fn(async () => {
+      const err: any = new Error("invalid api key");
+      err.status = 401;
+      throw err;
+    });
+    vi.doMock("@anthropic-ai/sdk", () => ({
+      default: vi.fn().mockImplementation(() => ({
+        messages: { create },
+      })),
+    }));
+
+    const { makeAnthropicApiProvider } = await import("./anthropic");
+    const provider = makeAnthropicApiProvider({ enabled: true });
+
+    await expect(provider.runJson({ system: "system", user: "user" }, '{"ok":boolean}')).rejects.toMatchObject({
+      code: "provider_not_authenticated",
+    });
   });
 });

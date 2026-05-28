@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { loadProviderConfig, saveProviderConfig, type ProviderConfig } from "@/lib/providers/config";
 import { listProviderAvailability, selectProviderMatrix } from "@/lib/providers/provider-router";
-import { adminOrAnonymous, isNextResponse } from "@/lib/auth/guards-api";
+import { requireAdminApi, isNextResponse } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 const Mode = z.enum(["api", "cli", "hybrid", "local"]);
 
 export async function GET(req: Request) {
-  const auth = await adminOrAnonymous();
+  const auth = await requireAdminApi();
   if (isNextResponse(auth)) return auth;
 
   const url = new URL(req.url);
@@ -35,7 +35,7 @@ const ConfigBody = z.object({
 });
 
 export async function POST(req: Request) {
-  const auth = await adminOrAnonymous();
+  const auth = await requireAdminApi();
   if (isNextResponse(auth)) return auth;
 
   let body: z.infer<typeof ConfigBody>;
@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     saveProviderConfig(body.config as ProviderConfig);
     await writeAuditLog({
       action: "admin.providers.update",
-      actorUserId: auth.user?.id ?? null,
+      actorUserId: auth.user.id,
       tenantId: null,
       targetType: "provider_config",
       targetId: null,

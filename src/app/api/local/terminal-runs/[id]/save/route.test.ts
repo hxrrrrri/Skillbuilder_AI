@@ -5,6 +5,11 @@ const mocks = vi.hoisted(() => ({
   writeAuditLog: vi.fn(),
   saveCommandRunAsEvidence: vi.fn(),
   runCommand: vi.fn(),
+  prisma: {
+    analysisRun: {
+      findUnique: vi.fn(),
+    },
+  },
 }));
 
 vi.mock("@/lib/auth/session", async () => {
@@ -12,6 +17,7 @@ vi.mock("@/lib/auth/session", async () => {
   return { ...actual, getCurrentUser: mocks.getCurrentUser };
 });
 vi.mock("@/lib/auth/audit", () => ({ writeAuditLog: mocks.writeAuditLog }));
+vi.mock("@/lib/db", () => ({ prisma: mocks.prisma }));
 vi.mock("@/lib/local-runner/terminal-store", async () => {
   const actual = await vi.importActual<any>("@/lib/local-runner/terminal-store");
   return { ...actual, saveCommandRunAsEvidence: mocks.saveCommandRunAsEvidence };
@@ -32,7 +38,15 @@ function req(body: any): Request {
 describe("/api/local/terminal-runs/[id]/save", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.writeAuditLog.mockResolvedValue(undefined);
     mocks.getCurrentUser.mockResolvedValue({ id: "u1", role: "candidate", primaryTenantId: null });
+    mocks.prisma.analysisRun.findUnique.mockResolvedValue({
+      id: "r1",
+      candidateId: "cand-1",
+      createdByUserId: "u1",
+      tenantId: null,
+      candidate: { userId: "u1" },
+    });
     mocks.saveCommandRunAsEvidence.mockResolvedValue({
       commandRunId: "cmd-1",
       command: "git status",
@@ -67,6 +81,25 @@ describe("/api/local/terminal-runs/[id]/save", () => {
     expect(mocks.runCommand).not.toHaveBeenCalled();
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "terminal.command.saved_as_evidence" }),
+    );
+  });
+
+  it("blocks non-owners before saving evidence", async () => {
+    mocks.getCurrentUser.mockResolvedValue({ id: "u2", role: "candidate", primaryTenantId: null });
+    mocks.prisma.analysisRun.findUnique.mockResolvedValue({
+      id: "r1",
+      candidateId: "cand-1",
+      createdByUserId: "u1",
+      tenantId: null,
+      candidate: { userId: "u1" },
+    });
+    const { POST } = await import("./route");
+    const res = await POST(req({ run_id: "r1" }), { params: { id: "cmd-1" } });
+    expect(res.status).toBe(403);
+    expect(mocks.saveCommandRunAsEvidence).not.toHaveBeenCalled();
+    expect(mocks.runCommand).not.toHaveBeenCalled();
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "terminal.command.save_denied" }),
     );
   });
 });

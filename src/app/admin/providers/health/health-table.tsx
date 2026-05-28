@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { ClientDateTime } from "@/components/ui/client-datetime";
 
 type Row = {
   providerId: string;
@@ -22,6 +23,7 @@ type Row = {
   lastLatencyMs: number | null;
   lastRawOutputPreview: string | null;
   lastError: string | null;
+  lastTestJsonOk: boolean | null;
   fix: string;
   command: string | null;
 };
@@ -91,8 +93,9 @@ function HealthRow({ row }: { row: Row }) {
         <KV k="Version" v={row.version ?? "-"} />
         <KV k="Command" v={row.command ?? "-"} />
         <KV k="Configured model" v={row.configuredModel ?? "-"} />
-        <KV k="Last tested" v={row.lastTestedAt ? new Date(row.lastTestedAt).toLocaleString() : "never"} />
+        <KV k="Last tested" v={<ClientDateTime value={row.lastTestedAt} empty="never" />} />
         <KV k="JSON" v={row.supportsJson ? "yes" : "no"} />
+        <KV k="JSON contract" v={row.lastTestJsonOk == null ? "not tested" : row.lastTestJsonOk ? "passed" : "failed"} />
         <KV k="Non-interactive" v={row.supportsNonInteractive ? "yes" : "no"} />
         <KV k="Model flag" v={row.supportsModelSelection ? "yes" : "no"} />
         <KV k="Reasoning" v={row.supportsReasoningBudget ? "yes" : "no"} />
@@ -117,7 +120,7 @@ function HealthRow({ row }: { row: Row }) {
   );
 }
 
-function KV({ k, v }: { k: string; v: string }) {
+function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div>
       <span className="font-semibold uppercase tracking-wide text-[10px] text-muted">{k}</span>

@@ -23,6 +23,39 @@ export type RunOptions = {
 const DEFAULT_TIMEOUT = 60_000;
 const DEFAULT_MAX_OUTPUT = 256 * 1024;
 
+function cmdQuote(value: string): string {
+  const normalized = value.replace(/\r?\n/g, " ");
+  if (/^[a-zA-Z0-9_./:\\-]+$/.test(normalized)) return normalized;
+  return `"${normalized.replace(/(["^&|<>])/g, "^$1").replace(/%/g, "%%")}"`;
+}
+
+function prepareSpawn(command: string, args: string[], shell: boolean | undefined): {
+  command: string;
+  args: string[];
+  shell: boolean;
+} {
+  if (shell !== undefined) return { command, args, shell };
+  if (process.platform !== "win32") return { command, args, shell: false };
+
+  // Windows package managers and global CLIs are commonly .cmd shims. Run them
+  // through cmd.exe without Node's shell option so arguments are controlled.
+  const line = [command, ...args].map(cmdQuote).join(" ");
+  return {
+    command: process.env.ComSpec || "cmd.exe",
+    args: ["/d", "/s", "/c", line],
+    shell: false,
+  };
+}
+
+function mergeEnv(overrides?: Record<string, string | undefined>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  for (const [key, value] of Object.entries(overrides ?? {})) {
+    if (value === undefined) delete env[key];
+    else env[key] = value;
+  }
+  return env;
+}
+
 export async function runCommand(opts: RunOptions): Promise<CommandRun> {
   const id = randomUUID();
   const command = opts.command;
@@ -60,12 +93,11 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 
     let child;
     try {
-      child = spawn(command, args, {
+      const spawnTarget = prepareSpawn(command, args, opts.shell);
+      child = spawn(spawnTarget.command, spawnTarget.args, {
         cwd,
-        env: { ...process.env, ...opts.env },
-        // On Windows, Volta (and npm global installs) create .cmd shims — not .exe.
-        // spawn() without shell can't resolve .cmd files, causing ENOENT for codex, copilot, etc.
-        shell: opts.shell ?? (process.platform === "win32"),
+        env: mergeEnv(opts.env),
+        shell: spawnTarget.shell,
         windowsHide: true,
       });
     } catch (err: any) {

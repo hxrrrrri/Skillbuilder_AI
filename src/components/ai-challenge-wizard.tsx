@@ -198,7 +198,7 @@ export function AIChallengeWizard({
       )}
 
       {step === 4 && (
-        <Step title="5. Review discipline" help="Be honest — heuristics penalize empty boxes.">
+        <Step title="5. Review discipline" help="Be honest; unsupported claims lower confidence.">
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <label className="flex items-center gap-2 rounded border border-border bg-panel/60 p-2">
               <input type="checkbox" checked={reviewed} onChange={(e) => setReviewed(e.target.checked)} />

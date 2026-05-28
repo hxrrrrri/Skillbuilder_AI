@@ -262,7 +262,7 @@ function buildTrustBadges(input: {
   if (input.testingDetected) badges.push("Tests Detected");
   if (input.aiCollabScore != null) badges.push("AI Collaboration Reviewed");
   badges.push("Public-Safe Report");
-  if (input.mockOrHeuristic) badges.push("Mock Mode Warning");
+  if (input.mockOrHeuristic) badges.push("Unverified legacy source");
   if (input.evidenceCount > 0) badges.push("Hallucination Checks Passed");
   return badges;
 }

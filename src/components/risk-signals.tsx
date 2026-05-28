@@ -102,7 +102,7 @@ export function RiskSignalsCard({
   if (signals.length === 0) {
     return (
       <p className="text-sm text-muted">
-        No risk signals raised. This does not certify everything is fine — it means our heuristics did not flag anything.
+        No risk signals raised. This does not certify everything is fine; it means the available evidence checks did not flag anything.
       </p>
     );
   }

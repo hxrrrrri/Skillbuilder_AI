@@ -1,6 +1,7 @@
 "use client";
 import { useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { ClientDateTime } from "@/components/ui/client-datetime";
 
 type Event = {
   id: string;
@@ -56,8 +57,8 @@ export function TraceEventList({ events }: { events: Event[] }) {
             {open && (
               <div className="border-t border-border bg-panel2/60 px-3 py-3 text-xs">
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <Field k="Started" v={e.startedAt ? new Date(e.startedAt).toLocaleString() : "—"} />
-                  <Field k="Completed" v={e.completedAt ? new Date(e.completedAt).toLocaleString() : "—"} />
+                  <Field k="Started" v={<ClientDateTime value={e.startedAt} empty="—" />} />
+                  <Field k="Completed" v={<ClientDateTime value={e.completedAt} empty="—" />} />
                   <Field k="Order" v={String(e.order)} />
                   <Field k="Status" v={e.status} />
                 </div>
@@ -71,7 +72,7 @@ export function TraceEventList({ events }: { events: Event[] }) {
   );
 }
 
-function Field({ k, v }: { k: string; v: string }) {
+function Field({ k, v }: { k: string; v: ReactNode }) {
   return (
     <div>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-muted">{k}</p>

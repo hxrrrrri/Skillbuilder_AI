@@ -1,5 +1,5 @@
 /**
- * Seeds demo accounts for each role. Idempotent — safe to re-run.
+ * Seeds local development accounts for each role. Idempotent — safe to re-run.
  * Run with: npm run db:seed-users
  */
 import { PrismaClient } from "@prisma/client";
@@ -7,9 +7,9 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-const DEMO_PASSWORD = "demo1234";
+const SEEDED_PASSWORD = "demo1234";
 
-type DemoUser = {
+type SeededUser = {
   email: string;
   name: string;
   role: "candidate" | "employer" | "college_admin" | "admin" | "super_admin";
@@ -17,7 +17,7 @@ type DemoUser = {
   tenant?: { slug: string; name: string; kind: "college" | "employer" | "platform" };
 };
 
-const USERS: DemoUser[] = [
+const USERS: SeededUser[] = [
   {
     email: "candidate@skillproof.dev",
     name: "Casey Candidate",
@@ -44,7 +44,7 @@ const USERS: DemoUser[] = [
 ];
 
 async function main() {
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const passwordHash = await bcrypt.hash(SEEDED_PASSWORD, 10);
 
   for (const u of USERS) {
     let tenantId: string | null = null;
@@ -103,7 +103,7 @@ async function main() {
     console.log(`  - ${u.email}  [${u.role}]${tenantId ? `  tenant=${u.tenant!.slug}` : ""}`);
   }
 
-  console.log(`\nDone. Password for every account: ${DEMO_PASSWORD}\n`);
+  console.log(`\nDone. Password for every local seeded account: ${SEEDED_PASSWORD}\n`);
 }
 
 main()

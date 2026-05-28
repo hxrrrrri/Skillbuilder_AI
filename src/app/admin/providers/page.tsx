@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ADMIN_NAV } from "../_nav";
 import { ProviderTable } from "./provider-table";
+import { modelsForProvider } from "@/lib/providers/model-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -18,32 +19,38 @@ export default async function AdminProvidersPage() {
   ]);
   const liveAvailability = Object.fromEntries(availability.map((a) => [a.id, a.available]));
 
-  const rows = providers.filter((p) => p.providerId !== "mock").map((p) => ({
-    id: p.id,
-    providerId: p.providerId,
-    label: p.label,
-    kind: p.kind,
-    enabled: p.enabled,
-    defaultModel: p.defaultModel,
-    baseUrl: p.baseUrl,
-    command: p.command,
-    apiKeyEnv: p.apiKeyEnv,
-    notes: p.notes,
-    capabilities: parseJson(p.capabilities) as {
+  const rows = providers.filter((p) => p.providerId !== "mock").map((p) => {
+    const capabilities = parseJson(p.capabilities) as {
       reasoning?: boolean;
       jsonMode?: boolean;
       streaming?: boolean;
       models?: string[];
-    } | null,
-    lastTestedAt: p.lastTestedAt ? p.lastTestedAt.toISOString() : null,
-    lastTestStatus: p.lastTestStatus,
-    lastTestModel: p.lastTestModel,
-    lastTestRaw: p.lastTestRaw,
-    lastTestJsonOk: p.lastTestJsonOk,
-    lastTestLatencyMs: p.lastTestLatencyMs,
-    lastTestError: p.lastTestError,
-    liveAvailable: !!liveAvailability[p.providerId],
-  }));
+    } | null;
+    return {
+      id: p.id,
+      providerId: p.providerId,
+      label: p.label,
+      kind: p.kind,
+      enabled: p.enabled,
+      defaultModel: p.defaultModel,
+      baseUrl: p.baseUrl,
+      command: p.command,
+      apiKeyEnv: p.apiKeyEnv,
+      notes: p.notes,
+      capabilities: {
+        ...(capabilities ?? {}),
+        models: modelsForProvider(p.providerId, capabilities?.models ?? []),
+      },
+      lastTestedAt: p.lastTestedAt ? p.lastTestedAt.toISOString() : null,
+      lastTestStatus: p.lastTestStatus,
+      lastTestModel: p.lastTestModel,
+      lastTestRaw: p.lastTestRaw,
+      lastTestJsonOk: p.lastTestJsonOk,
+      lastTestLatencyMs: p.lastTestLatencyMs,
+      lastTestError: p.lastTestError,
+      liveAvailable: !!liveAvailability[p.providerId],
+    };
+  });
 
   const apiKeyPresent = !!process.env.ANTHROPIC_API_KEY;
 

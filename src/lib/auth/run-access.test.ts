@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { NextResponse } from "next/server";
 import type { SessionUser } from "./session";
-import { evaluateRunAccess, isNextResponse } from "./guards-api";
+import { evaluateRunAccess, evaluateRunMutationAccess, isNextResponse } from "./guards-api";
 
 function userWith(
   role: SessionUser["role"],
@@ -140,5 +140,64 @@ describe("evaluateRunAccess", () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.response).toBeInstanceOf(NextResponse);
+  });
+});
+
+describe("evaluateRunMutationAccess", () => {
+  it("returns 401 when no user is signed in", () => {
+    const r = evaluateRunMutationAccess(null, baseRun, "submit_interview_answer");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("unauthenticated");
+    expect(r.response.status).toBe(401);
+  });
+
+  it("candidate can submit their own interview answer", () => {
+    const user = userWith("candidate", { id: "user-A" });
+    const r = evaluateRunMutationAccess(
+      user,
+      { ...baseRun, candidateUserId: "user-A" },
+      "submit_interview_answer",
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.reason).toBe("candidate_owner");
+  });
+
+  it("candidate cannot submit another candidate's answer", () => {
+    const user = userWith("candidate", { id: "user-A" });
+    const r = evaluateRunMutationAccess(
+      user,
+      { ...baseRun, candidateUserId: "user-B", createdByUserId: "user-B" },
+      "submit_interview_answer",
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.response.status).toBe(403);
+  });
+
+  it("college cannot submit interview or AI challenge mutations", () => {
+    const user = userWith("college_admin", { id: "college-A", tenantIds: ["tenant-1"] });
+    for (const action of ["submit_interview_answer", "submit_ai_challenge"] as const) {
+      const r = evaluateRunMutationAccess(user, { ...baseRun, tenantId: "tenant-1" }, action);
+      expect(r.ok).toBe(false);
+      if (r.ok) continue;
+      expect(r.response.status).toBe(403);
+    }
+  });
+
+  it("employer cannot mutate candidate proof", () => {
+    const user = userWith("employer", { id: "employer-A", tenantIds: ["tenant-1"] });
+    const r = evaluateRunMutationAccess(user, { ...baseRun, tenantId: "tenant-1" }, "publish_profile");
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.response.status).toBe(403);
+  });
+
+  it("admin can override proof mutations", () => {
+    const r = evaluateRunMutationAccess(userWith("admin"), baseRun, "verify_ownership");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.reason).toBe("admin");
   });
 });

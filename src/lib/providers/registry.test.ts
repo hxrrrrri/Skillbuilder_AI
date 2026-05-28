@@ -83,3 +83,14 @@ describe("registry validators", () => {
     expect(QUALITY_TIERS).toEqual(["low", "medium", "high"]);
   });
 });
+
+describe("deterministic provider runtime guard", () => {
+  it("cannot generate LLM output", async () => {
+    const { deterministicProvider } = await import("./deterministic");
+    await expect(
+      deterministicProvider.runJson({ system: "s", user: "u" }, '{"ok":boolean}'),
+    ).rejects.toMatchObject({
+      code: "provider_unsupported",
+    });
+  });
+});

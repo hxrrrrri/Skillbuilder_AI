@@ -1,4 +1,5 @@
 import type { ProviderId, ProviderMatrixAgentEntry, ProviderResult } from "./types";
+import type { CommandRun } from "@/lib/local-runner/types";
 
 export type ProviderErrorCode =
   | "provider_unavailable"
@@ -6,6 +7,7 @@ export type ProviderErrorCode =
   | "provider_execution_failed"
   | "provider_not_authenticated"
   | "provider_missing_binary"
+  | "provider_timeout"
   | "provider_disabled"
   | "provider_unsupported";
 
@@ -53,12 +55,13 @@ export class ProviderInvalidJsonError extends ProviderExecutionError {
     provider: ProviderId;
     message?: string;
     agentName?: string;
-    result?: ProviderResult;
+    result?: Pick<ProviderResult, "command" | "exitCode" | "stderr" | "stdout" | "raw"> | CommandRun;
     raw?: string;
     fix?: string | null;
     runtime?: ProviderMatrixAgentEntry;
   }) {
-    const raw = args.raw ?? args.result?.raw ?? "";
+    const resultRaw = args.result && "raw" in args.result ? args.result.raw : undefined;
+    const raw = args.raw ?? resultRaw ?? "";
     super({
       provider: args.provider,
       message: args.message ?? `${args.provider} returned invalid JSON after retry`,

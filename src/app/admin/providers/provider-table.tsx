@@ -2,6 +2,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { ClientDateTime } from "@/components/ui/client-datetime";
 
 type Row = {
   id: string;
@@ -52,6 +53,10 @@ function ProviderRow({ row }: { row: Row }) {
   const [notes, setNotes] = useState(row.notes ?? "");
   const [testBusy, setTestBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const modelOptions = row.capabilities?.models ?? [];
+  const defaultModelOptions = defaultModel && !modelOptions.includes(defaultModel)
+    ? [defaultModel, ...modelOptions]
+    : modelOptions;
 
   async function save() {
     setError(null);
@@ -194,10 +199,7 @@ function ProviderRow({ row }: { row: Row }) {
             k="Registry models"
             v={row.capabilities?.models?.length ? row.capabilities.models.join(", ") : "—"}
           />
-          <KV
-            k="Last tested"
-            v={row.lastTestedAt ? new Date(row.lastTestedAt).toLocaleString() : "never"}
-          />
+          <KV k="Last tested" v={<ClientDateTime value={row.lastTestedAt} empty="never" />} />
           <KV k="Last test model" v={row.lastTestModel ?? "—"} />
           <KV k="JSON parse" v={row.lastTestJsonOk == null ? "—" : row.lastTestJsonOk ? "ok" : "failed"} />
           <KV k="Latency" v={row.lastTestLatencyMs == null ? "—" : `${row.lastTestLatencyMs}ms`} />
@@ -229,11 +231,18 @@ function ProviderRow({ row }: { row: Row }) {
         <div className="border-t border-border px-3 py-3">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Default model">
-              <input
+              <select
                 value={defaultModel}
                 onChange={(e) => setDefaultModel(e.target.value)}
                 className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 text-xs text-ink"
-              />
+              >
+                <option value="">Provider default</option>
+                {defaultModelOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="API key env var">
               <input
@@ -301,7 +310,7 @@ function Field({ label, children, className }: { label: string; children: React.
   );
 }
 
-function KV({ k, v }: { k: string; v: string }) {
+function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div>
       <span className="font-semibold uppercase tracking-wide text-[10px] text-muted">{k}</span>

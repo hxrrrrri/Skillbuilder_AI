@@ -2,7 +2,7 @@
 
 import { loadProviderConfig } from "./config";
 import type { ProviderTemplate } from "./config";
-import { ProviderExecutionError } from "./errors";
+import { ProviderExecutionError, ProviderInvalidJsonError } from "./errors";
 import { jsonRepairPrompt, parseProviderJson } from "./json";
 import type { LLMProvider, ProviderHealth, ProviderPrompt, ProviderResult } from "./types";
 
@@ -45,11 +45,11 @@ export async function detectOllama(template?: ProviderTemplate): Promise<Provide
   try {
     const models = await listModels(baseUrl);
     const names = models.map((m) => String(m?.name ?? m?.model ?? "")).filter(Boolean);
-    const installed = names.some((n) => n === model || n.startsWith(`${model}:`) || model.startsWith(`${n}:`));
+    const installed = modelInstalled(names, model);
     return {
       providerId: "ollama",
       label: "Ollama",
-      status: installed ? "ready" : "invalid_command",
+      status: installed ? "ready" : "failed",
       enabled: true,
       installed: true,
       authenticated: true,
@@ -71,7 +71,7 @@ export async function detectOllama(template?: ProviderTemplate): Promise<Provide
     return {
       providerId: "ollama",
       label: "Ollama",
-      status: "missing_binary",
+      status: "failed",
       enabled: true,
       installed: false,
       authenticated: true,
@@ -104,15 +104,46 @@ export function makeOllamaProvider(template?: ProviderTemplate): LLMProvider {
       const cfg = template ?? loadProviderConfig().providers.ollama;
       const baseUrl = cfg?.baseUrl ?? "http://localhost:11434";
       const model = prompt.model ?? cfg?.model ?? "llama3.1:8b";
+      let models: any[];
+      try {
+        models = await listModels(baseUrl);
+      } catch (err: any) {
+        throw new ProviderExecutionError({
+          provider: "ollama",
+          code: "provider_unavailable",
+          message: `Ollama server is unavailable: ${err?.message ?? String(err)}`,
+          fix: "Install/start Ollama, verify the configured base URL, then rerun the provider health test.",
+        });
+      }
+      const names = models.map((m) => String(m?.name ?? m?.model ?? "")).filter(Boolean);
+      if (!modelInstalled(names, model)) {
+        throw new ProviderExecutionError({
+          provider: "ollama",
+          code: "provider_unavailable",
+          message: `Configured Ollama model '${model}' is not installed.`,
+          fix: `Pull it explicitly from an admin terminal: ollama pull ${model}`,
+        });
+      }
       const system = `${prompt.system}\nReturn JSON only matching: ${schemaHint}`;
       const first = await generate(baseUrl, model, system, prompt.user, prompt.temperature);
       const firstJson = parseProviderJson(first.raw);
       if (firstJson !== null) return { ...first, json: firstJson };
       const repair = jsonRepairPrompt(prompt.user, schemaHint, first.raw);
       const retry = await generate(baseUrl, model, system, repair, 0);
-      return { ...retry, json: parseProviderJson(retry.raw) };
+      const repairedJson = parseProviderJson(retry.raw);
+      if (repairedJson !== null) return { ...retry, json: repairedJson };
+      throw new ProviderInvalidJsonError({
+        provider: "ollama",
+        result: retry,
+        raw: retry.raw,
+        fix: "Use a model that reliably follows JSON mode, lower temperature, or update the provider prompt contract.",
+      });
     },
   };
+}
+
+function modelInstalled(names: string[], model: string): boolean {
+  return names.some((n) => n === model || n.startsWith(`${model}:`) || model.startsWith(`${n}:`));
 }
 
 async function generate(

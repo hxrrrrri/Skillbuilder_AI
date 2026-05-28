@@ -29,17 +29,29 @@ export type ProviderConfig = {
 
 const DEFAULTS: ProviderConfig = {
   providers: {
-    claude_cli: { command: "claude", args: ["--print", "--output-format", "text", "--no-session-persistence", "{{prompt}}"], enabled: true },
-    codex_cli: { command: "codex", args: ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-"], enabled: true },
+    claude_cli: {
+      command: "claude",
+      args: ["--print", "--output-format", "text", "--no-session-persistence"],
+      enabled: true,
+    },
+    codex_cli: {
+      command: "codex",
+      args: ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-"],
+      enabled: true,
+    },
     ollama: { model: "llama3.1:8b", baseUrl: "http://localhost:11434", enabled: true },
-    copilot_cli: { command: "copilot", args: ["-p", "{{prompt}}", "--silent", "--stream", "off", "--no-auto-update", "--allow-all-tools"], enabled: true },
+    copilot_cli: {
+      command: "copilot",
+      args: ["-p", "{{prompt}}", "--silent", "--stream", "off", "--no-auto-update", "--no-ask-user"],
+      enabled: true,
+    },
   },
   roles: {
-    orchestrator: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
-    worker: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
-    validator: ["anthropic_api", "codex_cli", "claude_cli", "ollama"],
-    interview: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
-    profile: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
+    orchestrator: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
+    worker: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
+    validator: ["anthropic_api", "codex_cli", "claude_cli", "copilot_cli", "ollama"],
+    interview: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
+    profile: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
   },
 };
 

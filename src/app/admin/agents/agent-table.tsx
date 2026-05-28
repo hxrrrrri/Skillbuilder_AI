@@ -2,6 +2,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { ClientDateTime } from "@/components/ui/client-datetime";
 
 type ProviderOption = {
   id: string;
@@ -106,7 +107,18 @@ function AgentRow({
     [providers, providerId],
   );
   const reasoningSupported = !!currentProvider?.reasoningSupported;
-  const models = currentProvider?.capabilities?.models ?? [];
+  const models = useMemo(() => {
+    const listed = currentProvider?.capabilities?.models ?? [];
+    return model && !listed.includes(model) ? [model, ...listed] : listed;
+  }, [currentProvider, model]);
+  const fallbackProviderOption = useMemo(
+    () => providers.find((p) => p.id === fallbackProvider),
+    [providers, fallbackProvider],
+  );
+  const fallbackModels = useMemo(() => {
+    const listed = fallbackProviderOption?.capabilities?.models ?? [];
+    return fallbackModel && !listed.includes(fallbackModel) ? [fallbackModel, ...listed] : listed;
+  }, [fallbackProviderOption, fallbackModel]);
 
   async function save() {
     setError(null);
@@ -210,7 +222,7 @@ function AgentRow({
           <KV k="Retries" v={String(retryCount)} />
           <KV k="Fallback" v={`${fallbackProvider || "—"} / ${fallbackStrategy}`} />
           <KV k="Reasoning maps to" v={row.reasoningMappingDetail} />
-          <KV k="Updated" v={new Date(row.updatedAt).toLocaleString()} />
+          <KV k="Updated" v={<ClientDateTime value={row.updatedAt} />} />
         </div>
       )}
 
@@ -223,7 +235,7 @@ function AgentRow({
                 onChange={(e) => {
                   setProviderId(e.target.value);
                   const np = providers.find((p) => p.id === e.target.value);
-                  if (np?.defaultModel) setModel(np.defaultModel);
+                  setModel(np?.defaultModel || np?.capabilities?.models?.[0] || "");
                   if (np && !np.reasoningSupported) setReasoningBudget("none");
                 }}
                 className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 text-xs text-ink"
@@ -236,17 +248,17 @@ function AgentRow({
               </select>
             </Field>
             <Field label="Model">
-              <input
+              <select
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
-                list={`models-${row.agentName}`}
                 className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 font-mono text-xs text-ink"
-              />
-              <datalist id={`models-${row.agentName}`}>
+              >
                 {models.map((m) => (
-                  <option key={m} value={m} />
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
                 ))}
-              </datalist>
+              </select>
             </Field>
             <Field label="Reasoning budget">
               <select
@@ -304,7 +316,12 @@ function AgentRow({
             <Field label="Fallback provider">
               <select
                 value={fallbackProvider}
-                onChange={(e) => setFallbackProvider(e.target.value)}
+                onChange={(e) => {
+                  const nextProvider = e.target.value;
+                  setFallbackProvider(nextProvider);
+                  const np = providers.find((p) => p.id === nextProvider);
+                  setFallbackModel(nextProvider ? np?.defaultModel || np?.capabilities?.models?.[0] || "" : "");
+                }}
                 className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 text-xs text-ink"
               >
                 <option value="">— none —</option>
@@ -316,11 +333,19 @@ function AgentRow({
               </select>
             </Field>
             <Field label="Fallback model">
-              <input
+              <select
                 value={fallbackModel}
                 onChange={(e) => setFallbackModel(e.target.value)}
-                className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 font-mono text-xs text-ink"
-              />
+                disabled={!fallbackProvider}
+                className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 font-mono text-xs text-ink disabled:opacity-40"
+              >
+                <option value="">No fallback model</option>
+                {fallbackModels.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
             </Field>
             <Field label="Fallback strategy">
               <select
@@ -419,7 +444,7 @@ function Field({ label, children, className }: { label: string; children: React.
   );
 }
 
-function KV({ k, v }: { k: string; v: string }) {
+function KV({ k, v }: { k: string; v: React.ReactNode }) {
   return (
     <div>
       <span className="font-semibold uppercase tracking-wide text-[10px] text-muted">{k}</span>

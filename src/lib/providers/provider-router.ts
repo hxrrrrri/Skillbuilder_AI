@@ -9,6 +9,7 @@ import { deterministicProvider } from "./deterministic";
 import { ProviderExecutionError, ProviderInvalidJsonError } from "./errors";
 import { makeOllamaProvider } from "./ollama";
 import { mapReasoningBudget, type ReasoningBudget } from "./reasoning";
+import { defaultModelForProvider } from "./model-catalog";
 import {
   AGENT_NAMES,
   listProviderConfigs,
@@ -141,7 +142,8 @@ function modelForProvider(provider: ProviderId, resolved: ResolvedAgentConfig): 
   if (provider === resolved.provider) return resolved.model;
   const cfg = loadProviderConfig();
   if (provider === "ollama") return cfg.providers.ollama?.model ?? resolved.model;
-  return resolved.model;
+  const configured = cfg.providers[provider as keyof typeof cfg.providers]?.model;
+  return defaultModelForProvider(provider, configured);
 }
 
 async function chooseAvailableProvider(
@@ -190,6 +192,19 @@ async function resolveMatrixEntry(
   reg: Record<ProviderId, LLMProvider>,
 ): Promise<ProviderMatrixAgentEntry> {
   const resolved = await resolveAgentConfig(agentName);
+  const modeRequiresNonApi = mode === "cli" || mode === "local";
+  const apiUnavailableInHybrid =
+    mode === "hybrid" && resolved.provider === "anthropic_api" && !(await reg.anthropic_api.available());
+  if ((modeRequiresNonApi && resolved.provider === "anthropic_api") || apiUnavailableInHybrid) {
+    const chosen = await chooseAvailableProvider(role, mode, reg);
+    return {
+      ...toMatrixEntry(resolved, chosen.source),
+      provider: chosen.provider,
+      model: modelForProvider(chosen.provider, resolved),
+      reasoningBudget: chosen.provider === "anthropic_api" ? resolved.reasoningBudget : "none",
+      note: `execution mode ${mode} selected ${chosen.provider} instead of anthropic_api`,
+    };
+  }
   if (resolved.source === "db") return toMatrixEntry(resolved, "db");
   if (resolved.provider === "deterministic") return toMatrixEntry(resolved, "deterministic");
 

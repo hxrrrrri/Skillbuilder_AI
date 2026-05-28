@@ -12,6 +12,7 @@
 import { prisma } from "@/lib/db";
 import type { FallbackStrategy, ProviderId, ProviderMatrixAgentEntry } from "./types";
 import { REASONING_BUDGETS, isReasoningBudget, type ReasoningBudget } from "./reasoning";
+import { PROVIDER_MODEL_CATALOG } from "./model-catalog";
 
 export const PROVIDER_DEFAULTS: Array<{
   providerId: ProviderId;
@@ -40,7 +41,7 @@ export const PROVIDER_DEFAULTS: Array<{
       reasoning: true,
       jsonMode: true,
       streaming: true,
-      models: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+      models: PROVIDER_MODEL_CATALOG.anthropic_api,
     },
   },
   {
@@ -51,7 +52,7 @@ export const PROVIDER_DEFAULTS: Array<{
     apiKeyEnv: null,
     command: "claude",
     baseUrl: null,
-    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: [] },
+    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: PROVIDER_MODEL_CATALOG.claude_cli },
   },
   {
     providerId: "codex_cli",
@@ -61,7 +62,7 @@ export const PROVIDER_DEFAULTS: Array<{
     apiKeyEnv: null,
     command: "codex",
     baseUrl: null,
-    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: [] },
+    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: PROVIDER_MODEL_CATALOG.codex_cli },
   },
   {
     providerId: "copilot_cli",
@@ -71,7 +72,7 @@ export const PROVIDER_DEFAULTS: Array<{
     apiKeyEnv: null,
     command: "copilot",
     baseUrl: null,
-    capabilities: { reasoning: true, jsonMode: true, streaming: false, models: [] },
+    capabilities: { reasoning: true, jsonMode: true, streaming: false, models: PROVIDER_MODEL_CATALOG.copilot_cli },
   },
   {
     providerId: "ollama",
@@ -85,7 +86,7 @@ export const PROVIDER_DEFAULTS: Array<{
       reasoning: false,
       jsonMode: true,
       streaming: true,
-      models: ["llama3.1:8b", "qwen2.5-coder:7b", "deepseek-r1:7b"],
+      models: PROVIDER_MODEL_CATALOG.ollama,
     },
   },
   {
@@ -96,7 +97,7 @@ export const PROVIDER_DEFAULTS: Array<{
     apiKeyEnv: null,
     command: null,
     baseUrl: null,
-    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: ["repo-scanner", "git-evidence", "skill-graph"] },
+    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: PROVIDER_MODEL_CATALOG.deterministic },
   },
 ];
 

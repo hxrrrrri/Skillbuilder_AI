@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
+import { ClientDateTime } from "@/components/ui/client-datetime";
 
 type PromptRow = {
   id: string;
@@ -183,7 +184,9 @@ function PromptCard({ agentName, rows }: { agentName: string; rows: PromptRow[] 
                 <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
                   <div className="flex items-center gap-2">
                     <Badge tone={row.isActive ? "good" : "default"}>v{row.version}</Badge>
-                    <span className="text-muted">{new Date(row.createdAt).toLocaleString()}</span>
+                    <span className="text-muted">
+                      <ClientDateTime value={row.createdAt} />
+                    </span>
                     <span className="font-mono text-muted">{row.system.length} chars</span>
                   </div>
                   <div className="flex items-center gap-2">

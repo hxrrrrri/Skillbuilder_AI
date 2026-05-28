@@ -44,6 +44,7 @@ describe("/api/local/command", () => {
     vi.clearAllMocks();
     (process.env as any).NODE_ENV = "test";
     delete (process.env as any).SKILLPROOF_TERMINAL_ENABLED;
+    mocks.writeAuditLog.mockResolvedValue(undefined);
     mocks.getCurrentUser.mockResolvedValue({ id: "u1", role: "candidate", tenantIds: [] });
     mocks.prisma.analysisRun.findUnique.mockResolvedValue({
       id: "r1",

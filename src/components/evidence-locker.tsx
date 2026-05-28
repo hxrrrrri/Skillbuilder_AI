@@ -38,9 +38,9 @@ function sourceLabel(src: string): { label: string; tone: "good" | "warn" | "bad
     case "deterministic":
       return { label: "Deterministic", tone: "good" };
     case "heuristic":
-      return { label: "Legacy heuristic", tone: "bad" };
+      return { label: "Unverified legacy", tone: "bad" };
     case "mock":
-      return { label: "Legacy mock", tone: "bad" };
+      return { label: "Unverified legacy", tone: "bad" };
     case "not_measured":
       return { label: "Not measured", tone: "default" };
     default:
@@ -135,7 +135,7 @@ export function EvidenceLocker({ scores }: { scores: Score[] }) {
                           {e.line_start ? `:${e.line_start}${e.line_end && e.line_end !== e.line_start ? `-${e.line_end}` : ""}` : e.line ? `:${e.line}` : ""}
                         </span>
                       )}
-                      {e.source && <Badge className="mr-1 align-middle" tone={e.source === "terminal" || e.source === "deterministic" ? "good" : e.source === "mock" || e.source === "heuristic" ? "bad" : "default"}>{e.source}</Badge>}
+                      {e.source && <Badge className="mr-1 align-middle" tone={e.source === "terminal" || e.source === "deterministic" ? "good" : e.source === "mock" || e.source === "heuristic" ? "bad" : "default"}>{e.source === "mock" || e.source === "heuristic" ? "unverified" : e.source}</Badge>}
                       {e.reason}
                       {e.validator_note && <span className="ml-1 text-warn">({e.validator_note})</span>}
                       {e.snippet && (

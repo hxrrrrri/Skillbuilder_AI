@@ -414,8 +414,8 @@ function TrustList({
       {evidenceSet.has("github_api") && <Badge tone="good">GitHub API verified</Badge>}
       {evidenceSet.has("local_clone") && <Badge tone="good">Local clone verified</Badge>}
       {sourceSet.has("llm") && <Badge tone="accent">LLM judged</Badge>}
-      {sourceSet.has("heuristic") && <Badge tone="bad">Legacy heuristic</Badge>}
-      {(sourceSet.has("mock") || executionMode === "mock") && <Badge tone="bad">Legacy mock</Badge>}
+      {sourceSet.has("heuristic") && <Badge tone="bad">Unverified legacy source</Badge>}
+      {(sourceSet.has("mock") || executionMode === "mock") && <Badge tone="bad">Unverified legacy source</Badge>}
       {ownership?.confidence === "verified" && <Badge tone="good">Ownership verified</Badge>}
       {ownership?.confidence === "self_declared" && <Badge tone="warn">Self-declared</Badge>}
       {!ownership && <Badge>Not measured</Badge>}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardBody } from "@/components/ui/card";
 
-const DEMO_ACCOUNTS = [
+const SEEDED_ACCOUNTS = [
   { label: "Candidate", email: "candidate@skillproof.dev" },
   { label: "Employer", email: "employer@skillproof.dev" },
   { label: "College admin", email: "college@skillproof.dev" },
@@ -51,7 +51,7 @@ export function LoginForm({
     router.refresh();
   }
 
-  function fillDemo(addr: string) {
+  function fillSeededAccount(addr: string) {
     setEmail(addr);
     setPassword("demo1234");
   }
@@ -124,14 +124,14 @@ export function LoginForm({
         </form>
 
         <div className="mt-6 border-t border-border pt-4 text-xs text-muted">
-          <p className="font-semibold uppercase tracking-wide text-ink">Demo accounts</p>
-          <p className="mt-1">Password is <code className="rounded bg-panel2 px-1">demo1234</code> for every seeded account.</p>
+          <p className="font-semibold uppercase tracking-wide text-ink">Local seeded accounts</p>
+          <p className="mt-1">Password is <code className="rounded bg-panel2 px-1">demo1234</code> for every local seeded account.</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            {DEMO_ACCOUNTS.map((acct) => (
+            {SEEDED_ACCOUNTS.map((acct) => (
               <button
                 key={acct.email}
                 type="button"
-                onClick={() => fillDemo(acct.email)}
+                onClick={() => fillSeededAccount(acct.email)}
                 className="rounded-md border border-border bg-panel2 px-2 py-1.5 text-left text-xs text-ink transition hover:border-accent/60 hover:text-accent"
               >
                 <div className="font-semibold">{acct.label}</div>

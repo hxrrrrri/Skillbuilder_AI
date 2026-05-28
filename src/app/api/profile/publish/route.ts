@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     return NextResponse.json(
       {
         error: "unverified_profile_blocked",
-        reason: "Public profiles cannot be generated from mock or heuristic scores.",
+        reason: "Public profiles cannot be generated from unverified legacy score sources.",
         unsafe_scores: unsafeScores,
       },
       { status: 409 },

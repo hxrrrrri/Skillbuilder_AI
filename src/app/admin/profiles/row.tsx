@@ -3,6 +3,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { ClientDateTime } from "@/components/ui/client-datetime";
 
 type Visibility = "public" | "unlisted" | "private";
 const OPTIONS: Visibility[] = ["public", "unlisted", "private"];
@@ -61,7 +62,7 @@ export function ProfileRow({
           <Link href={`/admin/runs/${runId}`} className="text-muted hover:text-accent">
             trace
           </Link>{" "}
-          · {new Date(createdAt).toLocaleDateString()}
+          · <ClientDateTime value={createdAt} mode="date" />
         </div>
         {error && <p className="mt-1 text-xs text-bad">{error}</p>}
       </div>

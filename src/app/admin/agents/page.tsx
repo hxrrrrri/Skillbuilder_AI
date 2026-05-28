@@ -8,6 +8,7 @@ import {
   QUALITY_TIERS,
 } from "@/lib/providers/registry";
 import { mapReasoningBudget, reasoningSupportedByProvider } from "@/lib/providers/reasoning";
+import { modelsForProvider } from "@/lib/providers/model-catalog";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { ADMIN_NAV } from "../_nav";
@@ -21,17 +22,23 @@ export default async function AdminAgentsPage() {
 
   const [agents, providers] = await Promise.all([listAgentConfigs(), listProviderConfigs()]);
 
-  const providerOptions = providers.filter((p) => p.providerId !== "mock").map((p) => ({
-    id: p.providerId,
-    label: p.label,
-    enabled: p.enabled,
-    defaultModel: p.defaultModel,
-    capabilities: safeJson(p.capabilities) as {
+  const providerOptions = providers.filter((p) => p.providerId !== "mock").map((p) => {
+    const capabilities = safeJson(p.capabilities) as {
       reasoning?: boolean;
       models?: string[];
-    } | null,
-    reasoningSupported: reasoningSupportedByProvider(p.providerId as ProviderId),
-  }));
+    } | null;
+    return {
+      id: p.providerId,
+      label: p.label,
+      enabled: p.enabled,
+      defaultModel: p.defaultModel,
+      capabilities: {
+        ...(capabilities ?? {}),
+        models: modelsForProvider(p.providerId, capabilities?.models ?? []),
+      },
+      reasoningSupported: reasoningSupportedByProvider(p.providerId as ProviderId),
+    };
+  });
 
   const rows = agents.map((a) => {
     const mapping = mapReasoningBudget(a.providerId as ProviderId, a.reasoningBudget as any);

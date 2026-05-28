@@ -105,7 +105,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
             {run.verificationLevel === "repo_interview_verified" ? "Repo + Interview verified" : "Repo-only verified"}
           </Badge>
           <Badge tone="good">Validator audited</Badge>
-          <Badge tone={mode === "mock" ? "bad" : "default"}>mode: {mode}</Badge>
+          <Badge tone={mode === "api" ? "default" : "accent"}>mode: {mode}</Badge>
           {ownership?.confidence === "verified" && <Badge tone="good">ownership: verified</Badge>}
           {ownership?.confidence === "self_declared" && <Badge tone="warn">ownership: self-declared</Badge>}
           {ownership?.confidence === "unverified" && <Badge tone="warn">ownership: unverified</Badge>}

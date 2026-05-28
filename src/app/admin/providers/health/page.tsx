@@ -32,6 +32,7 @@ export default async function ProviderHealthPage() {
       lastLatencyMs: row?.lastTestLatencyMs ?? h.lastLatencyMs ?? null,
       lastRawOutputPreview: row?.lastTestRaw ?? h.rawOutputPreview ?? h.lastRawOutputPreview ?? null,
       lastError: row?.lastTestError ?? h.lastError ?? null,
+      lastTestJsonOk: row?.lastTestJsonOk ?? null,
       fix: h.fix,
       command: row?.command ?? h.command,
     };

@@ -28,16 +28,31 @@ export async function POST(req: Request, { params }: { params: { providerId: str
 
   const available = await provider.available();
   if (!available) {
+    const health = provider.health ? await provider.health() : null;
+    const error = health?.lastError ?? health?.status ?? "provider not available — check setup";
     await recordProviderTest(params.providerId, {
       status: "unavailable",
-      error: "provider not available — check setup",
+      error,
+      raw: health?.rawOutputPreview ?? health?.lastRawOutputPreview ?? null,
       jsonOk: false,
+    });
+    await writeAuditLog({
+      action: "admin.provider.test",
+      actorUserId: auth.user.id,
+      tenantId: null,
+      targetType: "provider",
+      targetId: params.providerId,
+      metadata: { ok: false, status: health?.status ?? "unavailable", error },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
     });
     return NextResponse.json({
       provider_id: params.providerId,
       available: false,
       json: null,
-      error: "provider not available — check setup",
+      status: health?.status ?? "unavailable",
+      fix: health?.fix ?? "Open Admin -> Providers -> Health and follow provider setup instructions.",
+      error,
     });
   }
 
@@ -89,14 +104,31 @@ export async function POST(req: Request, { params }: { params: { providerId: str
     await recordProviderTest(params.providerId, {
       status: "fail",
       error: err?.message ?? String(err),
-      raw: "",
+      raw: err?.stdout ?? err?.stderr ?? err?.raw ?? "",
       jsonOk: false,
     });
+    await writeAuditLog({
+      action: "admin.provider.test",
+      actorUserId: auth.user.id,
+      tenantId: null,
+      targetType: "provider",
+      targetId: params.providerId,
+      metadata: {
+        ok: false,
+        error: err?.message ?? String(err),
+        code: err?.code ?? null,
+        exitCode: err?.exitCode ?? null,
+      },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+    }).catch(() => {});
     return NextResponse.json({
       provider_id: params.providerId,
       available: true,
       json: null,
-      raw: "",
+      raw: String(err?.stdout ?? err?.stderr ?? err?.raw ?? "").slice(0, 4000),
+      code: err?.code ?? null,
+      fix: err?.fix ?? "Run the provider health test after fixing setup.",
       error: err?.message ?? String(err),
     });
   }

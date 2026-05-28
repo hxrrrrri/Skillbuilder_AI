@@ -50,7 +50,7 @@ export function RoleShell({
 }
 
 export function ScaffoldNotice({
-  title = "Scaffold view",
+  title = "No data yet",
   detail,
 }: {
   title?: string;

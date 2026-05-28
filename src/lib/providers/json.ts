@@ -29,6 +29,12 @@ export function parseJsonFromText<T = any>(text: string): T | null {
   try {
     return JSON.parse(sub) as T;
   } catch {}
+  const balanced = firstBalancedJson(sub);
+  if (balanced) {
+    try {
+      return JSON.parse(balanced) as T;
+    } catch {}
+  }
   const last = Math.max(sub.lastIndexOf("}"), sub.lastIndexOf("]"));
   if (last === -1) return null;
   try {
@@ -46,6 +52,43 @@ export function parseProviderJson<T = any>(stdout: string, rawFallback?: string)
     parseJsonFromText<T>(stdout) ??
     parseJsonFromText<T>(rawFallback ?? "")
   );
+}
+
+function firstBalancedJson(text: string): string | null {
+  const start = text.search(/[{[]/);
+  if (start === -1) return null;
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const char = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{" || char === "[") {
+      stack.push(char === "{" ? "}" : "]");
+      continue;
+    }
+    if (char === "}" || char === "]") {
+      if (stack.pop() !== char) return null;
+      if (stack.length === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  return null;
 }
 
 export function jsonRepairPrompt(originalPrompt: string, schemaHint: string, invalidOutput: string): string {

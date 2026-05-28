@@ -10,7 +10,7 @@ const LABELS: Record<string, { title: string; subtitle: string }> = {
   security: { title: "Security Awareness", subtitle: "Secrets, validation" },
   "git-evidence": { title: "Git Evidence", subtitle: "Commit cadence + quality" },
   documentation: { title: "Documentation", subtitle: "README specificity" },
-  authenticity: { title: "Authenticity Signals", subtitle: "Originality heuristics" },
+  authenticity: { title: "Authenticity Signals", subtitle: "Ownership and provenance signals" },
   "interview-gen": { title: "Interview Generator", subtitle: "Questions from real code" },
   validator: { title: "Validator", subtitle: "Fresh context audit" },
   "skill-graph": { title: "Skill Graph", subtitle: "Weighted aggregation" },

@@ -9,4 +9,5 @@ export const COLLEGE_NAV: NavLink[] = [
   { href: "/college/placement-ready", label: "Placement" },
   { href: "/college/employer-share", label: "Share" },
   { href: "/college/reports", label: "Reports" },
+  { href: "/college/settings", label: "Settings" },
 ];

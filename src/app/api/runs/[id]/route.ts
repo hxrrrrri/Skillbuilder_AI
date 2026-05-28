@@ -476,8 +476,8 @@ function buildTrustLabels(input: {
   if (input.validationSummary || input.scores.some((s) => s.evidence.some((e: any) => e?.validator_note))) {
     labels.push({ label: "Validator audited", tone: "good" });
   }
-  if (scoreSources.has("heuristic")) labels.push({ label: "Legacy heuristic", tone: "bad" });
-  if (scoreSources.has("mock") || input.executionMode === "mock") labels.push({ label: "Legacy mock", tone: "bad" });
+  if (scoreSources.has("heuristic")) labels.push({ label: "Unverified legacy source", tone: "bad" });
+  if (scoreSources.has("mock") || input.executionMode === "mock") labels.push({ label: "Unverified legacy source", tone: "bad" });
   if (input.verificationLevel === "repo_interview_verified") labels.push({ label: "Interview verified", tone: "good" });
   if (input.aiCollaboration) labels.push({ label: "Challenge verified", tone: "good" });
   if (input.ownershipStatus?.confidence === "verified") labels.push({ label: "Ownership verified", tone: "good" });

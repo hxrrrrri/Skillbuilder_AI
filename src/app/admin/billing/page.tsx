@@ -17,13 +17,13 @@ export default async function AdminBillingPage() {
   return (
     <RoleShell
       title="Billing"
-      subtitle="Subscription scaffold. Stripe SDK is not wired yet — this page reads the model and lists existing rows only."
+      subtitle="Subscription ledger and current billing integration state."
       navLinks={ADMIN_NAV}
       activeHref="/admin/billing"
     >
       <ScaffoldNotice
-        title="Scaffold only"
-        detail="Slice 11 added the Subscription schema and this placeholder. No Stripe SDK calls, no webhooks, no plan-gated features yet."
+        title="Billing integration not connected"
+        detail="The Subscription table is visible for audit readiness. Stripe SDK calls, webhooks, and plan-gated features are not enabled in this prototype."
       />
 
       <Card>

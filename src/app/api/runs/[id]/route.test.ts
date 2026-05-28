@@ -54,7 +54,7 @@ const fullRun = {
   profileSummary: null,
   executionMode: "api",
   terminalEvidence: JSON.stringify([]),
-  providerMatrix: JSON.stringify({ agents: { architecture: { provider: "mock" } } }),
+  providerMatrix: JSON.stringify({ agents: { architecture: { provider: "anthropic_api" } } }),
   ownershipStatus: null,
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
   completedAt: new Date("2026-01-01T00:01:00.000Z"),
@@ -76,7 +76,7 @@ const fullRun = {
         completed: ["Checked architecture"],
         evidence: [{ file: "src/app.ts", reason: "Layering is clear", source: "github_api" }],
         output: { architecture_score: 82 },
-        runtime: { provider: "mock", model: "mock:heuristic" },
+        runtime: { provider: "anthropic_api", model: "claude-sonnet-4-6" },
       }),
     },
   ],
@@ -159,7 +159,7 @@ describe("/api/runs/[id]", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.context_pack).toEqual({ private: "context" });
-    expect(data.provider_matrix.agents.architecture.provider).toBe("mock");
-    expect(data.events[0].output.runtime.provider).toBe("mock");
+    expect(data.provider_matrix.agents.architecture.provider).toBe("anthropic_api");
+    expect(data.events[0].output.runtime.provider).toBe("anthropic_api");
   });
 });

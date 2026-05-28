@@ -39,6 +39,16 @@ export async function POST(req: Request) {
   const userAgent = req.headers.get("user-agent") ?? null;
 
   if (!user) {
+    await writeAuditLog({
+      action: "terminal.command.denied",
+      actorUserId: null,
+      tenantId: null,
+      targetType: "run",
+      targetId: null,
+      metadata: { reason: "unauthenticated" },
+      ip,
+      userAgent,
+    }).catch(() => {});
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
 
@@ -62,6 +72,16 @@ export async function POST(req: Request) {
   const runId = body.runId ?? body.mission_id;
 
   if (!runId) {
+    await writeAuditLog({
+      action: "terminal.command.denied",
+      actorUserId: user.id,
+      tenantId: user.primaryTenantId,
+      targetType: "run",
+      targetId: null,
+      metadata: { command: body.command, reason: "missing_run_id" },
+      ip,
+      userAgent,
+    }).catch(() => {});
     return NextResponse.json(
       { error: "missing_run_id", reason: "terminal commands must be scoped to a verification run" },
       { status: 400 },
@@ -112,6 +132,16 @@ export async function POST(req: Request) {
 
   const safeCwd = resolveSafeRunCwd(body.cwd, runId);
   if (!safeCwd.ok) {
+    await writeAuditLog({
+      action: "terminal.command.blocked",
+      actorUserId: user.id,
+      tenantId: runTenantId,
+      targetType: "run",
+      targetId: runId,
+      metadata: { command: body.command, args: body.args, reason: safeCwd.reason },
+      ip,
+      userAgent,
+    }).catch(() => {});
     return NextResponse.json({ error: "cwd_blocked", reason: safeCwd.reason }, { status: 403 });
   }
 

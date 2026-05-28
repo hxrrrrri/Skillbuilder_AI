@@ -37,7 +37,7 @@ export default async function EmployerCandidateDetail({ params }: { params: { id
         </Badge>
         {summary.overallScore != null && <Badge tone="accent">Score {summary.overallScore}</Badge>}
         <Badge tone={summary.ownership === "verified" ? "good" : "warn"}>ownership: {summary.ownership}</Badge>
-        {summary.mockOrHeuristic && <Badge tone="bad">Legacy unverified score source</Badge>}
+        {summary.mockOrHeuristic && <Badge tone="bad">Unverified legacy score source</Badge>}
       </div>
 
       <Card>
