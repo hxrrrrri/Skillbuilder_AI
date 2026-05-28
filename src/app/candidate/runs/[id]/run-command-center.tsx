@@ -533,22 +533,26 @@ function AgentTimeline({ events, partial }: { events: RunPayload["events"]; part
   return (
     <div className="space-y-2">
       {partial && <StateNotice tone="warn" title="Partial" detail="Some evaluators completed. Remaining agents still running." />}
-      {events.map((event) => (
-        <div key={`${event.order}-${event.agent}`} className="rounded-md border border-border bg-panel2/35 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={statusTone(event.status)}>{event.status}</Badge>
-            <span className="font-mono text-xs text-ink">{event.agent}</span>
-            {event.duration_ms != null && <span className="text-xs text-muted">{event.duration_ms}ms</span>}
+      {events.map((event) => {
+        const keyFindings = event.key_findings ?? [];
+        const missingProof = event.missing_proof ?? [];
+        return (
+          <div key={`${event.order}-${event.agent}`} className="rounded-md border border-border bg-panel2/35 p-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={statusTone(event.status)}>{event.status}</Badge>
+              <span className="font-mono text-xs text-ink">{event.agent}</span>
+              {event.duration_ms != null && <span className="text-xs text-muted">{event.duration_ms}ms</span>}
+            </div>
+            <p className="mt-2 text-sm text-muted">{event.checked}</p>
+            {keyFindings.length > 0 && (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-ink">
+                {keyFindings.slice(0, 3).map((f, i) => <li key={i}>{f}</li>)}
+              </ul>
+            )}
+            {missingProof.length > 0 && <p className="mt-2 text-xs text-warn">{missingProof.join(" ")}</p>}
           </div>
-          <p className="mt-2 text-sm text-muted">{event.checked}</p>
-          {event.key_findings.length > 0 && (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-ink">
-              {event.key_findings.slice(0, 3).map((f, i) => <li key={i}>{f}</li>)}
-            </ul>
-          )}
-          {event.missing_proof.length > 0 && <p className="mt-2 text-xs text-warn">{event.missing_proof.join(" ")}</p>}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -618,19 +622,20 @@ function SkillGraph({ scores }: { scores: RunPayload["scores"] }) {
 
 function TerminalProof({ run }: { run: RunPayload | null }) {
   if (!run) return null;
-  if (run.execution_mode === "api" && run.terminal_summary.total === 0) {
+  const terminalSummary = run.terminal_summary ?? { total: 0, passed: 0, failed: 0, skipped: 0, by_use: {} };
+  if (run.execution_mode === "api" && terminalSummary.total === 0) {
     return <StateNotice title="Terminal skipped" detail="API execution mode did not run terminal proof. This does not count as passed proof." />;
   }
-  if (run.terminal_summary.total === 0) {
+  if (terminalSummary.total === 0) {
     return <StateNotice title="Terminal skipped" detail="No terminal evidence has been saved. Missing commands are not counted as proof." />;
   }
   return (
     <div className="space-y-3">
       <div className="grid gap-2 md:grid-cols-4">
-        <Metric label="Total" value={String(run.terminal_summary.total)} />
-        <Metric label="Passed" value={String(run.terminal_summary.passed)} />
-        <Metric label="Failed" value={String(run.terminal_summary.failed)} />
-        <Metric label="Skipped" value={String(run.terminal_summary.skipped)} />
+        <Metric label="Total" value={String(terminalSummary.total)} />
+        <Metric label="Passed" value={String(terminalSummary.passed)} />
+        <Metric label="Failed" value={String(terminalSummary.failed)} />
+        <Metric label="Skipped" value={String(terminalSummary.skipped)} />
       </div>
       <ul className="space-y-2">
         {run.terminal_evidence.slice(0, 8).map((t, i) => (
@@ -658,10 +663,11 @@ function TerminalProof({ run }: { run: RunPayload | null }) {
 
 function InterviewQuestions({ run }: { run: RunPayload | null }) {
   if (!run) return null;
+  const interviewSummary = run.interview_summary ?? { total: 0, answered: 0, verified: false };
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <StateNotice detail={`${run.interview_summary.answered}/${run.interview_summary.total} answered. Interview evidence upgrades verification only after answers are evaluated.`} />
+        <StateNotice detail={`${interviewSummary.answered}/${interviewSummary.total} answered. Interview evidence upgrades verification only after answers are evaluated.`} />
         <Link href={`/candidate/interview/${run.id}`} className="text-xs text-accent hover:underline">Answer interview</Link>
       </div>
       <ul className="space-y-2">
