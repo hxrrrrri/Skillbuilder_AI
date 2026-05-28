@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { slugify } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { writeAuditLog } from "@/lib/auth/audit";
-import { isAdminRole } from "@/lib/auth/roles";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,16 +31,40 @@ export async function POST(req: Request) {
   if (run.status !== "completed") {
     return NextResponse.json({ error: "run_incomplete", status: run.status }, { status: 409 });
   }
+  const unsafeScores = await prisma.skillScore.findMany({
+    where: { runId: run.id, scoreSource: { in: ["mock", "heuristic"] } },
+    select: { skillName: true, scoreSource: true },
+  });
+  if (run.executionMode === "mock" || unsafeScores.length) {
+    return NextResponse.json(
+      {
+        error: "unverified_profile_blocked",
+        reason: "Public profiles cannot be generated from mock or heuristic scores.",
+        unsafe_scores: unsafeScores,
+      },
+      { status: 409 },
+    );
+  }
 
   const sessionUser = await getCurrentUser();
-  const isOwner =
-    !!sessionUser &&
-    (run.createdByUserId === sessionUser.id ||
-      (run.candidate?.userId && run.candidate.userId === sessionUser.id));
-  const isAnonymousRun = !run.createdByUserId && !run.candidate?.userId;
-
-  if (!isOwner && !isAnonymousRun && (!sessionUser || !isAdminRole(sessionUser.role))) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const decision = evaluateRunMutationAccess(sessionUser, {
+    candidateId: run.candidateId,
+    createdByUserId: run.createdByUserId,
+    tenantId: run.tenantId,
+    candidateUserId: run.candidate?.userId ?? null,
+  }, "publish_profile");
+  if (!decision.ok) {
+    await writeAuditLog({
+      action: "profile.publish.denied",
+      actorUserId: sessionUser?.id ?? null,
+      tenantId: run.tenantId ?? null,
+      targetType: "run",
+      targetId: run.id,
+      metadata: { reason: decision.reason },
+      ip: req.headers.get("x-forwarded-for") ?? null,
+      userAgent: req.headers.get("user-agent") ?? null,
+    }).catch(() => {});
+    return decision.response;
   }
 
   const baseSlug = slugify(

@@ -8,12 +8,20 @@ vi.mock("@/lib/claude", () => ({
 
 vi.mock("@/lib/providers/run-agent", () => ({
   runAgentJson: vi.fn(async (opts: any) => ({
-    output: opts.fallback(),
-    provider: "mock",
-    model: "mock:heuristic",
+    output: {
+      validated: true,
+      confidence: 0.9,
+      unsupported_claims_removed: 0,
+      adjusted_scores: [],
+      hallucinated_files: [],
+      notes: ["test provider output"],
+      assertion_coverage: [],
+    },
+    provider: "anthropic_api",
+    model: "claude-test",
     inputTokens: 0,
     outputTokens: 0,
-    source: "mock",
+    source: "llm",
   })),
 }));
 
@@ -67,7 +75,7 @@ function makeState(overrides: Partial<MissionState> = {}): MissionState {
     tokens_in: 0,
     tokens_out: 0,
     mock_mode: true,
-    execution_mode: "mock",
+    execution_mode: "local",
     provider_matrix: null,
     terminal_evidence: [],
     ownership_status: null,
@@ -75,7 +83,7 @@ function makeState(overrides: Partial<MissionState> = {}): MissionState {
   };
 }
 
-describe("validator (heuristic)", () => {
+describe("validator deterministic evidence audit", () => {
   it("lowers score with no evidence to <=55", async () => {
     const state = makeState();
     state.scores.push({ skill: "Architecture", score: 90, evidence: [] });

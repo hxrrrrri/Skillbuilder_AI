@@ -16,7 +16,7 @@ import { REASONING_BUDGETS, isReasoningBudget, type ReasoningBudget } from "./re
 export const PROVIDER_DEFAULTS: Array<{
   providerId: ProviderId;
   label: string;
-  kind: "api" | "cli" | "local" | "mock";
+  kind: "api" | "cli" | "local" | "deterministic";
   defaultModel: string | null;
   apiKeyEnv: string | null;
   command: string | null;
@@ -69,9 +69,9 @@ export const PROVIDER_DEFAULTS: Array<{
     kind: "cli",
     defaultModel: null,
     apiKeyEnv: null,
-    command: "gh",
+    command: "copilot",
     baseUrl: null,
-    capabilities: { reasoning: false, jsonMode: false, streaming: false, models: [] },
+    capabilities: { reasoning: true, jsonMode: true, streaming: false, models: [] },
   },
   {
     providerId: "ollama",
@@ -89,14 +89,14 @@ export const PROVIDER_DEFAULTS: Array<{
     },
   },
   {
-    providerId: "mock",
-    label: "Mock / heuristic",
-    kind: "mock",
-    defaultModel: "mock-1",
+    providerId: "deterministic",
+    label: "Deterministic evidence",
+    kind: "deterministic",
+    defaultModel: "evidence-derived",
     apiKeyEnv: null,
     command: null,
     baseUrl: null,
-    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: ["mock-1"] },
+    capabilities: { reasoning: false, jsonMode: true, streaming: false, models: ["repo-scanner", "git-evidence", "skill-graph"] },
   },
 ];
 
@@ -132,7 +132,7 @@ type AgentDefault = {
   maxTokens: number;
   jsonMode: boolean;
   fallbackProvider: ProviderId | null;
-  fallbackStrategy: "mock" | "retry" | "skip";
+  fallbackStrategy: "retry" | "fail" | "skip_optional";
   costTier: "low" | "medium" | "high";
   qualityTier: "low" | "medium" | "high";
   enabled: boolean;
@@ -155,8 +155,8 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
     temperature: 0.1,
     maxTokens: 2000,
     jsonMode: true,
-    fallbackProvider: "mock",
-    fallbackStrategy: "mock",
+    fallbackProvider: null,
+    fallbackStrategy: "fail",
     costTier: "high",
     qualityTier: "high",
     enabled: true,
@@ -169,8 +169,8 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
     temperature: 0.0,
     maxTokens: 2500,
     jsonMode: true,
-    fallbackProvider: "mock",
-    fallbackStrategy: "mock",
+    fallbackProvider: null,
+    fallbackStrategy: "fail",
     costTier: "high",
     qualityTier: "high",
     enabled: true,
@@ -200,51 +200,51 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
     temperature: 0.2,
     maxTokens: 1500,
     jsonMode: true,
-    fallbackProvider: "mock",
-    fallbackStrategy: "mock",
+    fallbackProvider: null,
+    fallbackStrategy: "fail",
     costTier: "medium",
     qualityTier: "medium",
     enabled: true,
   })),
-  // Deterministic / no-LLM stages → mock.
+  // Deterministic / no-LLM stages use evidence-derived code paths.
   {
     agentName: "repo-scanner",
-    providerId: "mock",
-    model: "mock-1",
+    providerId: "deterministic",
+    model: "repo-scanner",
     reasoningBudget: "none",
     temperature: 0,
     maxTokens: 100,
     jsonMode: true,
     fallbackProvider: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     costTier: "low",
     qualityTier: "low",
     enabled: true,
   },
   {
     agentName: "git-evidence",
-    providerId: "mock",
-    model: "mock-1",
+    providerId: "deterministic",
+    model: "git-evidence",
     reasoningBudget: "none",
     temperature: 0,
     maxTokens: 100,
     jsonMode: true,
     fallbackProvider: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     costTier: "low",
     qualityTier: "low",
     enabled: true,
   },
   {
     agentName: "skill-graph",
-    providerId: "mock",
-    model: "mock-1",
+    providerId: "deterministic",
+    model: "skill-graph",
     reasoningBudget: "none",
     temperature: 0,
     maxTokens: 100,
     jsonMode: true,
     fallbackProvider: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     costTier: "low",
     qualityTier: "low",
     enabled: true,
@@ -325,14 +325,14 @@ function defaultForAgent(agentName: string): AgentDefault {
   if (known) return known;
   return {
     agentName: agentName as AgentName,
-    providerId: "mock",
-    model: "mock-1",
+    providerId: "anthropic_api",
+    model: "claude-sonnet-4-6",
     reasoningBudget: "none",
     temperature: 0,
-    maxTokens: 100,
+    maxTokens: 1500,
     jsonMode: true,
     fallbackProvider: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     costTier: "low",
     qualityTier: "low",
     enabled: true,
@@ -421,7 +421,7 @@ export async function updateAgentConfig(
     jsonMode: boolean;
     fallbackProvider: string | null;
     fallbackModel: string | null;
-    fallbackStrategy: "mock" | "retry" | "skip";
+    fallbackStrategy: "retry" | "fail" | "skip_optional";
     timeoutMs: number;
     retryCount: number;
     enabled: boolean;
@@ -438,6 +438,22 @@ export async function seedRegistry(options: { force?: boolean } = {}): Promise<{
   providers: { created: number; updated: number };
   agents: { created: number; updated: number };
 }> {
+  await prisma.providerConfig.deleteMany({ where: { providerId: "mock" } });
+  if (options.force) {
+    await prisma.agentConfig.updateMany({
+      where: { providerId: "mock" },
+      data: {
+        providerId: "anthropic_api",
+        model: "claude-sonnet-4-6",
+        fallbackProvider: null,
+        fallbackStrategy: "fail",
+      },
+    });
+    await prisma.agentConfig.updateMany({
+      where: { fallbackProvider: "mock" },
+      data: { fallbackProvider: null, fallbackStrategy: "fail" },
+    });
+  }
   let providersCreated = 0;
   let providersUpdated = 0;
   for (const p of PROVIDER_DEFAULTS) {
@@ -496,7 +512,7 @@ export async function seedRegistry(options: { force?: boolean } = {}): Promise<{
 
 // --------------- Validation helpers ---------------
 
-export const FALLBACK_STRATEGIES = ["mock", "retry", "skip"] as const;
+export const FALLBACK_STRATEGIES = ["retry", "fail", "skip_optional"] as const;
 export const COST_TIERS = ["low", "medium", "high"] as const;
 export const QUALITY_TIERS = ["low", "medium", "high"] as const;
 

@@ -48,7 +48,7 @@ function fallback(state: MissionState): DocumentationOutput {
     evidence: has
       ? [{ file: state.context_pack?.filesIndex.readme ?? "README", reason: `Specificity ${spec}/100, length ${text!.length} chars.` }]
       : [{ reason: "No README detected by scanner." }],
-    score_source: "heuristic",
+    score_source: "deterministic",
   };
 }
 
@@ -85,11 +85,10 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 800,
-    fallback: () => fallback(state),
   });
 
   const out: DocumentationOutput = { ...res.output, score_source: res.source };
-  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "deterministic");
   out.assertion_results = deriveAssertionResults(state, out);
 
   state.tokens_in += res.inputTokens;

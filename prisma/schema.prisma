@@ -134,9 +134,9 @@ model AuditLog {
 
 model ProviderConfig {
   id                String    @id @default(cuid())
-  providerId        String    @unique // anthropic_api|claude_cli|codex_cli|ollama|copilot_cli|mock
+  providerId        String    @unique // anthropic_api|claude_cli|codex_cli|ollama|copilot_cli|deterministic
   label             String
-  kind              String // api|cli|local|mock
+  kind              String // api|cli|local|deterministic
   enabled           Boolean   @default(true)
   defaultModel      String?
   baseUrl           String?
@@ -167,7 +167,7 @@ model AgentConfig {
   jsonMode         Boolean  @default(true)
   fallbackProvider String?
   fallbackModel    String?
-  fallbackStrategy String   @default("mock") // mock|retry|skip
+  fallbackStrategy String   @default("fail") // retry|fail|skip_optional
   timeoutMs        Int      @default(60000)
   retryCount       Int      @default(1)
   enabled          Boolean  @default(true)
@@ -339,7 +339,7 @@ model AnalysisRun {
   employerVerifier     String? // JSON EmployerVerifier
   aiCollaboration      String? // JSON AICollabEvaluation
   profileSummary       String? // JSON ProfileOutput
-  executionMode        String                  @default("api") // api|cli|hybrid|mock
+  executionMode        String                  @default("api") // api|cli|hybrid|local
   localInstallApproved Boolean                 @default(false)
   terminalEvidence     String? // JSON TerminalEvidence[]
   providerMatrix       String? // JSON role -> provider id
@@ -528,7 +528,7 @@ model SkillScore {
   skillName      String
   score          Int
   confidence     Float       @default(0.8)
-  scoreSource    String      @default("llm") // llm|heuristic|mock|pending
+  scoreSource    String      @default("llm") // llm|terminal|github_api|local_clone|interview|challenge|deterministic|not_measured
   evidence       String // JSON Evidence[]
   validatorNotes String?
   run            AnalysisRun @relation(fields: [runId], references: [id])

@@ -8,7 +8,7 @@ import { writeAuditLog } from "@/lib/auth/audit";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const Mode = z.enum(["api", "cli", "hybrid", "mock"]);
+const Mode = z.enum(["api", "cli", "hybrid", "local"]);
 
 export async function GET(req: Request) {
   const auth = await adminOrAnonymous();

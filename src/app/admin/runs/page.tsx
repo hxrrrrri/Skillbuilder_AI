@@ -9,7 +9,7 @@ import { ADMIN_NAV } from "../_nav";
 export const dynamic = "force-dynamic";
 
 const STATUSES = ["all", "pending", "running", "completed", "failed"] as const;
-const MODES = ["all", "api", "cli", "hybrid", "mock"] as const;
+const MODES = ["all", "api", "cli", "hybrid", "local"] as const;
 
 type Search = { status?: string; mode?: string; q?: string };
 

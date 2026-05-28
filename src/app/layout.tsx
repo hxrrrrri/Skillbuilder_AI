@@ -32,24 +32,23 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${display.variable} ${sans.variable} ${mono.variable} min-h-screen font-sans antialiased`}>
         <AuthSessionProvider>
-          <header className="sticky top-0 z-40 border-b border-border bg-bg/92 backdrop-blur">
-            <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 sm:px-6">
-              <a href="/" className="flex items-center gap-3">
-                <span className="grid h-8 w-8 place-items-center rounded-md border border-border bg-panel2 text-sm font-semibold text-accent shadow-card">
+          <header className="fixed left-1/2 top-5 z-50 -translate-x-1/2 w-[700px] max-w-[calc(100vw-2rem)]">
+            <div className="flex w-full items-center rounded-full border border-white/[0.08] bg-panel2/95 px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md">
+              <div className="flex flex-1 items-center">
+                <a href="/" className="flex items-center justify-center h-8 w-8 rounded-full bg-ink text-bg text-sm font-bold shrink-0">
                   S
-                </span>
-                <span className="font-display text-xl font-medium text-ink">
-                  Skill<span className="text-accent">Proof</span>
-                </span>
-              </a>
-              <nav className="flex items-center gap-2 text-sm text-muted sm:gap-5">
-                <a href="/" className="hidden hover:text-ink sm:inline">Home</a>
-                <a href="/campus-preview" className="hidden hover:text-ink sm:inline">Campus</a>
-                <NavUser />
+                </a>
+              </div>
+              <nav className="hidden items-center gap-6 text-sm text-muted sm:flex">
+                <a href="/" className="transition hover:text-ink">Home</a>
+                <a href="/campus-preview" className="transition hover:text-ink">Campus</a>
               </nav>
+              <div className="flex flex-1 items-center justify-end">
+                <NavUser />
+              </div>
             </div>
           </header>
-          <main className="mx-auto max-w-7xl px-5 py-10 sm:px-6 lg:py-12">{children}</main>
+          <main className="mx-auto max-w-screen-2xl px-6 pt-28 pb-12 sm:px-10 lg:px-16">{children}</main>
           <footer className="border-t border-border bg-panel/20 py-6 text-center text-xs text-muted">
             SkillProof AI · Proof, not claims · Built for the AI era
           </footer>

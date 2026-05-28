@@ -137,30 +137,19 @@ async function detectOllama(): Promise<DetectedTool> {
 }
 
 async function detectCopilot(): Promise<DetectedTool> {
-  // Optional. Try `gh copilot --version` first, then `copilot --version`.
-  const ghCopilot = await probe("gh", ["copilot", "--version"], 4000);
-  if (ghCopilot.exitCode === 0) {
-    return {
-      name: "copilot",
-      installed: true,
-      command: "gh copilot",
-      version: firstLine(ghCopilot.stdout),
-      authenticated: true,
-      authStatus: "via gh",
-      capabilities: ["llm", "shell"],
-    };
-  }
   const r = await probe("copilot", ["--version"], 4000);
   const installed = r.exitCode === 0;
+  const ghCopilot = await probe("gh", ["copilot", "--help"], 4000);
   return {
     name: "copilot",
     installed,
     command: "copilot",
     version: installed ? firstLine(r.stdout) : null,
     authenticated: installed,
-    authStatus: installed ? "binary present" : null,
+    authStatus: installed ? "modern binary present; run provider health JSON test" : ghCopilot.exitCode === 0 ? "legacy gh copilot extension detected; retired" : null,
     capabilities: installed ? ["llm", "shell"] : [],
-    setupHint: installed ? undefined : "Optional. Install GitHub Copilot CLI: `gh extension install github/gh-copilot`.",
+    setupHint: installed ? undefined : "Install the modern GitHub Copilot CLI and run `copilot login`. The retired `gh copilot` extension is not supported.",
+    error: installed ? null : ghCopilot.exitCode === 0 ? "legacy gh copilot extension detected; retired" : r.stderr || "copilot CLI not found",
   };
 }
 
@@ -180,7 +169,7 @@ export async function detectAllTools(): Promise<DetectionReport> {
   );
   const hasGit = tools.find((t) => t.name === "git")?.installed ?? false;
 
-  let recommendedMode: ExecutionMode = "mock";
+  let recommendedMode: ExecutionMode = "api";
   const reasons: string[] = [];
   if (hasApi && hasLocalLLM && hasGit) {
     recommendedMode = "hybrid";
@@ -192,8 +181,8 @@ export async function detectAllTools(): Promise<DetectionReport> {
     recommendedMode = "api";
     reasons.push("API key set, no local LLM CLI → cloud API mode");
   } else {
-    recommendedMode = "mock";
-    reasons.push("No API key and no local LLM CLI → heuristic/mock mode");
+    recommendedMode = "api";
+    reasons.push("No ready API key or local LLM CLI detected → configure a real provider before starting a mission");
   }
 
   return {

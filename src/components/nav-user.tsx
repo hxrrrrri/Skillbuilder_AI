@@ -10,16 +10,16 @@ export function NavUser() {
   }
   if (!data?.user) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-6">
         <Link
           href="/login"
-          className="rounded-md border border-border bg-panel px-3 py-1.5 text-xs font-medium text-ink transition hover:border-accent/60 hover:text-accent sm:text-sm"
+          className="hidden text-sm text-muted transition hover:text-ink sm:inline"
         >
           Sign in
         </Link>
         <Link
           href="/register"
-          className="hidden rounded-md border border-accent/70 bg-accent px-3 py-1.5 text-xs font-semibold text-cream shadow-glow hover:bg-[#ba654f] sm:inline-block sm:text-sm"
+          className="rounded-full border border-white/10 bg-ink px-4 py-1.5 text-xs font-semibold text-bg transition hover:bg-ink/80"
         >
           Get started
         </Link>
@@ -37,24 +37,18 @@ export function NavUser() {
       .join("") || "U";
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-6">
       <Link
         href={dashboard}
-        className="hidden text-xs text-muted hover:text-ink sm:inline sm:text-sm"
+        className="grid h-8 w-8 place-items-center rounded-full border border-white/10 bg-white/10 text-xs font-semibold text-ink"
+        aria-label={`Go to dashboard · ${data.user.email} · ${role.replace("_", " ")}`}
         title={`${data.user.email} · ${role.replace("_", " ")}`}
-      >
-        {role.replace("_", " ")}
-      </Link>
-      <Link
-        href={dashboard}
-        className="grid h-8 w-8 place-items-center rounded-md border border-border bg-panel2 text-xs font-semibold text-accent"
-        aria-label="Go to your dashboard"
       >
         {initials}
       </Link>
       <button
         onClick={() => signOut({ callbackUrl: "/" })}
-        className="rounded-md border border-border bg-panel px-2.5 py-1.5 text-xs text-muted transition hover:border-accent/60 hover:text-accent"
+        className="rounded-full border border-white/10 bg-ink px-4 py-1.5 text-xs font-semibold text-bg transition hover:bg-ink/80"
       >
         Sign out
       </button>

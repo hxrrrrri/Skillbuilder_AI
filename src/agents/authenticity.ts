@@ -14,7 +14,7 @@ Return STRICT JSON:
   "risk_signals": string[],
   "evidence": [{"file": string?, "reason": string}]
 }
-Use the provided heuristic baseline. Adjust score modestly, do not invent claims.`;
+Use the provided deterministic signal summary. Adjust score modestly, do not invent claims.`;
 
 const SCHEMA_HINT = '{"authenticity_score":number,"confidence":number,"positive_signals":string[],"risk_signals":string[],"evidence":[{"file":string?,"reason":string}]}';
 
@@ -70,9 +70,9 @@ function fallback(state: MissionState): AuthenticityOutput {
     positive_signals: positive,
     risk_signals: risk,
     evidence: [
-      { reason: `Heuristic over ${state.context_pack!.commits.length} commits + repo meta.` },
+      { reason: `Deterministic signals over ${state.context_pack!.commits.length} commits + repo meta.`, source: "deterministic" },
     ],
-    score_source: "heuristic",
+    score_source: "deterministic",
   };
 }
 
@@ -80,7 +80,7 @@ export async function runAuthenticity(state: MissionState): Promise<Handoff<Auth
   if (!state.context_pack) throw new Error("authenticity: context_pack missing");
   const baseline = fallback(state);
 
-  const user = `Heuristic baseline:
+  const user = `Deterministic signal summary:
 ${JSON.stringify(baseline, null, 2)}
 
 Commit messages (subject only):
@@ -96,7 +96,6 @@ Return JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 900,
-    fallback: () => baseline,
   });
 
   const out: AuthenticityOutput = { ...res.output, score_source: res.source };

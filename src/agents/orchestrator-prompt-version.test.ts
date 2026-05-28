@@ -9,9 +9,9 @@ function matrixEntry() {
     model: "claude-active-test",
     reasoningBudget: "none",
     enabled: true,
-    fallbackProvider: "mock",
+    fallbackProvider: null,
     fallbackModel: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     temperature: 0.1,
     maxTokens: 2500,
     jsonMode: true,
@@ -42,10 +42,10 @@ function state(): MissionState {
     execution_mode: "api",
     provider_matrix: {
       orchestrator: "anthropic_api",
-      worker: "mock",
-      validator: "mock",
-      interview: "mock",
-      profile: "mock",
+      worker: "anthropic_api",
+      validator: "anthropic_api",
+      interview: "anthropic_api",
+      profile: "anthropic_api",
       agents: { orchestrator: matrixEntry() },
     },
     provider_runtime: {},
@@ -57,7 +57,7 @@ function state(): MissionState {
 describe("orchestrator active prompt version", () => {
   beforeEach(() => {
     vi.resetModules();
-    process.env = { ...ORIGINAL_ENV, ANTHROPIC_API_KEY: "test-key", SKILLPROOF_MOCK_LLM: "0" };
+    process.env = { ...ORIGINAL_ENV, ANTHROPIC_API_KEY: "test-key" };
   });
 
   afterEach(() => {

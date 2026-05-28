@@ -151,7 +151,7 @@ export default async function EmployerSearchPage({
                           {s.recommendation.replace(/_/g, " ")}
                         </Badge>
                         <Badge tone={s.mockOrHeuristic ? "warn" : "default"}>
-                          {s.mockOrHeuristic ? "Mock / heuristic" : "LLM / verified evidence"}
+                          {s.mockOrHeuristic ? "Legacy unverified source" : "LLM / verified evidence"}
                         </Badge>
                       </div>
                     </div>

@@ -21,7 +21,7 @@ type Report = {
   detectedAt: string;
   platform: string;
   tools: Tool[];
-  recommendedMode: "api" | "cli" | "hybrid" | "mock";
+  recommendedMode: "api" | "cli" | "hybrid" | "local";
   reasons: string[];
 };
 
@@ -47,7 +47,7 @@ export default function LocalSetupPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [providers, setProviders] = useState<ProviderInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [mode, setMode] = useState<"api" | "cli" | "hybrid" | "mock">("hybrid");
+  const [mode, setMode] = useState<"api" | "cli" | "hybrid" | "local">("hybrid");
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
@@ -152,7 +152,7 @@ export default function LocalSetupPage() {
           <CardBody>
             <div className="text-xs uppercase tracking-wide text-muted">Mode preview</div>
             <div className="mt-2 flex flex-wrap gap-2">
-              {(["api", "cli", "hybrid", "mock"] as const).map((m) => (
+              {(["api", "cli", "hybrid", "local"] as const).map((m) => (
                 <button
                   key={m}
                   className={`rounded border px-2 py-1 text-xs ${
@@ -175,8 +175,8 @@ export default function LocalSetupPage() {
         </CardHeader>
         <CardBody className="grid gap-3 text-sm md:grid-cols-4">
           <div className="rounded border border-border bg-panel2/70 p-3">
-            <div className="text-xs uppercase text-muted">Demo/mock</div>
-            <Badge tone="warn" className="mt-2">install disabled</Badge>
+            <div className="text-xs uppercase text-muted">Fixture seed</div>
+            <Badge tone="warn" className="mt-2">dev-only disabled</Badge>
           </div>
           <div className="rounded border border-border bg-panel2/70 p-3">
             <div className="text-xs uppercase text-muted">CLI/hybrid default</div>

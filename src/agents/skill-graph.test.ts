@@ -47,7 +47,7 @@ describe("skill-graph", () => {
     expect(h.output.not_measured).toContain("Testing");
     const testEntry = h.output.skill_graph.find((s) => s.name === "Testing");
     expect(testEntry?.score).toBeNull();
-    expect(testEntry?.source).toBe("pending");
+    expect(testEntry?.source).toBe("not_measured");
   });
 
   it("recomputeOverall uses the same weights", () => {

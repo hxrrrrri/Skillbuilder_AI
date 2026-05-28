@@ -56,7 +56,7 @@ function state(contextPack: RepoContextPack): MissionState {
     tokens_in: 0,
     tokens_out: 0,
     mock_mode: true,
-    execution_mode: "mock",
+    execution_mode: "local",
     provider_matrix: null,
     provider_runtime: {},
     terminal_evidence: [],

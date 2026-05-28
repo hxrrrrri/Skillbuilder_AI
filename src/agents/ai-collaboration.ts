@@ -12,7 +12,7 @@ export type AICollaborationReviewOutput = {
   aiPromptingSignal: "weak" | "moderate" | "strong" | "insufficient_evidence";
   aiResponsibleUseSummary: string;
   evidence: Evidence[];
-  score_source: "heuristic" | "pending";
+  score_source: "deterministic" | "not_measured";
 };
 
 function commitLooksAiRelated(message: string): boolean {
@@ -31,7 +31,7 @@ export async function runAICollaborationReview(state: MissionState): Promise<Han
   for (const commit of commits.slice(0, 3)) {
     evidence.push({
       reason: `AI-related commit message observed: ${commit.message.split(/\r?\n/)[0]}`,
-      source: "heuristic",
+      source: "deterministic",
       confidence: 0.55,
     });
   }
@@ -52,13 +52,13 @@ export async function runAICollaborationReview(state: MissionState): Promise<Han
       aiPromptingSignal: "insufficient_evidence",
       aiResponsibleUseSummary: "AI collaboration evidence insufficient.",
       evidence: [],
-      score_source: "pending",
+      score_source: "not_measured",
     };
     return {
       agent: "ai-collaboration",
       completed: ["ai_collaboration_reviewed"],
       unresolved: ["AI collaboration evidence insufficient."],
-      evidence: [{ reason: "AI collaboration evidence insufficient.", source: "heuristic", confidence: 0.4 }],
+      evidence: [{ reason: "AI collaboration evidence insufficient.", source: "not_measured", confidence: 0.4 }],
       issues_found: ["AI collaboration evidence insufficient."],
       next_recommended: "git-evidence",
       output: out,
@@ -77,7 +77,7 @@ export async function runAICollaborationReview(state: MissionState): Promise<Han
       ? "AI-related workflow signals are paired with local verification commands."
       : "AI-related workflow signals exist, but verification evidence is thin.",
     evidence,
-    score_source: "heuristic",
+    score_source: "deterministic",
   };
 
   state.scores.push({
@@ -85,7 +85,7 @@ export async function runAICollaborationReview(state: MissionState): Promise<Han
     score,
     evidence,
     confidence: hasVerification ? 0.65 : 0.45,
-    source: "heuristic",
+    source: "deterministic",
     strengths: hasVerification ? ["Uses checks after AI-related work."] : [],
     weaknesses: hasVerification ? [] : ["AI-related work is not paired with enough test/build evidence."],
   });

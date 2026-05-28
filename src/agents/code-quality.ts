@@ -30,9 +30,9 @@ function fallback(state?: MissionState): CodeQualityOutput {
   const file = state?.context_pack?.filesIndex.important[0] ?? undefined;
   return {
     code_quality_score: 55,
-    observations: ["LLM unavailable — heuristic score only"],
-    evidence: [{ file, reason: "Heuristic mode: deterministic score returned from repo intelligence and file layout." }],
-    score_source: "heuristic",
+    observations: ["Provider unavailable — code quality not verified."],
+    evidence: [{ file, reason: "Deterministic code-quality signal from repo intelligence and file layout.", source: "deterministic" }],
+    score_source: "deterministic",
   };
 }
 
@@ -97,11 +97,10 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
-    fallback: () => fallback(state),
   });
 
   const out: CodeQualityOutput = { ...res.output, score_source: res.source };
-  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "deterministic");
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 
@@ -111,7 +110,7 @@ Return the JSON now.`;
     skill: "Code Quality",
     score: out.code_quality_score,
     evidence: out.evidence,
-    confidence: res.source === "llm" ? 0.85 : res.source === "mock" ? 0.3 : 0.6,
+    confidence: res.source === "llm" ? 0.85 : 0.6,
     source: res.source,
     weaknesses: out.observations,
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),

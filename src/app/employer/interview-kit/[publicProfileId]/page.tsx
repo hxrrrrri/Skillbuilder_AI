@@ -43,8 +43,8 @@ export default async function EmployerInterviewKitPage({
           ) : (
             <div className="space-y-5">
               <div className="flex flex-wrap gap-2">
-                <Badge tone={kit.source === "mock" || kit.source === "heuristic" ? "warn" : "accent"}>
-                  {kit.source === "mock" || kit.source === "heuristic" ? "Mock / heuristic" : "LLM generated"}
+                <Badge tone={kit.source === "deterministic" ? "good" : "accent"}>
+                  {kit.source === "deterministic" ? "Deterministic evidence-derived" : "LLM generated"}
                 </Badge>
                 <Badge>{kit.target_role}</Badge>
                 <Badge>{kit.model}</Badge>

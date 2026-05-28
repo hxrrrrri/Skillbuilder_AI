@@ -8,12 +8,21 @@ export type ProviderId =
   | "codex_cli"
   | "ollama"
   | "copilot_cli"
-  | "mock";
+  | "deterministic";
 
 export type AgentRole = "orchestrator" | "worker" | "validator" | "interview" | "profile";
-export type FallbackStrategy = "mock" | "retry" | "skip";
-export type RuntimeResolutionSource = "db" | "default" | "file" | "mock";
-export type RuntimeResolutionStatus = "planned" | "used" | "fallback" | "skipped";
+export type FallbackStrategy = "retry" | "fail" | "skip_optional";
+export type RuntimeResolutionSource = "db" | "default" | "file" | "deterministic";
+export type RuntimeResolutionStatus = "planned" | "used" | "fallback" | "skipped" | "failed";
+export type ProviderHealthStatus =
+  | "ready"
+  | "installed_not_authenticated"
+  | "missing_binary"
+  | "invalid_command"
+  | "invalid_json"
+  | "unsupported_for_scoring"
+  | "disabled"
+  | "failed";
 
 export type ProviderPrompt = {
   system: string;
@@ -33,6 +42,11 @@ export type ProviderResult = {
   outputTokens: number;
   model: string;
   runtime?: ProviderMatrixAgentEntry;
+  stdout?: string;
+  stderr?: string;
+  exitCode?: number | null;
+  command?: string;
+  latencyMs?: number;
 };
 
 export interface LLMProvider {
@@ -40,7 +54,32 @@ export interface LLMProvider {
   label: string;
   available(): Promise<boolean>;
   runJson(prompt: ProviderPrompt, schemaHint: string): Promise<ProviderResult>;
+  health?(): Promise<ProviderHealth>;
 }
+
+export type ProviderHealth = {
+  providerId: ProviderId;
+  label: string;
+  status: ProviderHealthStatus;
+  enabled: boolean;
+  installed: boolean;
+  authenticated: boolean;
+  version: string | null;
+  supportsJson: boolean;
+  supportsNonInteractive: boolean;
+  supportsModelSelection: boolean;
+  supportsReasoningBudget: boolean;
+  availableModels: string[];
+  configuredModel: string | null;
+  lastTestedAt?: string | null;
+  lastLatencyMs?: number | null;
+  lastRawOutputPreview?: string | null;
+  lastError?: string | null;
+  fix: string;
+  command: string | null;
+  exitCode?: number | null;
+  rawOutputPreview?: string | null;
+};
 
 export type ProviderMatrixAgentEntry = {
   provider: ProviderId;

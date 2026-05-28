@@ -21,7 +21,7 @@ export default async function AdminAgentsPage() {
 
   const [agents, providers] = await Promise.all([listAgentConfigs(), listProviderConfigs()]);
 
-  const providerOptions = providers.map((p) => ({
+  const providerOptions = providers.filter((p) => p.providerId !== "mock").map((p) => ({
     id: p.providerId,
     label: p.label,
     enabled: p.enabled,
@@ -117,7 +117,7 @@ export default async function AdminAgentsPage() {
               none / low / medium / high / high (planned).
             </li>
             <li>
-              <code className="rounded bg-panel2 px-1">claude_cli / codex_cli / copilot_cli / ollama / mock</code> →
+              <code className="rounded bg-panel2 px-1">claude_cli / codex_cli / copilot_cli / ollama / deterministic</code> →
               not supported (the budget is recorded but has no runtime effect for these providers).
             </li>
           </ul>

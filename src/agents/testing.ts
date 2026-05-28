@@ -33,7 +33,7 @@ function fallback(state: MissionState): TestingOutput {
       { file: pack.filesIndex.tests[0], reason: `${pack.filesIndex.tests.length} test files detected by scanner.` },
       { file: pack.filesIndex.ci[0], reason: pack.detected.hasCI ? "CI workflow present." : "No CI workflow detected." },
     ],
-    score_source: "heuristic",
+    score_source: "deterministic",
   };
 }
 
@@ -50,7 +50,7 @@ function deriveAssertionResults(state: MissionState, out: TestingOutput): Valida
   });
 }
 
-// Override LLM/heuristic with real test execution if terminal evidence exists.
+// Override LLM scoring with real test execution if terminal evidence exists.
 function applyTerminalEvidence(state: MissionState, out: TestingOutput) {
   const evidence = getTerminalEvidence(state);
   const testPass = hasPassingCommand(evidence, "testing");
@@ -91,11 +91,10 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1200,
-    fallback: () => fallback(state),
   });
 
   const out: TestingOutput = { ...res.output, score_source: res.source };
-  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "deterministic");
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 

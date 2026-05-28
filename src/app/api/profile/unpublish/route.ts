@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth/session";
-import { isAdminRole } from "@/lib/auth/roles";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/auth/audit";
 
@@ -26,11 +26,17 @@ export async function POST(req: Request) {
 
   const profile = await prisma.publicProfile.findUnique({
     where: { id: body.profile_id },
-    include: { run: { select: { tenantId: true } } },
+    include: { run: { select: { tenantId: true, candidateId: true, createdByUserId: true, candidate: { select: { userId: true } } } } },
   });
   if (!profile) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (!isAdminRole(user.role) && profile.ownerUserId !== user.id) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const decision = evaluateRunMutationAccess(user, {
+    candidateId: profile.run.candidateId,
+    createdByUserId: profile.run.createdByUserId,
+    tenantId: profile.run.tenantId,
+    candidateUserId: profile.run.candidate?.userId ?? null,
+  }, "unpublish_profile");
+  if (!decision.ok || (decision.reason !== "admin" && profile.ownerUserId !== user.id)) {
+    return !decision.ok ? decision.response : NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
   const updated = await prisma.publicProfile.update({

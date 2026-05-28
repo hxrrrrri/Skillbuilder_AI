@@ -22,7 +22,15 @@ export type AgentName =
   | "skill-graph"
   | "profile-gen";
 
-export type ScoreSource = "llm" | "heuristic" | "mock" | "pending";
+export type ScoreSource =
+  | "llm"
+  | "terminal"
+  | "github_api"
+  | "local_clone"
+  | "interview"
+  | "challenge"
+  | "deterministic"
+  | "not_measured";
 
 export type Evidence = {
   file?: string;
@@ -36,7 +44,7 @@ export type Evidence = {
   reason: string;
   snippet?: string;
   snippet_hash?: string;
-  source?: "github_api" | "local_clone" | "terminal" | "llm" | "heuristic" | "interview" | "challenge";
+  source?: "github_api" | "local_clone" | "terminal" | "llm" | "interview" | "challenge" | "deterministic" | "not_measured";
   confidence?: number;
   validator_note?: string;
 };

@@ -29,17 +29,17 @@ export type ProviderConfig = {
 
 const DEFAULTS: ProviderConfig = {
   providers: {
-    claude_cli: { command: "claude", args: ["-p", "{{prompt}}"], enabled: true },
-    codex_cli: { command: "codex", args: ["exec", "{{prompt}}"], enabled: true },
+    claude_cli: { command: "claude", args: ["--print", "--output-format", "text", "--no-session-persistence", "{{prompt}}"], enabled: true },
+    codex_cli: { command: "codex", args: ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-"], enabled: true },
     ollama: { model: "llama3.1:8b", baseUrl: "http://localhost:11434", enabled: true },
-    copilot_cli: { command: "gh", args: ["copilot", "suggest", "{{prompt}}"], enabled: false },
+    copilot_cli: { command: "copilot", args: ["-p", "{{prompt}}", "--silent", "--stream", "off", "--no-auto-update", "--allow-all-tools"], enabled: true },
   },
   roles: {
-    orchestrator: ["claude_cli", "anthropic_api", "ollama", "mock"],
-    worker: ["ollama", "claude_cli", "codex_cli", "anthropic_api", "mock"],
-    validator: ["codex_cli", "anthropic_api", "claude_cli", "ollama", "mock"],
-    interview: ["claude_cli", "anthropic_api", "ollama", "mock"],
-    profile: ["anthropic_api", "claude_cli", "ollama", "mock"],
+    orchestrator: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
+    worker: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
+    validator: ["anthropic_api", "codex_cli", "claude_cli", "ollama"],
+    interview: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
+    profile: ["anthropic_api", "claude_cli", "codex_cli", "ollama"],
   },
 };
 

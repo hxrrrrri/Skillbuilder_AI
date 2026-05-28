@@ -1,5 +1,4 @@
-// Demo seed endpoint — fabricates a completed mission so the hackathon demo
-// stays demoable even when GitHub rate-limits or local tools are missing.
+// Development-only fixture seed endpoint. Disabled unless explicitly enabled.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
@@ -195,6 +194,15 @@ const interviewQuestions = [
 ];
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production" || process.env.SKILLPROOF_ENABLE_FIXTURE_DATA !== "1") {
+    return NextResponse.json(
+      {
+        error: "fixture_seed_disabled",
+        reason: "Fixture data is development-only. Set SKILLPROOF_ENABLE_FIXTURE_DATA=1 outside production to enable.",
+      },
+      { status: 404 },
+    );
+  }
   // Idempotent: clean previous demo records by candidate name.
   const existing = await prisma.publicProfile.findFirst({ where: { slug: "demo" } });
   if (existing) {

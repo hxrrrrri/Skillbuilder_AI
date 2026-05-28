@@ -134,7 +134,7 @@ ${sampledTruth.map((p) => "- " + p).join("\n")}
 Score claims to audit:
 ${JSON.stringify(claims, null, 2)}
 
-Heuristic baseline already computed:
+Deterministic evidence audit already computed:
 ${JSON.stringify(baseline, null, 2)}
 
 Return the JSON now.`;
@@ -147,7 +147,6 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
-    fallback: () => baseline,
   });
 
   const out: ValidatorOutput = {

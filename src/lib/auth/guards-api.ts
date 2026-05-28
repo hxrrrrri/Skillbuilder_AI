@@ -43,6 +43,20 @@ export type RunAccessDecision =
   | { ok: true; user: SessionUser; reason: "admin" | "creator" | "candidate_owner" | "tenant_member" }
   | { ok: false; response: NextResponse; reason: "unauthenticated" | "forbidden" };
 
+export type RunMutationAction =
+  | "submit_interview_answer"
+  | "submit_ai_challenge"
+  | "save_terminal_evidence"
+  | "publish_profile"
+  | "unpublish_profile"
+  | "execute_terminal_command"
+  | "publish_terminal_transcript"
+  | "verify_ownership";
+
+export type RunMutationDecision =
+  | { ok: true; user: SessionUser; reason: "admin" | "creator" | "candidate_owner" }
+  | { ok: false; response: NextResponse; reason: "unauthenticated" | "forbidden" };
+
 /**
  * Centralized policy for "who can read this AnalysisRun?".
  *
@@ -90,5 +104,48 @@ export function evaluateRunAccess(
     ok: false,
     reason: "forbidden",
     response: NextResponse.json({ error: "forbidden" }, { status: 403 }),
+  };
+}
+
+/**
+ * Centralized policy for "who can mutate this AnalysisRun or candidate proof?".
+ *
+ * Only the candidate/run creator and admins may mutate proof. College tenants are
+ * read-only, employers must use public-profile workflows, and anonymous users
+ * cannot mutate anything.
+ */
+export function evaluateRunMutationAccess(
+  user: SessionUser | null,
+  run: RunAccessSubject,
+  _action: RunMutationAction,
+): RunMutationDecision {
+  if (!user) {
+    return {
+      ok: false,
+      reason: "unauthenticated",
+      response: NextResponse.json({ error: "unauthenticated" }, { status: 401 }),
+    };
+  }
+
+  if (isAdminRole(user.role)) {
+    return { ok: true, user, reason: "admin" };
+  }
+
+  if (user.role === "candidate") {
+    if (run.createdByUserId && run.createdByUserId === user.id) {
+      return { ok: true, user, reason: "creator" };
+    }
+    if (run.candidateUserId && run.candidateUserId === user.id) {
+      return { ok: true, user, reason: "candidate_owner" };
+    }
+  }
+
+  return {
+    ok: false,
+    reason: "forbidden",
+    response: NextResponse.json(
+      { error: "forbidden", reason: "only the candidate who owns the run or an admin can mutate proof" },
+      { status: 403 },
+    ),
   };
 }

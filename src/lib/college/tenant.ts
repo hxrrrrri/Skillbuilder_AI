@@ -69,7 +69,12 @@ export function collegeErrorResponse(err: unknown): Response {
 }
 
 export function tenantRunWhere(scope: CollegeTenantScope, base: Record<string, any> = {}) {
-  return { ...base, tenantId: { in: scope.tenantIds.length ? scope.tenantIds : [scope.tenantId] } };
+  return {
+    ...base,
+    tenantId: { in: scope.tenantIds.length ? scope.tenantIds : [scope.tenantId] },
+    executionMode: { not: "mock" },
+    scores: { none: { scoreSource: { in: ["mock", "heuristic"] } } },
+  };
 }
 
 export async function ensureCohortInTenant(cohortId: string, tenantId: string) {
@@ -97,11 +102,10 @@ export async function getSkillGaps(scope: CollegeTenantScope, cohortId?: string 
       ).map((s) => s.candidateId)
     : null;
   const runs = await prisma.analysisRun.findMany({
-    where: {
-      tenantId: { in: scope.tenantIds.length ? scope.tenantIds : [scope.tenantId] },
+    where: tenantRunWhere(scope, {
       status: "completed",
       ...(candidateIds ? { candidateId: { in: candidateIds } } : {}),
-    },
+    }),
     include: { scores: true },
   });
   const gaps = SKILL_GAP_SKILLS.map((skill) => {
@@ -116,7 +120,7 @@ export async function getSkillGaps(scope: CollegeTenantScope, cohortId?: string 
 
 export async function getPlacementReady(scope: CollegeTenantScope) {
   const runs = await prisma.analysisRun.findMany({
-    where: { tenantId: { in: scope.tenantIds.length ? scope.tenantIds : [scope.tenantId] }, status: "completed" },
+    where: tenantRunWhere(scope, { status: "completed" }),
     include: { candidate: true, repository: true, profiles: true },
     orderBy: { completedAt: "desc" },
   });
@@ -154,7 +158,7 @@ export async function getPlacementReady(scope: CollegeTenantScope) {
 
 export async function buildCollegeReport(scope: CollegeTenantScope, format: "csv" | "md") {
   const runs = await prisma.analysisRun.findMany({
-    where: { tenantId: { in: scope.tenantIds.length ? scope.tenantIds : [scope.tenantId] } },
+    where: tenantRunWhere(scope),
     include: { candidate: true, repository: true },
     orderBy: { createdAt: "desc" },
   });

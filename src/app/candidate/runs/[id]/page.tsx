@@ -95,7 +95,7 @@ export default async function CandidateRunDetailPage({ params }: { params: { id:
         {ownership?.confidence === "self_declared" && <Badge tone="warn">Self-declared ownership</Badge>}
         {!ownership && <Badge tone="default">Ownership not measured</Badge>}
         {terminal.some((t) => t.exitCode === 0) ? <Badge tone="good">Terminal verified</Badge> : <Badge>Terminal not measured</Badge>}
-        {isMockLike && <Badge tone="warn">Mock / heuristic signals present</Badge>}
+        {isMockLike && <Badge tone="bad">Legacy unverified score source</Badge>}
       </div>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -414,8 +414,8 @@ function TrustList({
       {evidenceSet.has("github_api") && <Badge tone="good">GitHub API verified</Badge>}
       {evidenceSet.has("local_clone") && <Badge tone="good">Local clone verified</Badge>}
       {sourceSet.has("llm") && <Badge tone="accent">LLM judged</Badge>}
-      {sourceSet.has("heuristic") && <Badge tone="warn">Heuristic only</Badge>}
-      {(sourceSet.has("mock") || executionMode === "mock") && <Badge tone="bad">Mock/demo</Badge>}
+      {sourceSet.has("heuristic") && <Badge tone="bad">Legacy heuristic</Badge>}
+      {(sourceSet.has("mock") || executionMode === "mock") && <Badge tone="bad">Legacy mock</Badge>}
       {ownership?.confidence === "verified" && <Badge tone="good">Ownership verified</Badge>}
       {ownership?.confidence === "self_declared" && <Badge tone="warn">Self-declared</Badge>}
       {!ownership && <Badge>Not measured</Badge>}

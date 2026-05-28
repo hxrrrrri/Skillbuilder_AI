@@ -70,7 +70,7 @@ export default async function TalentPoolSharePage({ params }: { params: { token:
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge tone={profile.ownership === "verified" ? "good" : "warn"}>{profile.ownership}</Badge>
                   <Badge tone={profile.interviewVerified ? "good" : "default"}>interview {profile.interviewVerified ? "verified" : "pending"}</Badge>
-                  {profile.mockOrHeuristic && <Badge tone="warn">mock / heuristic</Badge>}
+                  {profile.mockOrHeuristic && <Badge tone="bad">legacy unverified</Badge>}
                 </div>
                 <Link href={`/profile/${profile.slug}`} className="mt-4 inline-flex text-sm font-semibold text-accent hover:text-ink">
                   Open public profile

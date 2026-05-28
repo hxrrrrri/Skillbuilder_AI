@@ -123,11 +123,10 @@ Produce the validation contract JSON now.`;
     schemaHint: SCHEMA_HINT,
     maxTokens: 2500,
     temperature: 0.2,
-    fallback: () => fallbackContract(state),
   });
 
   const contract = normalizeContract(
-    res.output && res.output.assertions?.length ? res.output : fallbackContract(state),
+    res.output,
     state
   );
   state.contract = contract;

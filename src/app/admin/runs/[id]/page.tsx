@@ -52,10 +52,7 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
   const authenticity = safeJsonParse(run.authenticitySignals, null);
   const contextPack = safeJsonParse(run.contextPack, null);
 
-  const isMockMode =
-    run.executionMode === "mock" ||
-    (run.executionMode === "api" &&
-      (!process.env.ANTHROPIC_API_KEY || process.env.SKILLPROOF_MOCK_LLM === "1"));
+  const hasLegacyUnverifiedScores = run.executionMode === "mock" || run.scores.some((s) => ["mock", "heuristic"].includes(s.scoreSource));
 
   return (
     <RoleShell
@@ -72,7 +69,7 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
         <Badge tone={run.verificationLevel === "repo_interview_verified" ? "good" : "default"}>
           {run.verificationLevel.replace(/_/g, " ")}
         </Badge>
-        {isMockMode && <Badge tone="warn">MOCK / heuristic mode</Badge>}
+        {hasLegacyUnverifiedScores && <Badge tone="bad">legacy unverified score source</Badge>}
         {run.overallScore != null && <Badge tone="accent">score {run.overallScore}</Badge>}
         <Link href={`/admin/runs/${run.id}/terminal`} className="text-accent hover:underline">
           open sandbox terminal →
@@ -274,7 +271,7 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
                         <Badge
                           tone={
                             s.scoreSource === "mock" || s.scoreSource === "heuristic"
-                              ? "warn"
+                              ? "bad"
                               : s.scoreSource === "llm"
                               ? "accent"
                               : "default"

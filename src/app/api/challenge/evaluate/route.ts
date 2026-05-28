@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { isMockMode } from "@/lib/claude";
 import { recomputeOverall } from "@/agents/skill-graph";
 import { runAgentJson } from "@/lib/providers/run-agent";
+import { ProviderExecutionError, providerErrorMetadata } from "@/lib/providers/errors";
 import { safeJsonParse } from "@/lib/utils";
 import type { AICollabEvaluation, MissionState } from "@/agents/types";
 import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
 import type { ProviderMatrix } from "@/lib/providers/types";
 import { getCurrentUser } from "@/lib/auth/session";
-import { evaluateRunAccess } from "@/lib/auth/guards-api";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
@@ -47,37 +47,20 @@ Return STRICT JSON:
 
 const SCHEMA_HINT = '{"correctness_score":number,"explanation_quality_score":number,"test_awareness_score":number,"review_discipline_score":number,"ai_collaboration_maturity_score":number,"overall_score":number,"tool_used":string,"feedback":string}';
 
-function heuristicScore(body: z.infer<typeof Body>): AICollabEvaluation {
+function deterministicContext(body: z.infer<typeof Body>): Pick<AICollabEvaluation, "challenge_id" | "prompt" | "target_files" | "expected_capabilities" | "difficulty" | "tool_used" | "evidence" | "what_this_proves"> {
   const diff = body.proposed_diff;
   const exp = body.explanation;
   const targetHits = body.target_files.filter((file) => diff.includes(file) || diff.includes(`a/${file}`) || diff.includes(`b/${file}`));
   const hasTests = /\btest\b|\bspec\b|\bdescribe\(|\bit\(|\bexpect\(/i.test(diff);
   const mentionsTests = /\btest|\bspec|\bcover/i.test(exp) || !!body.tests_changed;
   const mentionsReview = body.reviewed_ai_output || /\breview|\bcaveat|\blimitation|\btradeoff/i.test(exp);
-  const mentionsAI = /\b(claude|gpt|copilot|cursor|gemini|ai)\b/i.test(exp);
-  const explanationMatches = targetHits.length > 0 && targetHits.some((file) => exp.includes(file.split("/").pop() ?? file));
-  const correctness = Math.min(100, 42 + (diff.length > 200 ? 12 : 0) + (targetHits.length ? 18 : -10) + (explanationMatches ? 8 : 0) + (hasTests ? 8 : 0));
-  const explanation = Math.min(100, 45 + (exp.length > 200 ? 12 : 0) + (mentionsReview ? 10 : 0) + (explanationMatches ? 12 : 0));
-  const testAware = mentionsTests || hasTests ? 75 : 40;
-  const review = mentionsReview ? 75 : 45;
-  const maturity = mentionsAI && mentionsReview && (body.limitations_discussed || /\blimitation|tradeoff|risk|follow-up/i.test(exp)) ? 80 : mentionsAI ? 62 : 52;
-  const overall = Math.round((correctness + explanation + testAware + review + maturity) / 5);
   return {
     challenge_id: body.challenge_id,
     prompt: body.challenge_prompt,
     target_files: body.target_files,
     expected_capabilities: body.expected_capabilities,
     difficulty: body.difficulty,
-    correctness_score: correctness,
-    explanation_quality_score: explanation,
-    test_awareness_score: testAware,
-    review_discipline_score: review,
-    ai_collaboration_maturity_score: maturity,
-    overall_score: overall,
     tool_used: body.tool_used,
-    feedback: targetHits.length
-      ? "Heuristic evaluation: diff touched target repo files, explanation/test awareness/review discipline were scored against the challenge."
-      : "Heuristic evaluation: diff did not clearly touch the target files, so correctness was capped.",
     what_this_proves: [
       targetHits.length ? "Can target changes to the relevant repo area." : "Target-file alignment still needs proof.",
       mentionsTests ? "Considers tests or justifies test scope." : "Test discipline not demonstrated.",
@@ -108,12 +91,12 @@ export async function POST(req: Request) {
   });
   if (!access) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
   const sessionUser = await getCurrentUser();
-  const decision = evaluateRunAccess(sessionUser, {
+  const decision = evaluateRunMutationAccess(sessionUser, {
     candidateId: access.candidateId,
     createdByUserId: access.createdByUserId,
     tenantId: access.tenantId,
     candidateUserId: access.candidate?.userId ?? null,
-  });
+  }, "submit_ai_challenge");
   if (!decision.ok) {
     await writeAuditLog({
       action: "challenge.evaluate.denied",
@@ -128,7 +111,7 @@ export async function POST(req: Request) {
     return decision.response;
   }
 
-  const baseline = heuristicScore(body);
+  const deterministic = deterministicContext(body);
   const mode: ExecutionMode = (run.executionMode as ExecutionMode) ?? "api";
 
   const state: MissionState = {
@@ -144,7 +127,7 @@ export async function POST(req: Request) {
     authenticity: null,
     tokens_in: 0,
     tokens_out: 0,
-    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    mock_mode: false,
     execution_mode: mode,
     provider_matrix: safeJsonParse<ProviderMatrix | null>(run.providerMatrix ?? null, null),
     terminal_evidence: safeJsonParse<TerminalEvidence[]>(run.terminalEvidence ?? null, []),
@@ -167,20 +150,36 @@ ${body.proposed_diff.slice(0, 8000)}
 Candidate explanation:
 """${body.explanation.slice(0, 4000)}"""
 
-Heuristic baseline: ${JSON.stringify(baseline)}
+Deterministic submission context: ${JSON.stringify(deterministic)}
 
 Return the JSON now.`;
 
-  const res = await runAgentJson<AICollabEvaluation>({
-    state,
-    agentName: "ai-collaboration-evaluator",
-    role: "validator",
-    system: SYSTEM,
-    user: promptUser,
-    schemaHint: SCHEMA_HINT,
-    maxTokens: 900,
-    fallback: () => baseline,
-  });
+  let res;
+  try {
+    res = await runAgentJson<AICollabEvaluation>({
+      state,
+      agentName: "ai-collaboration-evaluator",
+      role: "validator",
+      system: SYSTEM,
+      user: promptUser,
+      schemaHint: SCHEMA_HINT,
+      maxTokens: 900,
+    });
+  } catch (err) {
+    if (err instanceof ProviderExecutionError) {
+      return NextResponse.json(
+        {
+          error: err.code,
+          message: err.message,
+          provider: err.provider,
+          fix: err.fix,
+          trace: providerErrorMetadata(err),
+        },
+        { status: err.code === "provider_invalid_json" ? 502 : 503 },
+      );
+    }
+    throw err;
+  }
 
   const out = res.output;
   out.challenge_id = out.challenge_id ?? body.challenge_id;
@@ -188,8 +187,8 @@ Return the JSON now.`;
   out.target_files = out.target_files ?? body.target_files;
   out.expected_capabilities = out.expected_capabilities ?? body.expected_capabilities;
   out.difficulty = out.difficulty ?? body.difficulty;
-  out.evidence = out.evidence ?? baseline.evidence;
-  out.what_this_proves = out.what_this_proves ?? baseline.what_this_proves;
+  out.evidence = out.evidence ?? deterministic.evidence;
+  out.what_this_proves = out.what_this_proves ?? deterministic.what_this_proves;
 
   await prisma.analysisRun.update({
     where: { id: body.run_id },
@@ -203,8 +202,8 @@ Return the JSON now.`;
     runId: body.run_id,
     skillName: "AI Collaboration",
     score: out.overall_score,
-    confidence: res.source === "llm" ? 0.8 : 0.5,
-    scoreSource: res.source,
+    confidence: 0.8,
+    scoreSource: "challenge",
     evidence: JSON.stringify(out.evidence?.length ? out.evidence : [{ reason: `AI Collaboration challenge submission (${out.tool_used}). ${out.feedback}`, source: "challenge" }]),
   };
   if (existing) {

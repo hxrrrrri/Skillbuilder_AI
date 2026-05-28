@@ -1,15 +1,38 @@
 // Anthropic API provider — wraps existing llmCall.
 
-import { extractJson, llmCall } from "@/lib/claude";
-import type { LLMProvider, ProviderPrompt, ProviderResult } from "./types";
+import { llmCall } from "@/lib/claude";
+import type { LLMProvider, ProviderHealth, ProviderPrompt, ProviderResult } from "./types";
 import { mapReasoningBudget } from "./reasoning";
+import { parseProviderJson } from "./json";
 
 export function makeAnthropicApiProvider(opts: { enabled?: boolean; defaultModel?: string | null } = {}): LLMProvider {
   return {
     id: "anthropic_api",
     label: "Anthropic API",
     async available() {
-      return opts.enabled !== false && !!process.env.ANTHROPIC_API_KEY && process.env.SKILLPROOF_MOCK_LLM !== "1";
+      return opts.enabled !== false && !!process.env.ANTHROPIC_API_KEY;
+    },
+    async health(): Promise<ProviderHealth> {
+      const enabled = opts.enabled !== false;
+      const hasKey = !!process.env.ANTHROPIC_API_KEY;
+      return {
+        providerId: "anthropic_api",
+        label: "Anthropic API",
+        status: !enabled ? "disabled" : hasKey ? "ready" : "installed_not_authenticated",
+        enabled,
+        installed: true,
+        authenticated: hasKey,
+        version: "sdk",
+        supportsJson: true,
+        supportsNonInteractive: true,
+        supportsModelSelection: true,
+        supportsReasoningBudget: true,
+        availableModels: ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+        configuredModel: opts.defaultModel ?? null,
+        lastError: hasKey ? null : "ANTHROPIC_API_KEY is missing",
+        fix: hasKey ? "API key configured." : "Set ANTHROPIC_API_KEY and rerun Admin -> Providers -> Test.",
+        command: "Anthropic SDK messages.create",
+      };
     },
     async runJson(prompt: ProviderPrompt, schemaHint: string): Promise<ProviderResult> {
       const sys = `${prompt.system}\n\nRespond with valid JSON only, matching: ${schemaHint}`;
@@ -27,8 +50,12 @@ export function makeAnthropicApiProvider(opts: { enabled?: boolean; defaultModel
             : null,
       });
       return {
-        json: extractJson(res.text),
+        json: parseProviderJson(res.text),
         raw: res.text,
+        stdout: res.text,
+        stderr: "",
+        exitCode: 0,
+        command: "Anthropic SDK messages.create",
         provider: "anthropic_api",
         inputTokens: res.inputTokens,
         outputTokens: res.outputTokens,

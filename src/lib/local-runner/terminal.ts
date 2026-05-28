@@ -63,7 +63,9 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
       child = spawn(command, args, {
         cwd,
         env: { ...process.env, ...opts.env },
-        shell: opts.shell ?? false,
+        // On Windows, Volta (and npm global installs) create .cmd shims — not .exe.
+        // spawn() without shell can't resolve .cmd files, causing ENOENT for codex, copilot, etc.
+        shell: opts.shell ?? (process.platform === "win32"),
         windowsHide: true,
       });
     } catch (err: any) {
@@ -96,9 +98,9 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
       } catch {}
     }, timeoutMs);
 
-    if (opts.input && child.stdin) {
+    if (child.stdin) {
       try {
-        child.stdin.write(opts.input);
+        if (opts.input) child.stdin.write(opts.input);
         child.stdin.end();
       } catch {}
     }

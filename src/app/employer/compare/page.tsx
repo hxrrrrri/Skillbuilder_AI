@@ -74,7 +74,7 @@ export default async function EmployerComparePage({
                           <Badge tone={r.proof_strength.ownership === "verified" ? "good" : "warn"}>{r.proof_strength.ownership}</Badge>
                           {r.proof_strength.interview_verified && <Badge tone="good">interview</Badge>}
                           {r.proof_strength.terminal_proof && <Badge tone="good">terminal</Badge>}
-                          {r.proof_strength.mock_or_heuristic && <Badge tone="warn">mock / heuristic</Badge>}
+                          {r.proof_strength.mock_or_heuristic && <Badge tone="bad">legacy unverified</Badge>}
                         </div>
                       </td>
                     ))}

@@ -3,7 +3,7 @@ import type { AgentName, Evidence, MissionState, ValidationAssertion, Validation
 function hasDirectEvidence(e: Evidence): boolean {
   if (e.source === "terminal" || e.source === "interview" || e.source === "challenge") return true;
   if (e.source === "github_api" && !e.file) return true;
-  return !!e.file && (!!e.snippet || !!e.line_start || !!e.line || e.source === "github_api" || e.source === "heuristic" || e.source === "llm");
+  return !!e.file && (!!e.snippet || !!e.line_start || !!e.line || e.source === "github_api" || e.source === "deterministic" || e.source === "llm");
 }
 
 export function assertionResultsForDimension(args: {

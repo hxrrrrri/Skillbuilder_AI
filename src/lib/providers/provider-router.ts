@@ -1,9 +1,12 @@
 // Provider router — resolves runtime provider/model settings and executes agents.
 
 import { makeAnthropicApiProvider } from "./anthropic";
-import { makeCliProvider } from "./cli-provider";
+import { makeClaudeCliProvider } from "./claude-cli";
+import { makeCodexCliProvider } from "./codex-cli";
+import { makeCopilotCliProvider } from "./copilot-cli";
 import { loadProviderConfig, type ProviderTemplate } from "./config";
-import { mockProvider } from "./mock";
+import { deterministicProvider } from "./deterministic";
+import { ProviderExecutionError, ProviderInvalidJsonError } from "./errors";
 import { makeOllamaProvider } from "./ollama";
 import { mapReasoningBudget, type ReasoningBudget } from "./reasoning";
 import {
@@ -16,6 +19,7 @@ import type {
   AgentRole,
   LLMProvider,
   ProviderId,
+  ProviderHealth,
   ProviderMatrix,
   ProviderMatrixAgentEntry,
   ProviderPrompt,
@@ -63,7 +67,7 @@ function isProviderId(value: unknown): value is ProviderId {
     value === "codex_cli" ||
     value === "ollama" ||
     value === "copilot_cli" ||
-    value === "mock"
+    value === "deterministic"
   );
 }
 
@@ -106,44 +110,34 @@ export async function buildProviderRegistry(): Promise<Record<ProviderId, LLMPro
       enabled: rows.get("anthropic_api")?.enabled,
       defaultModel: rows.get("anthropic_api")?.defaultModel ?? null,
     }),
-    claude_cli: makeCliProvider({
-      id: "claude_cli",
-      label: "Claude CLI",
-      template: templateFromDb(rows.get("claude_cli"), cfg.providers.claude_cli),
-    }),
-    codex_cli: makeCliProvider({
-      id: "codex_cli",
-      label: "Codex CLI",
-      template: templateFromDb(rows.get("codex_cli"), cfg.providers.codex_cli),
-    }),
-    copilot_cli: makeCliProvider({
-      id: "copilot_cli",
-      label: "Copilot CLI",
-      template: templateFromDb(rows.get("copilot_cli"), cfg.providers.copilot_cli),
-      probeArgs: ["copilot", "--version"],
-    }),
+    claude_cli: makeClaudeCliProvider(templateFromDb(rows.get("claude_cli"), cfg.providers.claude_cli)),
+    codex_cli: makeCodexCliProvider(templateFromDb(rows.get("codex_cli"), cfg.providers.codex_cli)),
+    copilot_cli: makeCopilotCliProvider(templateFromDb(rows.get("copilot_cli"), cfg.providers.copilot_cli)),
     ollama: makeOllamaProvider(templateFromDb(rows.get("ollama"), cfg.providers.ollama)),
-    mock: mockProvider,
+    deterministic: deterministicProvider,
   };
 }
 
 function preferenceFor(role: AgentRole, mode: ExecutionMode): ProviderId[] {
   const cfg = loadProviderConfig();
-  const rolePref = ((cfg.roles?.[role] ?? []) as string[]).filter(isProviderId);
+  const rolePref = ((cfg.roles?.[role] ?? []) as string[]).filter(isProviderId).filter((p) => p !== "deterministic");
   if (mode === "api") {
-    return ["anthropic_api", "mock"];
+    return ["anthropic_api"];
   }
   if (mode === "cli") {
-    return rolePref.filter((p) => p !== "anthropic_api").concat("mock");
+    const cli = rolePref.filter((p) => p !== "anthropic_api" && p !== "ollama");
+    return cli.length ? cli : ["claude_cli", "codex_cli", "copilot_cli"];
   }
   if (mode === "hybrid") {
-    return rolePref.concat("mock");
+    return rolePref.length ? rolePref : ["anthropic_api", "claude_cli", "codex_cli", "ollama"];
   }
-  return ["mock"];
+  return rolePref.filter((p) => p !== "anthropic_api").length
+    ? rolePref.filter((p) => p !== "anthropic_api")
+    : ["ollama", "claude_cli", "codex_cli", "copilot_cli"];
 }
 
 function modelForProvider(provider: ProviderId, resolved: ResolvedAgentConfig): string {
-  if (provider === "mock") return "mock:heuristic";
+  if (provider === "deterministic") return resolved.model || "evidence-derived";
   if (provider === resolved.provider) return resolved.model;
   const cfg = loadProviderConfig();
   if (provider === "ollama") return cfg.providers.ollama?.model ?? resolved.model;
@@ -154,18 +148,23 @@ async function chooseAvailableProvider(
   role: AgentRole,
   mode: ExecutionMode,
   reg: Record<ProviderId, LLMProvider>,
-): Promise<{ provider: ProviderId; source: "file" | "mock" }> {
+): Promise<{ provider: ProviderId; source: "file" }> {
   for (const pid of preferenceFor(role, mode)) {
     const provider = reg[pid];
     if (!provider) continue;
     if (await provider.available()) {
-      return { provider: pid, source: pid === "mock" ? "mock" : "file" };
+      return { provider: pid, source: "file" };
     }
   }
-  return { provider: "mock", source: "mock" };
+  throw new ProviderExecutionError({
+    provider: "anthropic_api",
+    code: "provider_unavailable",
+    message: `No ready provider available for ${role} in ${mode} mode.`,
+    fix: "Open Admin -> Providers -> Health, configure at least one real provider, and run a passing JSON contract test.",
+  });
 }
 
-function toMatrixEntry(resolved: ResolvedAgentConfig, source: "db" | "default" | "file" | "mock"): ProviderMatrixAgentEntry {
+function toMatrixEntry(resolved: ResolvedAgentConfig, source: "db" | "default" | "file" | "deterministic"): ProviderMatrixAgentEntry {
   return {
     provider: resolved.provider,
     model: resolved.model,
@@ -192,13 +191,13 @@ async function resolveMatrixEntry(
 ): Promise<ProviderMatrixAgentEntry> {
   const resolved = await resolveAgentConfig(agentName);
   if (resolved.source === "db") return toMatrixEntry(resolved, "db");
+  if (resolved.provider === "deterministic") return toMatrixEntry(resolved, "deterministic");
 
   const chosen = await chooseAvailableProvider(role, mode, reg);
   return {
     ...toMatrixEntry(resolved, chosen.source),
     provider: chosen.provider,
     model: modelForProvider(chosen.provider, resolved),
-    reasoningBudget: chosen.provider === "mock" ? "none" : resolved.reasoningBudget,
   };
 }
 
@@ -208,15 +207,23 @@ export async function selectProviderMatrix(mode: ExecutionMode): Promise<Provide
   const usedForWorker: ProviderId[] = [];
   for (const role of ROLES) {
     const pref = preferenceFor(role, mode);
-    let chosen: ProviderId = "mock";
+    let chosen: ProviderId | null = null;
     for (const pid of pref) {
       const p = reg[pid];
       if (!p) continue;
-      if (role === "validator" && usedForWorker.includes(pid) && pref.some((x) => x !== pid && x !== "mock")) continue;
+      if (role === "validator" && usedForWorker.includes(pid) && pref.some((x) => x !== pid)) continue;
       if (await p.available()) {
         chosen = pid;
         break;
       }
+    }
+    if (!chosen) {
+      throw new ProviderExecutionError({
+        provider: "anthropic_api",
+        code: "provider_unavailable",
+        message: `No ready provider available for ${role} in ${mode} mode.`,
+        fix: "Open Admin -> Providers -> Health and run provider setup tests before starting verification.",
+      });
     }
     matrix[role] = chosen;
     if (role === "worker") usedForWorker.push(chosen);
@@ -232,22 +239,22 @@ export async function selectProviderMatrix(mode: ExecutionMode): Promise<Provide
 }
 
 function legacyEntry(matrix: ProviderMatrix, role: AgentRole, prompt: ProviderPrompt): ProviderMatrixAgentEntry {
-  const provider = matrix[role] ?? "mock";
-  const model = prompt.model ?? (provider === "mock" ? "mock:heuristic" : provider);
+  const provider = matrix[role];
+  const model = prompt.model ?? provider;
   return {
     provider,
     model,
     reasoningBudget: prompt.reasoningBudget ?? "none",
     enabled: true,
-    fallbackProvider: "mock",
+    fallbackProvider: null,
     fallbackModel: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     temperature: prompt.temperature ?? 0.2,
     maxTokens: prompt.maxTokens ?? 1500,
     jsonMode: true,
     timeoutMs: 60_000,
     retryCount: 1,
-    source: provider === "mock" ? "mock" : "file",
+    source: "file",
     status: "planned",
   };
 }
@@ -294,24 +301,7 @@ async function runProvider(
 }
 
 function hasUsableJson(result: ProviderResult): boolean {
-  return result.json !== null || result.provider === "mock";
-}
-
-async function fallbackToMock(
-  reg: Record<ProviderId, LLMProvider>,
-  entry: ProviderMatrixAgentEntry,
-  prompt: ProviderPrompt,
-  schemaHint: string,
-  note: string,
-): Promise<ProviderResult> {
-  const result = await runProvider(
-    reg.mock,
-    { ...entry, provider: "mock", model: "mock:heuristic", reasoningBudget: "none" },
-    prompt,
-    schemaHint,
-  );
-  const runtime = runtimeFor(entry, result, "fallback", note);
-  return { ...result, runtime };
+  return result.json !== null;
 }
 
 async function handleProviderFailure(
@@ -324,7 +314,7 @@ async function handleProviderFailure(
   agentName: string,
 ): Promise<ProviderResult> {
   const note = err instanceof Error ? err.message : String(err);
-  if (entry.fallbackStrategy === "skip") {
+  if (entry.fallbackStrategy === "skip_optional") {
     throw new AgentSkippedError(agentName, note || "provider failed", {
       ...entry,
       status: "skipped",
@@ -332,10 +322,35 @@ async function handleProviderFailure(
     });
   }
   if (entry.fallbackStrategy === "retry") {
-    const retry = await runProvider(provider, entry, prompt, schemaHint);
-    return { ...retry, runtime: runtimeFor(entry, retry, "used", "retry after provider failure") };
+    try {
+      const retry = await runProvider(provider, entry, prompt, schemaHint);
+      if (hasUsableJson(retry)) return { ...retry, runtime: runtimeFor(entry, retry, "used", "retry after provider failure") };
+    } catch {}
+    if (entry.fallbackProvider && entry.fallbackProvider !== entry.provider) {
+      const fallback = reg[entry.fallbackProvider];
+      if (fallback && await fallback.available()) {
+        const result = await runProvider(
+          fallback,
+          { ...entry, provider: entry.fallbackProvider, model: entry.fallbackModel ?? modelForProvider(entry.fallbackProvider, entry as any) },
+          prompt,
+          schemaHint,
+        );
+        if (hasUsableJson(result)) return { ...result, runtime: runtimeFor(entry, result, "fallback", note) };
+      }
+    }
   }
-  return fallbackToMock(reg, entry, prompt, schemaHint, note || "provider failed");
+  const providerError = err instanceof ProviderExecutionError
+    ? err
+    : new ProviderExecutionError({
+        provider: entry.provider,
+        code: "provider_execution_failed",
+        message: note || "provider failed",
+        agentName,
+        runtime: { ...entry, status: "failed", note },
+        fix: "Open Admin -> Providers -> Health, fix the provider, and retry the mission.",
+      });
+  providerError.runtime = providerError.runtime ?? { ...entry, status: "failed", note };
+  throw providerError;
 }
 
 export async function runWithMatrix(
@@ -356,7 +371,16 @@ export async function runWithMatrix(
     });
   }
 
-  const primary = reg[entry.provider] ?? reg.mock;
+  const primary = reg[entry.provider];
+  if (!primary) {
+    throw new ProviderExecutionError({
+      provider: entry.provider,
+      code: "provider_unavailable",
+      message: `provider ${entry.provider} is not registered`,
+      agentName: name,
+      runtime: { ...entry, status: "failed", note: "provider not registered" },
+    });
+  }
   if (!(await primary.available())) {
     return handleProviderFailure(
       new Error(`provider ${entry.provider} unavailable`),
@@ -380,7 +404,7 @@ export async function runWithMatrix(
     return { ...result, runtime: runtimeFor(entry, result, "used") };
   }
 
-  if (entry.fallbackStrategy === "skip") {
+  if (entry.fallbackStrategy === "skip_optional") {
     throw new AgentSkippedError(name, "provider returned invalid JSON", {
       ...entry,
       status: "skipped",
@@ -389,9 +413,14 @@ export async function runWithMatrix(
   }
   if (entry.fallbackStrategy === "retry") {
     const retry = await runProvider(primary, entry, prompt, schemaHint);
-    return { ...retry, runtime: runtimeFor(entry, retry, "used", "retry after invalid JSON") };
+    if (hasUsableJson(retry)) return { ...retry, runtime: runtimeFor(entry, retry, "used", "retry after invalid JSON") };
   }
-  return fallbackToMock(reg, entry, prompt, schemaHint, "provider returned invalid JSON");
+  throw new ProviderInvalidJsonError({
+    provider: entry.provider,
+    agentName: name,
+    result,
+    runtime: runtimeFor(entry, result, "failed", "provider returned invalid JSON"),
+  });
 }
 
 export async function listProviderAvailability(): Promise<Array<{ id: ProviderId; label: string; available: boolean }>> {
@@ -404,4 +433,109 @@ export async function listProviderAvailability(): Promise<Array<{ id: ProviderId
       available: await reg[id].available(),
     })),
   );
+}
+
+export async function listProviderHealth(): Promise<ProviderHealth[]> {
+  const reg = await buildProviderRegistry();
+  const ids = Object.keys(reg) as ProviderId[];
+  return Promise.all(
+    ids.map(async (id) => {
+      const provider = reg[id];
+      if (provider.health) return provider.health();
+      const available = await provider.available();
+      return {
+        providerId: id,
+        label: provider.label,
+        status: available ? "ready" : "failed",
+        enabled: true,
+        installed: available,
+        authenticated: available,
+        version: null,
+        supportsJson: true,
+        supportsNonInteractive: true,
+        supportsModelSelection: false,
+        supportsReasoningBudget: false,
+        availableModels: [],
+        configuredModel: null,
+        fix: available ? "Provider is ready." : "Run provider-specific setup.",
+        command: null,
+      };
+    }),
+  );
+}
+
+export async function checkProviderReadinessForMode(mode: ExecutionMode): Promise<{
+  ok: boolean;
+  mode: ExecutionMode;
+  matrix: ProviderMatrix | null;
+  blockers: Array<{
+    providerId: ProviderId;
+    agentName?: string;
+    reason: string;
+    fix: string;
+    lastTestStatus?: string | null;
+    lastTestJsonOk?: boolean | null;
+  }>;
+}> {
+  let matrix: ProviderMatrix;
+  try {
+    matrix = await selectProviderMatrix(mode);
+  } catch (err) {
+    return {
+      ok: false,
+      mode,
+      matrix: null,
+      blockers: [{
+        providerId: "anthropic_api",
+        reason: err instanceof Error ? err.message : String(err),
+        fix: "Open Admin -> Providers -> Health, configure at least one real provider, and run provider tests.",
+      }],
+    };
+  }
+  const rows = await listProviderConfigs();
+  const rowByProvider = new Map(rows.map((r) => [r.providerId, r]));
+  const blockers: Array<{
+    providerId: ProviderId;
+    agentName?: string;
+    reason: string;
+    fix: string;
+    lastTestStatus?: string | null;
+    lastTestJsonOk?: boolean | null;
+  }> = [];
+  for (const [agentName, entry] of Object.entries(matrix.agents ?? {})) {
+    if (!entry.enabled || entry.provider === "deterministic") continue;
+    if (entry.fallbackStrategy === "skip_optional") continue;
+    const row = rowByProvider.get(entry.provider);
+    if (!row) {
+      blockers.push({
+        providerId: entry.provider,
+        agentName,
+        reason: "provider is missing from DB registry",
+        fix: "Run `npm run db:seed-registry -- --force`, then test the provider.",
+      });
+      continue;
+    }
+    if (!row.enabled) {
+      blockers.push({
+        providerId: entry.provider,
+        agentName,
+        reason: "provider is disabled",
+        fix: "Enable the provider in Admin -> Providers.",
+        lastTestStatus: row.lastTestStatus,
+        lastTestJsonOk: row.lastTestJsonOk,
+      });
+      continue;
+    }
+    if (row.lastTestStatus !== "ok" || row.lastTestJsonOk !== true) {
+      blockers.push({
+        providerId: entry.provider,
+        agentName,
+        reason: "provider has not passed the JSON contract health test",
+        fix: "Run Admin -> Providers -> Health -> Run test and fix the reported setup issue.",
+        lastTestStatus: row.lastTestStatus,
+        lastTestJsonOk: row.lastTestJsonOk,
+      });
+    }
+  }
+  return { ok: blockers.length === 0, mode, matrix, blockers };
 }

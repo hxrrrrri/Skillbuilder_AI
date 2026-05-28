@@ -205,9 +205,7 @@ function buildAdminRunPayload(run: any) {
     terminal_evidence: safeJsonParse(run.terminalEvidence, []),
     provider_matrix: safeJsonParse(run.providerMatrix, null),
     ownership_status: safeJsonParse(run.ownershipStatus, null),
-    mock_mode:
-      run.executionMode === "mock" ||
-      (run.executionMode === "api" && (!process.env.ANTHROPIC_API_KEY || process.env.SKILLPROOF_MOCK_LLM === "1")),
+    mock_mode: run.executionMode === "mock" || run.scores.some((s: any) => ["mock", "heuristic"].includes(s.scoreSource)),
     created_at: run.createdAt,
     completed_at: run.completedAt,
   };
@@ -340,9 +338,7 @@ function buildLimitedRunPayload(
       validationSummary,
       providerMatrix,
     }),
-    mock_mode:
-      run.executionMode === "mock" ||
-      (run.executionMode === "api" && (!process.env.ANTHROPIC_API_KEY || process.env.SKILLPROOF_MOCK_LLM === "1")),
+    mock_mode: run.executionMode === "mock" || run.scores.some((s: any) => ["mock", "heuristic"].includes(s.scoreSource)),
     created_at: run.createdAt,
     completed_at: run.completedAt,
   };
@@ -480,8 +476,8 @@ function buildTrustLabels(input: {
   if (input.validationSummary || input.scores.some((s) => s.evidence.some((e: any) => e?.validator_note))) {
     labels.push({ label: "Validator audited", tone: "good" });
   }
-  if (scoreSources.has("heuristic")) labels.push({ label: "Heuristic only", tone: "warn" });
-  if (scoreSources.has("mock") || input.executionMode === "mock") labels.push({ label: "Mock/demo", tone: "bad" });
+  if (scoreSources.has("heuristic")) labels.push({ label: "Legacy heuristic", tone: "bad" });
+  if (scoreSources.has("mock") || input.executionMode === "mock") labels.push({ label: "Legacy mock", tone: "bad" });
   if (input.verificationLevel === "repo_interview_verified") labels.push({ label: "Interview verified", tone: "good" });
   if (input.aiCollaboration) labels.push({ label: "Challenge verified", tone: "good" });
   if (input.ownershipStatus?.confidence === "verified") labels.push({ label: "Ownership verified", tone: "good" });

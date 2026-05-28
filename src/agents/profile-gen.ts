@@ -117,11 +117,6 @@ function augmentEmployerVerifier(
     }
   }
 
-  // Mock-mode warning.
-  if (state.execution_mode === "mock" || state.mock_mode) {
-    risks.unshift("Provider matrix included MOCK — scores partially heuristic, not LLM-graded.");
-  }
-
   // Interview status.
   const interviewHandoff = state.handoffs.find((h) => h.agent === "interview-gen");
   const hasInterview = !!interviewHandoff;
@@ -140,7 +135,6 @@ function augmentEmployerVerifier(
   if (ownership?.confidence === "verified") confidence = Math.min(1, confidence + 0.1);
   if (ownership?.confidence === "unverified") confidence = Math.max(0, confidence - 0.1);
   if (state.execution_mode === "cli" || state.execution_mode === "hybrid") confidence = Math.min(1, confidence + 0.05);
-  if (state.mock_mode) confidence = Math.max(0, confidence - 0.2);
   out.confidence = Math.round(confidence * 100) / 100;
 
   // Shortlist / caution reasons.
@@ -207,12 +201,11 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 2200,
-    fallback: () => fallback(state, graph),
   });
 
   let out = res.output;
   if (!out?.employer_verifier || !out?.improvement_plan) {
-    out = fallback(state, graph);
+    throw new Error("profile-gen returned incomplete JSON");
   }
   // Always augment employer_verifier with deterministic local-proof signals.
   out.employer_verifier = augmentEmployerVerifier(state, graph, out.employer_verifier);

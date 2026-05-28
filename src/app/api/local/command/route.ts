@@ -6,7 +6,7 @@ import { evaluatePolicy } from "@/lib/local-runner/policies";
 import { runCommand, summarize } from "@/lib/local-runner/terminal";
 import { resolveSafeRunCwd } from "@/lib/local-runner/workspace";
 import { getCurrentUser } from "@/lib/auth/session";
-import { isAdminRole } from "@/lib/auth/roles";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { saveCommandRunAsEvidence } from "@/lib/local-runner/terminal-store";
 
@@ -74,6 +74,7 @@ export async function POST(req: Request) {
     where: { id: runId },
     select: {
       id: true,
+      candidateId: true,
       createdByUserId: true,
       candidate: { select: { userId: true } },
       tenantId: true,
@@ -85,11 +86,14 @@ export async function POST(req: Request) {
   runOwnerId = runRow.createdByUserId ?? runRow.candidate?.userId ?? null;
   runTenantId = runRow.tenantId ?? null;
 
-  const isOwner =
-    runRow.createdByUserId === user.id ||
-    (!!runRow.candidate?.userId && runRow.candidate.userId === user.id);
-  const isAdmin = isAdminRole(user.role);
-  if (!isOwner && !isAdmin) {
+  const decision = evaluateRunMutationAccess(user, {
+    candidateId: runRow.candidateId,
+    createdByUserId: runRow.createdByUserId,
+    tenantId: runRow.tenantId,
+    candidateUserId: runRow.candidate?.userId ?? null,
+  }, "execute_terminal_command");
+  const isAdmin = decision.ok && decision.reason === "admin";
+  if (!decision.ok) {
     await writeAuditLog({
       action: "terminal.forbidden",
       actorUserId: user.id,

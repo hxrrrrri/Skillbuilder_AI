@@ -7,7 +7,7 @@
  * - CLI tools (claude, codex, copilot) usually expose flags that are not stable
  *   across versions; we map to no-op for now.
  * - Ollama models do not expose reasoning effort.
- * - The mock provider ignores reasoning.
+ * - Deterministic evidence stages do not use reasoning.
  *
  * The internal abstraction is a 5-step ladder; each provider adapter calls
  * `mapReasoningBudget(providerId, budget)` to get either provider-native
@@ -47,9 +47,9 @@ export type ProviderReasoningMapping =
 const UNSUPPORTED: Record<string, string> = {
   claude_cli: "CLI flags drift across versions; reasoning is delegated to the CLI binary.",
   codex_cli: "CLI does not stably expose reasoning effort.",
-  copilot_cli: "Reasoning effort not supported by this CLI.",
+  copilot_cli: "Reasoning effort support depends on the installed Copilot CLI.",
   ollama: "Ollama does not expose reasoning effort.",
-  mock: "Mock provider does not reason.",
+  deterministic: "Deterministic evidence stages do not use reasoning.",
 };
 
 export function mapReasoningBudget(providerId: ProviderId, budget: ReasoningBudget): ProviderReasoningMapping {

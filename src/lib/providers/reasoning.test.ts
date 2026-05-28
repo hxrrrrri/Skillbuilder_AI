@@ -27,7 +27,7 @@ describe("reasoningSupportedByProvider", () => {
     expect(reasoningSupportedByProvider("codex_cli")).toBe(false);
     expect(reasoningSupportedByProvider("copilot_cli")).toBe(false);
     expect(reasoningSupportedByProvider("ollama")).toBe(false);
-    expect(reasoningSupportedByProvider("mock")).toBe(false);
+    expect(reasoningSupportedByProvider("deterministic")).toBe(false);
   });
 });
 
@@ -49,7 +49,7 @@ describe("mapReasoningBudget", () => {
     }
   });
 
-  it.each(["claude_cli", "codex_cli", "copilot_cli", "ollama", "mock"] as const)(
+  it.each(["claude_cli", "codex_cli", "copilot_cli", "ollama", "deterministic"] as const)(
     "%s reports unsupported with a reason",
     (provider) => {
       const m = mapReasoningBudget(provider, "high");

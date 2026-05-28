@@ -19,10 +19,6 @@ function getClient(): Anthropic {
   return client;
 }
 
-export function isMockMode(): boolean {
-  return process.env.SKILLPROOF_MOCK_LLM === "1" || !process.env.ANTHROPIC_API_KEY;
-}
-
 export type LLMCallOptions = {
   role: Role;
   system: string;

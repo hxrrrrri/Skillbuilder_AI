@@ -10,17 +10,17 @@ type ProviderMock = {
 
 const baseConfig = {
   providers: {
-    claude_cli: { command: "claude", args: ["-p", "{{prompt}}"], enabled: true },
-    codex_cli: { command: "codex", args: ["exec", "{{prompt}}"], enabled: true },
+    claude_cli: { command: "claude", args: ["--print", "{{prompt}}"], enabled: true },
+    codex_cli: { command: "codex", args: ["exec", "--ephemeral", "--skip-git-repo-check", "-"], enabled: true },
     ollama: { model: "llama3.1:8b", baseUrl: "http://localhost:11434", enabled: true },
-    copilot_cli: { command: "gh", args: ["copilot", "suggest", "{{prompt}}"], enabled: false },
+    copilot_cli: { command: "copilot", args: ["-p", "{{prompt}}", "--silent"], enabled: false },
   },
   roles: {
-    orchestrator: ["mock"],
-    worker: ["ollama", "mock"],
-    validator: ["mock"],
-    interview: ["mock"],
-    profile: ["mock"],
+    orchestrator: ["anthropic_api"],
+    worker: ["ollama", "anthropic_api"],
+    validator: ["anthropic_api", "codex_cli"],
+    interview: ["anthropic_api", "claude_cli"],
+    profile: ["anthropic_api"],
   },
 };
 
@@ -30,9 +30,9 @@ function entry(patch: Partial<ProviderMatrixAgentEntry> = {}): ProviderMatrixAge
     model: "claude-test",
     reasoningBudget: "medium",
     enabled: true,
-    fallbackProvider: "mock",
+    fallbackProvider: null,
     fallbackModel: null,
-    fallbackStrategy: "mock",
+    fallbackStrategy: "fail",
     temperature: 0.2,
     maxTokens: 1500,
     jsonMode: true,
@@ -71,8 +71,8 @@ function makeProvider(
       if (typeof next === "function") return next(prompt);
       return (
         next ?? {
-          json: id === "mock" ? { mock: true } : { ok: true },
-          raw: id === "mock" ? '{"mock":true}' : '{"ok":true}',
+          json: { ok: true },
+          raw: '{"ok":true}',
           provider: id,
           inputTokens: 3,
           outputTokens: 2,
@@ -96,7 +96,7 @@ async function loadRouter(opts: {
     codex_cli: makeProvider("codex_cli"),
     ollama: makeProvider("ollama"),
     copilot_cli: makeProvider("copilot_cli", { available: false }),
-    mock: makeProvider("mock"),
+    deterministic: makeProvider("deterministic"),
     ...(opts.providers as any),
   };
 
@@ -112,14 +112,20 @@ async function loadRouter(opts: {
   vi.doMock("./anthropic", () => ({
     makeAnthropicApiProvider: vi.fn(() => providers.anthropic_api),
   }));
-  vi.doMock("./cli-provider", () => ({
-    makeCliProvider: vi.fn((factoryOpts: { id: ProviderId }) => providers[factoryOpts.id]),
+  vi.doMock("./claude-cli", () => ({
+    makeClaudeCliProvider: vi.fn(() => providers.claude_cli),
+  }));
+  vi.doMock("./codex-cli", () => ({
+    makeCodexCliProvider: vi.fn(() => providers.codex_cli),
+  }));
+  vi.doMock("./copilot-cli", () => ({
+    makeCopilotCliProvider: vi.fn(() => providers.copilot_cli),
   }));
   vi.doMock("./ollama", () => ({
     makeOllamaProvider: vi.fn(() => providers.ollama),
   }));
-  vi.doMock("./mock", () => ({
-    mockProvider: providers.mock,
+  vi.doMock("./deterministic", () => ({
+    deterministicProvider: providers.deterministic,
   }));
 
   const router = await import("./provider-router");
@@ -128,11 +134,11 @@ async function loadRouter(opts: {
 
 function matrix(agentEntry: ProviderMatrixAgentEntry): ProviderMatrix {
   return {
-    orchestrator: "mock",
+    orchestrator: "anthropic_api",
     worker: agentEntry.provider,
-    validator: "mock",
-    interview: "mock",
-    profile: "mock",
+    validator: "anthropic_api",
+    interview: "anthropic_api",
+    profile: "anthropic_api",
     agents: { architecture: agentEntry },
   };
 }
@@ -150,10 +156,6 @@ describe("provider-router runtime resolution", () => {
         model: "db-model",
         reasoningBudget: "high",
       }),
-      config: {
-        ...baseConfig,
-        roles: { ...baseConfig.roles, worker: ["ollama", "mock"] },
-      },
     });
 
     const selected = await router.selectProviderMatrix("hybrid");
@@ -164,13 +166,9 @@ describe("provider-router runtime resolution", () => {
     expect(selected.agents!.architecture.source).toBe("db");
   });
 
-  it("falls back to file preferences when DB config is absent", async () => {
+  it("uses file preferences when DB config is absent", async () => {
     const { router } = await loadRouter({
       agentConfig: resolved({ source: "default", provider: "anthropic_api" }),
-      config: {
-        ...baseConfig,
-        roles: { ...baseConfig.roles, worker: ["ollama", "mock"] },
-      },
     });
 
     const selected = await router.selectProviderMatrix("hybrid");
@@ -179,22 +177,20 @@ describe("provider-router runtime resolution", () => {
     expect(selected.agents!.architecture.source).toBe("file");
   });
 
-  it("falls back to mock when DB is absent and file providers are unavailable", async () => {
+  it("fails closed when no real provider is available", async () => {
     const { router } = await loadRouter({
       agentConfig: resolved({ source: "default", provider: "anthropic_api" }),
       providers: {
+        anthropic_api: makeProvider("anthropic_api", { available: false }),
         ollama: makeProvider("ollama", { available: false }),
       },
       config: {
         ...baseConfig,
-        roles: { ...baseConfig.roles, worker: ["ollama"] },
+        roles: { ...baseConfig.roles, worker: ["ollama", "anthropic_api"] },
       },
     });
 
-    const selected = await router.selectProviderMatrix("hybrid");
-
-    expect(selected.agents!.architecture.provider).toBe("mock");
-    expect(selected.agents!.architecture.source).toBe("mock");
+    await expect(router.selectProviderMatrix("hybrid")).rejects.toThrow(/No ready provider/);
   });
 
   it("passes resolved model and reasoning budget into provider calls", async () => {
@@ -232,12 +228,12 @@ describe("provider-router runtime resolution", () => {
   });
 });
 
-describe("provider-router fallback strategies", () => {
+describe("provider-router fail-closed strategies", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("fallbackStrategy=mock returns the mock provider on invalid JSON", async () => {
+  it("invalid JSON throws ProviderInvalidJsonError instead of falling back", async () => {
     const { router } = await loadRouter({
       providers: {
         anthropic_api: makeProvider("anthropic_api", {
@@ -254,19 +250,16 @@ describe("provider-router fallback strategies", () => {
         }),
       },
     });
-    const agentEntry = entry({ fallbackStrategy: "mock" });
 
-    const result = await router.runWithMatrix(
-      matrix(agentEntry),
-      "worker",
-      { system: "sys", user: "user" },
-      '{"ok":boolean}',
-      "architecture",
-    );
-
-    expect(result.provider).toBe("mock");
-    expect(result.runtime?.status).toBe("fallback");
-    expect(result.runtime?.note).toContain("invalid JSON");
+    await expect(
+      router.runWithMatrix(
+        matrix(entry({ fallbackStrategy: "fail" })),
+        "worker",
+        { system: "sys", user: "user" },
+        '{"ok":boolean}',
+        "architecture",
+      ),
+    ).rejects.toBeInstanceOf((await import("./errors")).ProviderInvalidJsonError);
   });
 
   it("fallbackStrategy=retry reruns the same provider once", async () => {
@@ -284,10 +277,9 @@ describe("provider-router fallback strategies", () => {
       ],
     });
     const { router, providers } = await loadRouter({ providers: { anthropic_api: anthropic } });
-    const agentEntry = entry({ fallbackStrategy: "retry" });
 
     const result = await router.runWithMatrix(
-      matrix(agentEntry),
+      matrix(entry({ fallbackStrategy: "retry" })),
       "worker",
       { system: "sys", user: "user" },
       '{"ok":boolean}',
@@ -299,7 +291,7 @@ describe("provider-router fallback strategies", () => {
     expect(result.runtime?.note).toBe("retry after provider failure");
   });
 
-  it("fallbackStrategy=skip throws AgentSkippedError", async () => {
+  it("fallbackStrategy=skip_optional throws AgentSkippedError", async () => {
     const { router } = await loadRouter({
       providers: {
         anthropic_api: makeProvider("anthropic_api", {
@@ -316,11 +308,10 @@ describe("provider-router fallback strategies", () => {
         }),
       },
     });
-    const agentEntry = entry({ fallbackStrategy: "skip" });
 
     await expect(
       router.runWithMatrix(
-        matrix(agentEntry),
+        matrix(entry({ fallbackStrategy: "skip_optional" })),
         "worker",
         { system: "sys", user: "user" },
         '{"ok":boolean}',

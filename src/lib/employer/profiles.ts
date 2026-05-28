@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { isMockMode } from "@/lib/claude";
 import { prisma } from "@/lib/db";
 import { safeJsonParse } from "@/lib/utils";
 import { runAgentJson } from "@/lib/providers/run-agent";
@@ -134,7 +133,7 @@ export type InterviewKit = {
   profile_id: string;
   target_role: string;
   generated_at: string;
-  source: "llm" | "mock" | "heuristic";
+  source: "llm" | "deterministic";
   model: string;
   sections: {
     project_specific: string[];
@@ -314,7 +313,14 @@ export function comparePayload(summaries: EmployerProfileSummary[]) {
 
 export async function fetchPublicProfileBundles(where: Record<string, any> = {}, take = 50) {
   return prisma.publicProfile.findMany({
-    where: { visibility: "public", ...where },
+    where: {
+      visibility: "public",
+      run: {
+        executionMode: { not: "mock" },
+        scores: { none: { scoreSource: { in: ["mock", "heuristic"] } } },
+      },
+      ...where,
+    },
     orderBy: { createdAt: "desc" },
     take,
     include: {
@@ -337,7 +343,14 @@ export async function fetchPublicProfileBundles(where: Record<string, any> = {},
 
 export async function getEmployerProfileBundle(profileId: string) {
   return prisma.publicProfile.findFirst({
-    where: { id: profileId, visibility: "public" },
+    where: {
+      id: profileId,
+      visibility: "public",
+      run: {
+        executionMode: { not: "mock" },
+        scores: { none: { scoreSource: { in: ["mock", "heuristic"] } } },
+      },
+    },
     include: {
       candidate: { select: { name: true, githubUsername: true } },
       run: {
@@ -407,7 +420,7 @@ export async function generateInterviewKit(
     authenticity: null,
     tokens_in: 0,
     tokens_out: 0,
-    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    mock_mode: false,
     execution_mode: mode,
     provider_matrix: safeJsonParse<ProviderMatrix | null>(bundle.run.providerMatrix, null),
     terminal_evidence: safeJsonParse<TerminalEvidence[]>(bundle.run.terminalEvidence, []),
@@ -429,7 +442,6 @@ Focus: ${(opts.focus ?? []).join(", ") || "balanced"}
 Return exactly 5 project-specific questions, 3 debugging questions, 2 AI collaboration questions, red flags, and expected strong signals.`,
     schemaHint,
     maxTokens: 1800,
-    fallback: () => fallback,
   });
 
   const sections = normalizeKitSections(res.output, fallback);
@@ -437,7 +449,7 @@ Return exactly 5 project-specific questions, 3 debugging questions, 2 AI collabo
     profile_id: bundle.id,
     target_role: targetRole,
     generated_at: new Date().toISOString(),
-    source: res.source === "llm" ? "llm" : res.source === "mock" ? "mock" : "heuristic",
+    source: res.source === "llm" ? "llm" : "deterministic",
     model: res.model,
     sections,
   };

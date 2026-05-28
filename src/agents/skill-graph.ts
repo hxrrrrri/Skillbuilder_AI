@@ -35,7 +35,7 @@ export function runSkillGraph(state: MissionState): Handoff<SkillGraphOutput> {
       score: claim.score,
       evidence: claim.evidence,
       confidence: claim.confidence ?? 0.8,
-      source: claim.source ?? "heuristic",
+      source: claim.source ?? "deterministic",
       assertion_ids: claim.assertion_ids,
     });
   }
@@ -52,7 +52,7 @@ export function runSkillGraph(state: MissionState): Handoff<SkillGraphOutput> {
         name,
         score: null,
         confidence: 0,
-        source: "pending" as ScoreSource,
+        source: "not_measured" as ScoreSource,
         evidence: [{ reason: "Not measured yet — pending interview or challenge submission." }],
         weight: RUBRIC_WEIGHTS[name],
         assertion_ids: [],

@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/roles";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { createSnapshotIfReVerify } from "@/lib/reverification";
+import { checkProviderReadinessForMode } from "@/lib/providers/provider-router";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,7 +19,7 @@ const Body = z.object({
   target_role: z.string().min(2).max(80),
   candidate_level: z.string().min(2).max(40).default("Junior"),
   job_description: z.string().max(4000).optional(),
-  execution_mode: z.enum(["api", "cli", "hybrid", "mock"]).default("api"),
+  execution_mode: z.enum(["api", "cli", "hybrid", "local"]).default("api"),
   local_install_approved: z.boolean().default(false),
 });
 
@@ -44,6 +45,19 @@ export async function POST(req: Request) {
   // from initiating runs on behalf of others via the API to reduce abuse.
   if (!isAdminRole(sessionUser.role) && sessionUser.role !== "candidate") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  const readiness = await checkProviderReadinessForMode(body.execution_mode);
+  if (!readiness.ok) {
+    return NextResponse.json(
+      {
+        error: "provider_not_ready",
+        message: "Verification cannot start until every required real provider has passed health checks.",
+        mode: body.execution_mode,
+        blockers: readiness.blockers,
+      },
+      { status: 409 },
+    );
   }
 
   // If the signed-in user is a candidate, reuse their Candidate row; otherwise create anonymous.

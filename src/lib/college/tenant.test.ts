@@ -40,6 +40,8 @@ describe("college tenant scoping", () => {
     expect(tenantRunWhere(scope, { status: "completed" })).toEqual({
       status: "completed",
       tenantId: { in: ["tenant-a"] },
+      executionMode: { not: "mock" },
+      scores: { none: { scoreSource: { in: ["mock", "heuristic"] } } },
     });
   });
 
@@ -78,7 +80,7 @@ describe("college tenant scoping", () => {
     const report = await buildCollegeReport(resolveCollegeScope(collegeUser()), "csv");
 
     expect(mocks.prisma.analysisRun.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { tenantId: { in: ["tenant-a"] } } }),
+      expect.objectContaining({ where: expect.objectContaining({ tenantId: { in: ["tenant-a"] } }) }),
     );
     expect(report).toContain('"Student One","octo/demo","Backend","completed","81","repo_interview_verified"');
   });

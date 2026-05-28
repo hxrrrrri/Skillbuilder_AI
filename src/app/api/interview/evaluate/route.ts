@@ -4,12 +4,12 @@ import { prisma } from "@/lib/db";
 import { evaluateAnswer } from "@/agents/answer-evaluator";
 import { recomputeOverall } from "@/agents/skill-graph";
 import { safeJsonParse } from "@/lib/utils";
-import { isMockMode } from "@/lib/claude";
+import { ProviderExecutionError, providerErrorMetadata } from "@/lib/providers/errors";
 import type { MissionState } from "@/agents/types";
 import type { ExecutionMode, TerminalEvidence } from "@/lib/local-runner/types";
 import type { ProviderMatrix } from "@/lib/providers/types";
 import { getCurrentUser } from "@/lib/auth/session";
-import { evaluateRunAccess } from "@/lib/auth/guards-api";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
@@ -39,12 +39,12 @@ export async function POST(req: Request) {
   if (!runAccess) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
 
   const user = await getCurrentUser();
-  const decision = evaluateRunAccess(user, {
+  const decision = evaluateRunMutationAccess(user, {
     candidateId: runAccess.candidateId,
     createdByUserId: runAccess.createdByUserId,
     tenantId: runAccess.tenantId,
     candidateUserId: runAccess.candidate?.userId ?? null,
-  });
+  }, "submit_interview_answer");
   if (!decision.ok) {
     await writeAuditLog({
       action: "interview.answer.denied",
@@ -74,24 +74,41 @@ export async function POST(req: Request) {
     authenticity: null,
     tokens_in: 0,
     tokens_out: 0,
-    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    mock_mode: false,
     execution_mode: mode,
     provider_matrix: safeJsonParse<ProviderMatrix | null>(run?.providerMatrix ?? null, null),
     terminal_evidence: safeJsonParse<TerminalEvidence[]>(run?.terminalEvidence ?? null, []),
     ownership_status: safeJsonParse(run?.ownershipStatus ?? null, null),
   };
 
-  const handoff = await evaluateAnswer(
-    state,
-    {
-      question: q.question,
-      source_file: q.sourceFile,
-      expected_signals: safeJsonParse<string[]>(q.expectedSignals, []),
-      red_flags: safeJsonParse<string[]>(q.redFlags, []),
-      scoring_rubric: safeJsonParse(q.scoringRubric, null),
-    },
-    body.answer
-  );
+  let handoff;
+  try {
+    handoff = await evaluateAnswer(
+      state,
+      {
+        question: q.question,
+        source_file: q.sourceFile,
+        expected_signals: safeJsonParse<string[]>(q.expectedSignals, []),
+        red_flags: safeJsonParse<string[]>(q.redFlags, []),
+        scoring_rubric: safeJsonParse(q.scoringRubric, null),
+      },
+      body.answer
+    );
+  } catch (err) {
+    if (err instanceof ProviderExecutionError) {
+      return NextResponse.json(
+        {
+          error: err.code,
+          message: err.message,
+          provider: err.provider,
+          fix: err.fix,
+          trace: providerErrorMetadata(err),
+        },
+        { status: err.code === "provider_invalid_json" ? 502 : 503 },
+      );
+    }
+    throw err;
+  }
 
   const evalOut = handoff.output;
   const blended = Math.round(
@@ -122,7 +139,6 @@ export async function POST(req: Request) {
   // Upsert interview-derived skill scores. Don't raise scores already supported by repo evidence
   // unless they're "pending" (no prior measurement) — but for Communication/Debugging the interview
   // IS the primary signal, so we set/overwrite those.
-  const interviewSource = isMockMode() ? "mock" : "llm";
   const upserts: Array<{ skill: string; score: number }> = [
     { skill: "Communication", score: evalOut.communication_score },
     { skill: "Debugging", score: evalOut.debugging_score },
@@ -140,7 +156,7 @@ export async function POST(req: Request) {
         data: {
           score: u.score,
           confidence: 0.8,
-          scoreSource: interviewSource,
+          scoreSource: "interview",
           evidence: JSON.stringify([{ reason: `Interview answer evaluated by fresh-context validator.`, source: "interview" }]),
         },
       });
@@ -151,7 +167,7 @@ export async function POST(req: Request) {
           skillName: u.skill,
           score: u.score,
           confidence: 0.8,
-          scoreSource: interviewSource,
+          scoreSource: "interview",
           evidence: JSON.stringify([{ reason: `Interview answer evaluated by fresh-context validator.`, source: "interview" }]),
         },
       });

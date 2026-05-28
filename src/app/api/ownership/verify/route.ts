@@ -5,7 +5,7 @@ import { getFile } from "@/lib/github";
 import { safeJsonParse } from "@/lib/utils";
 import type { OwnershipStatus } from "@/agents/types";
 import { getCurrentUser } from "@/lib/auth/session";
-import { evaluateRunAccess } from "@/lib/auth/guards-api";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
@@ -31,12 +31,12 @@ export async function POST(req: Request) {
 
   // Only authorized users may trigger ownership verification for a run.
   const user = await getCurrentUser();
-  const decision = evaluateRunAccess(user, {
+  const decision = evaluateRunMutationAccess(user, {
     candidateId: run.candidateId,
     createdByUserId: run.createdByUserId,
     tenantId: run.tenantId,
     candidateUserId: run.candidate?.userId ?? null,
-  });
+  }, "verify_ownership");
   if (!decision.ok) {
     await writeAuditLog({
       action: "ownership.verify.denied",
@@ -94,4 +94,3 @@ export async function POST(req: Request) {
 
   return NextResponse.json({ ownership_status: status });
 }
-

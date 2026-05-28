@@ -66,7 +66,6 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 800,
-    fallback: () => fallback(answer),
   });
 
   const out = res.output;
@@ -77,16 +76,19 @@ Return the JSON now.`;
     skill: "Communication",
     score: out.communication_score,
     evidence: [{ reason: `Interview answer for "${question.question.slice(0, 80)}"`, source: "interview" }],
+    source: "interview",
   });
   state.scores.push({
     skill: "Debugging",
     score: out.debugging_score,
     evidence: [{ reason: `Interview reasoning for "${question.question.slice(0, 80)}"`, source: "interview" }],
+    source: "interview",
   });
   state.scores.push({
     skill: "Understanding of Own Code",
     score: out.understanding_of_own_code,
     evidence: [{ reason: `Own-code interview question: "${question.question.slice(0, 80)}"`, source: "interview" }],
+    source: "interview",
   });
 
   return {

@@ -38,7 +38,7 @@ function fallback(state: MissionState): SecurityOutput {
     evidence: [
       { file: state.context_pack!.snippets[0]?.path, reason: `Scanned ${state.context_pack!.snippets.length} snippets for obvious secret patterns.` },
     ],
-    score_source: "heuristic",
+    score_source: "deterministic",
   };
 }
 
@@ -89,11 +89,10 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1500,
-    fallback: () => fallback(state),
   });
 
   const out: SecurityOutput = { ...res.output, score_source: res.source };
-  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "deterministic");
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 

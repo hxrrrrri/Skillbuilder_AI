@@ -86,7 +86,7 @@ export function findingFromLegacyEvidence(input: {
   const filePath = input.evidence.file;
   const validFile = evidenceFileExists(input.contextPack, filePath);
   const missingFile = !!filePath && !validFile;
-  const source = input.evidence.source ?? "heuristic";
+  const source = input.evidence.source ?? "deterministic";
   const claim = missingFile
     ? `Hallucinated file reference detected: ${filePath}`
     : rawClaim;

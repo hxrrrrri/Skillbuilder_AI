@@ -18,7 +18,7 @@ export default async function AdminProvidersPage() {
   ]);
   const liveAvailability = Object.fromEntries(availability.map((a) => [a.id, a.available]));
 
-  const rows = providers.map((p) => ({
+  const rows = providers.filter((p) => p.providerId !== "mock").map((p) => ({
     id: p.id,
     providerId: p.providerId,
     label: p.label,
@@ -46,7 +46,6 @@ export default async function AdminProvidersPage() {
   }));
 
   const apiKeyPresent = !!process.env.ANTHROPIC_API_KEY;
-  const mockForced = process.env.SKILLPROOF_MOCK_LLM === "1";
 
   return (
     <RoleShell
@@ -59,9 +58,9 @@ export default async function AdminProvidersPage() {
         <Badge tone={apiKeyPresent ? "good" : "warn"}>
           ANTHROPIC_API_KEY: {apiKeyPresent ? "present" : "missing"}
         </Badge>
-        <Badge tone={mockForced ? "warn" : "default"}>
-          SKILLPROOF_MOCK_LLM: {mockForced ? "ON (forced mock)" : "off"}
-        </Badge>
+        <a href="/admin/providers/health" className="rounded-md border border-border bg-panel2 px-2 py-1 text-xs text-ink hover:border-accent/60 hover:text-accent">
+          Real provider readiness
+        </a>
       </div>
 
       <Card>

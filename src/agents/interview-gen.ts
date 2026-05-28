@@ -4,7 +4,7 @@ import { buildContextBlock } from "./_analysis";
 import type { Handoff, InterviewGenOutput, InterviewQuestionT, MissionState } from "./types";
 
 const SYSTEM = `You are the Interview Generator agent of SkillProof AI.
-Generate 5-7 mock interview questions tailored to the candidate's own repo.
+Generate 5-7 own-code interview questions tailored to the candidate's repo.
 Questions must reference specific files/decisions from the snippets — generic CS trivia is forbidden.
 Return STRICT JSON:
 {
@@ -111,11 +111,13 @@ Generate the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1600,
-    fallback: () => fallback(state),
   });
 
   const fallbackFile = state.context_pack.filesIndex.important[0] ?? state.context_pack.filesIndex.readme ?? "README";
-  const out = res.output.questions?.length ? normalizeQuestions(res.output, fallbackFile) : fallback(state);
+  if (!res.output.questions?.length) {
+    throw new Error("interview-gen returned no questions");
+  }
+  const out = normalizeQuestions(res.output, fallbackFile);
 
   state.tokens_in += res.inputTokens;
   state.tokens_out += res.outputTokens;

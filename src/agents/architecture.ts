@@ -27,9 +27,9 @@ function fallback(state?: MissionState): ArchitectureOutput {
   return {
     architecture_score: 60,
     strengths: ["Heuristic: folder layout present"],
-    weaknesses: ["LLM unavailable — heuristic score only"],
-    evidence: [{ file, reason: "Heuristic mode: deterministic architecture score from repo layout and intelligence index." }],
-    score_source: "heuristic",
+    weaknesses: ["Provider unavailable — architecture not verified."],
+    evidence: [{ file, reason: "Deterministic architecture signal from repo layout and intelligence index.", source: "deterministic" }],
+    score_source: "deterministic",
   };
 }
 
@@ -72,14 +72,13 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
-    fallback: () => fallback(state),
   });
 
   const out: ArchitectureOutput = {
     ...res.output,
     score_source: res.source,
   };
-  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "heuristic");
+  out.evidence = hydrateEvidenceFromContext(out.evidence ?? [], state.context_pack, res.source === "llm" ? "llm" : "deterministic");
   out.assertion_results = deriveAssertionResults(state, out);
 
   state.tokens_in += res.inputTokens;
@@ -88,7 +87,7 @@ Return the JSON now.`;
     skill: "Architecture",
     score: out.architecture_score,
     evidence: out.evidence,
-    confidence: res.source === "llm" ? 0.85 : res.source === "mock" ? 0.3 : 0.55,
+    confidence: res.source === "llm" ? 0.85 : 0.55,
     source: res.source,
     strengths: out.strengths,
     weaknesses: out.weaknesses,

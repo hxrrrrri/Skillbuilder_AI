@@ -1,4 +1,3 @@
-import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildCommitsBlock } from "./_analysis";
 import { getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
 import { assertionResultsForDimension } from "./assertions";
@@ -34,9 +33,9 @@ function fallback(state: MissionState): GitEvidenceOutput {
     avg_msg_quality: Math.round(avg),
     evidence: [
       { reason: `${commits.length} recent commits sampled.`, source: "github_api" },
-      { reason: `Avg commit message quality heuristic: ${Math.round(avg)}.`, source: "heuristic" },
+      { reason: `Avg commit message quality from commit subjects: ${Math.round(avg)}.`, source: "deterministic" },
     ],
-    score_source: "heuristic",
+    score_source: "deterministic",
   };
 }
 
@@ -86,34 +85,17 @@ function applyTerminalEvidence(state: MissionState, out: GitEvidenceOutput) {
 export async function runGitEvidence(state: MissionState): Promise<Handoff<GitEvidenceOutput>> {
   if (!state.context_pack) throw new Error("git-evidence: context_pack missing");
 
-  const user = `${buildCommitsBlock(state.context_pack)}
-
-Return the JSON now.`;
-
-  const res = await runAgentJson<GitEvidenceOutput>({
-    state,
-    agentName: "git-evidence",
-    role: "worker",
-    system: SYSTEM,
-    user,
-    schemaHint: SCHEMA_HINT,
-    maxTokens: 900,
-    fallback: () => fallback(state),
-  });
-
-  const out: GitEvidenceOutput = { ...res.output, score_source: res.source };
+  const out: GitEvidenceOutput = fallback(state);
   out.evidence = (out.evidence ?? []).map((e) => ({ ...e, source: e.source ?? "github_api" }));
   applyTerminalEvidence(state, out);
   out.assertion_results = deriveAssertionResults(state, out);
 
-  state.tokens_in += res.inputTokens;
-  state.tokens_out += res.outputTokens;
   state.scores.push({
     skill: "Git Workflow",
     score: out.git_workflow_score,
     evidence: out.evidence,
-    confidence: res.source === "llm" ? 0.85 : 0.75,
-    source: res.source,
+    confidence: 0.75,
+    source: "deterministic",
     assertion_ids: out.assertion_results.map((a) => a.assertion_id),
   });
   state.assertion_results.push(...(out.assertion_results ?? []));
@@ -124,7 +106,7 @@ Return the JSON now.`;
     unresolved: [],
     evidence: [
       ...out.evidence,
-      { reason: `provider=${res.provider} model=${res.model}` },
+      { reason: "provider=deterministic model=git-evidence" },
     ],
     issues_found: out.git_workflow_score < 50 ? ["Commit hygiene needs work."] : [],
     next_recommended: "documentation",

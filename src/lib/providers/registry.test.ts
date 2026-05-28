@@ -15,8 +15,9 @@ describe("registry defaults shape", () => {
   it("provider defaults cover every ProviderId we ship", () => {
     const ids = PROVIDER_DEFAULTS.map((p) => p.providerId).sort();
     expect(ids).toEqual(
-      ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "mock", "ollama"].sort(),
+      ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "deterministic", "ollama"].sort(),
     );
+    expect(ids).not.toContain("mock");
   });
 
   it("agent defaults cover every name in AGENT_NAMES", () => {
@@ -36,10 +37,10 @@ describe("registry defaults shape", () => {
     expect(validator?.reasoningBudget).toBe("high");
   });
 
-  it("deterministic stages (repo-scanner, git-evidence, skill-graph) default to mock with reasoning=none", () => {
+  it("deterministic stages (repo-scanner, git-evidence, skill-graph) default to deterministic with reasoning=none", () => {
     for (const name of ["repo-scanner", "git-evidence", "skill-graph"] as const) {
       const a = AGENT_DEFAULTS.find((x) => x.agentName === name);
-      expect(a?.providerId).toBe("mock");
+      expect(a?.providerId).toBe("deterministic");
       expect(a?.reasoningBudget).toBe("none");
     }
   });
@@ -48,9 +49,9 @@ describe("registry defaults shape", () => {
     for (const a of AGENT_DEFAULTS) {
       if (["repo-scanner", "git-evidence", "skill-graph"].includes(a.agentName)) {
         expect(a.fallbackProvider).toBeNull();
-      } else {
-        expect(a.fallbackProvider).not.toBeNull();
       }
+      expect(a.fallbackProvider).not.toBe("mock");
+      expect(a.fallbackStrategy).toBe("fail");
     }
   });
 
@@ -67,7 +68,8 @@ describe("registry defaults shape", () => {
 
 describe("registry validators", () => {
   it("FALLBACK_STRATEGIES / COST_TIERS / QUALITY_TIERS narrowing", () => {
-    expect(isFallbackStrategy("mock")).toBe(true);
+    expect(isFallbackStrategy("fail")).toBe(true);
+    expect(isFallbackStrategy("mock")).toBe(false);
     expect(isFallbackStrategy("ignore")).toBe(false);
     expect(isCostTier("low")).toBe(true);
     expect(isCostTier("extreme")).toBe(false);
@@ -76,7 +78,7 @@ describe("registry validators", () => {
   });
 
   it("enum lists are stable", () => {
-    expect(FALLBACK_STRATEGIES).toEqual(["mock", "retry", "skip"]);
+    expect(FALLBACK_STRATEGIES).toEqual(["retry", "fail", "skip_optional"]);
     expect(COST_TIERS).toEqual(["low", "medium", "high"]);
     expect(QUALITY_TIERS).toEqual(["low", "medium", "high"]);
   });

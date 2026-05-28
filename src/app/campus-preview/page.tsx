@@ -154,7 +154,7 @@ export default function CampusPreview() {
       </section>
 
       <p className="text-xs text-muted">
-        Note: This page renders mock cohort data. The real dashboard is gated behind a separate
+        Note: This page renders a static product preview. The real dashboard is gated behind a separate
         org-aware build and not part of this hackathon prototype.
       </p>
     </div>

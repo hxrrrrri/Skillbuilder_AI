@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const Body = z.object({
-  provider_id: z.enum(["anthropic_api", "claude_cli", "codex_cli", "ollama", "copilot_cli", "mock"]),
+  provider_id: z.enum(["anthropic_api", "claude_cli", "codex_cli", "ollama", "copilot_cli"]),
   prompt: z.string().min(2).max(2000).optional(),
 });
 

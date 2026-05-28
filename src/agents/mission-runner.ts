@@ -2,9 +2,9 @@
 // persisted to DB so Mission Control can stream progress.
 
 import { prisma } from "@/lib/db";
-import { isMockMode } from "@/lib/claude";
 import { runProof } from "@/lib/local-runner/proof-runner";
 import { AgentSkippedError, selectProviderMatrix } from "@/lib/providers/provider-router";
+import { ProviderExecutionError } from "@/lib/providers/errors";
 import { resolveAgentConfig } from "@/lib/providers/registry";
 import type { ExecutionMode } from "@/lib/local-runner/types";
 import type { AgentName, Handoff, MissionState, OwnershipStatus, ProfileOutput, SkillGraphOutput } from "./types";
@@ -191,7 +191,7 @@ export async function runMission(opts: {
     aiCollaboration: null,
     tokens_in: 0,
     tokens_out: 0,
-    mock_mode: mode === "mock" || (mode === "api" && isMockMode()),
+    mock_mode: false,
     execution_mode: mode,
     provider_matrix: null,
     provider_runtime: {},
@@ -211,7 +211,7 @@ export async function runMission(opts: {
   const ownershipToken = opts.githubUsername
     ? `skillproof:${opts.githubUsername}:${opts.runId}:${opts.runId.slice(-8)}`
     : null;
-  if ((mode === "cli" || mode === "hybrid") && opts.repoUrl) {
+  if ((mode === "cli" || mode === "hybrid" || mode === "local") && opts.repoUrl) {
     try {
       proof = await runProof({
         runId: opts.runId,
@@ -253,7 +253,7 @@ export async function runMission(opts: {
     where: { id: opts.runId },
     data: {
       status: "running",
-      statusMessage: state.mock_mode ? "Heuristic/Mock mode active." : `Execution mode: ${mode}`,
+      statusMessage: `Execution mode: ${mode}`,
       executionMode: mode,
       localInstallApproved: !!opts.localInstallApproved,
       providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
@@ -348,13 +348,9 @@ export async function runMission(opts: {
       }
       await failEvent(evId, err);
       await failEvaluatorSkillRun({ prepared: skillRun, state, error: err });
-      if (AGENT_TO_EVALUATOR_SKILL[name]) {
-        const handoff = skippedHandoff(
-          name,
-          err instanceof Error ? err.message : String(err),
-        ) as Handoff<T>;
-        state.handoffs.push(handoff as Handoff);
-        return handoff;
+      if (err instanceof ProviderExecutionError && err.runtime && state.provider_matrix?.agents) {
+        state.provider_matrix.agents[name] = err.runtime;
+        state.provider_runtime = { ...(state.provider_runtime ?? {}), [name]: err.runtime };
       }
       throw err;
     }

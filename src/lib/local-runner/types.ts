@@ -1,6 +1,6 @@
 // Local runner shared types.
 
-export type ExecutionMode = "api" | "cli" | "hybrid" | "mock";
+export type ExecutionMode = "api" | "cli" | "hybrid" | "local";
 
 export type ToolCapability =
   | "git"

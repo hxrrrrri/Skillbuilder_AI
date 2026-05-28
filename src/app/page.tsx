@@ -12,7 +12,7 @@ const SAMPLE_REPOS = [
   "https://github.com/openai/openai-python",
 ];
 
-type Mode = "api" | "cli" | "hybrid" | "mock";
+type Mode = "api" | "cli" | "hybrid" | "local";
 
 export default function Landing() {
   const [repoUrl, setRepoUrl] = useState("");
@@ -63,7 +63,7 @@ export default function Landing() {
           candidate_level: level,
           job_description: jd || undefined,
           execution_mode: executionMode,
-          local_install_approved: localInstallApproved && (executionMode === "cli" || executionMode === "hybrid"),
+          local_install_approved: localInstallApproved && (executionMode === "cli" || executionMode === "hybrid" || executionMode === "local"),
         }),
       });
       const data = await r.json();
@@ -190,7 +190,7 @@ export default function Landing() {
               <div>
                 <label className="text-xs uppercase tracking-wide text-muted">Execution mode</label>
                 <div className="mt-1 grid grid-cols-2 gap-1 text-xs sm:grid-cols-4">
-                  {(["api", "cli", "hybrid", "mock"] as const).map((m) => (
+                  {(["api", "cli", "hybrid", "local"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -204,11 +204,11 @@ export default function Landing() {
                       {m === "api" && "Cloud API"}
                       {m === "cli" && "Local CLI"}
                       {m === "hybrid" && "Hybrid"}
-                      {m === "mock" && "Mock"}
+                      {m === "local" && "Local"}
                     </button>
                   ))}
                 </div>
-                {(executionMode === "cli" || executionMode === "hybrid") && (
+                {(executionMode === "cli" || executionMode === "hybrid" || executionMode === "local") && (
                   <label className="mt-3 flex items-start gap-2 rounded-md border border-border bg-bg/30 p-3 text-xs text-muted">
                     <input
                       type="checkbox"
@@ -236,23 +236,6 @@ export default function Landing() {
               <Button size="lg" className="w-full" onClick={start} disabled={loading}>
                 {loading ? "Starting mission…" : "Run SkillProof mission →"}
               </Button>
-              <button
-                type="button"
-                className="w-full rounded-md border border-dashed border-border bg-bg/20 px-3 py-2 text-xs font-medium text-muted transition hover:border-accent hover:text-accent"
-                onClick={async () => {
-                  setLoading(true);
-                  try {
-                    const r = await fetch("/api/demo/seed");
-                    const d = await r.json();
-                    if (d?.profile_url) router.push(d.profile_url);
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                disabled={loading}
-              >
-                Open Demo Mission (sample data)
-              </button>
               <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-muted">
                 <span>Try:</span>
                 {SAMPLE_REPOS.map((r) => (
@@ -302,7 +285,7 @@ export default function Landing() {
             <div className="text-xs uppercase tracking-wide text-accent">03 — Verify</div>
             <div className="mt-3 font-display text-2xl text-ink">Own-code interview</div>
             <p className="mt-2 text-sm leading-6 text-muted">
-              Mock interview questions are generated from the candidate&apos;s own code. Every score is
+              Own-code interview questions are generated from the candidate&apos;s code. Every score is
               backed by file evidence. The output is a shareable verified profile.
             </p>
           </CardBody>

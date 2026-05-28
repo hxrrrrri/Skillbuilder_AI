@@ -10,6 +10,7 @@ export const ADMIN_NAV: NavLink[] = [
   { href: "/admin/evaluator-skills", label: "Evaluator skills" },
   { href: "/admin/audit-logs", label: "Audit log" },
   { href: "/admin/providers", label: "Providers" },
+  { href: "/admin/providers/health", label: "Provider health" },
   { href: "/admin/agents", label: "Agents" },
   { href: "/admin/prompts", label: "Prompts" },
   { href: "/admin/billing", label: "Billing", badge: "scaffold" },

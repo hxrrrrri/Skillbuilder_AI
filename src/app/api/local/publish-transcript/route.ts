@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { isAdminRole } from "@/lib/auth/roles";
+import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 
 export const runtime = "nodejs";
@@ -28,6 +28,7 @@ export async function POST(req: Request) {
     where: { id: body.run_id },
     select: {
       id: true,
+      candidateId: true,
       tenantId: true,
       createdByUserId: true,
       candidate: { select: { userId: true } },
@@ -35,17 +36,20 @@ export async function POST(req: Request) {
   });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
 
-  const ownerId = run.createdByUserId ?? run.candidate?.userId ?? null;
-  const isOwner = !!ownerId && ownerId === user.id;
-  const isAdmin = isAdminRole(user.role);
-  if (!isOwner && !isAdmin) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  const decision = evaluateRunMutationAccess(user, {
+    candidateId: run.candidateId,
+    createdByUserId: run.createdByUserId,
+    tenantId: run.tenantId,
+    candidateUserId: run.candidate?.userId ?? null,
+  }, "publish_terminal_transcript");
+  if (!decision.ok) {
+    return decision.response;
   }
 
   const updated = await prisma.publicProfile.updateMany({
     where: {
       runId: body.run_id,
-      ...(isAdmin ? {} : { ownerUserId: user.id }),
+      ...(decision.reason === "admin" ? {} : { ownerUserId: user.id }),
     },
     data: { includeTerminalProof: body.include },
   });
