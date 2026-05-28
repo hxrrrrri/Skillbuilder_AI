@@ -189,6 +189,41 @@ export async function POST(req: Request) {
     },
   });
 
+  await prisma.evidenceFinding.create({
+    data: {
+      runId: q.runId,
+      category: "interview",
+      claim: `Own-code interview answer evaluated for ${q.sourceFile ?? "generated question"}.`,
+      evidenceType: "interview_answer",
+      filePath: q.sourceFile,
+      lineStart: q.lineStart,
+      lineEnd: q.lineEnd,
+      confidence: 0.8,
+      severity: null,
+      candidateSafe: true,
+      employerSafe: true,
+      publicSafe: true,
+      adminOnly: false,
+      redactedText: `Interview score ${blended}/100. Answer text remains private; feedback: ${evalOut.summary}`,
+    },
+  });
+
+  await writeAuditLog({
+    action: "interview.answer.evaluated",
+    actorUserId: user?.id ?? null,
+    tenantId: runAccess.tenantId ?? user?.primaryTenantId ?? null,
+    targetType: "InterviewQuestion",
+    targetId: q.id,
+    metadata: {
+      runId: q.runId,
+      blended_score: blended,
+      new_overall_score: overall,
+      verification_level: "repo_interview_verified",
+    },
+    ip: req.headers.get("x-forwarded-for") ?? null,
+    userAgent: req.headers.get("user-agent") ?? null,
+  }).catch(() => {});
+
   return NextResponse.json({
     evaluation: evalOut,
     blended_score: blended,

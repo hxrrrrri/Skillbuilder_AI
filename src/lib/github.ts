@@ -21,6 +21,8 @@ export type RepoMeta = {
   defaultBranch: string;
   description: string | null;
   language: string | null;
+  visibility?: "public" | "private" | "internal";
+  publicAccess?: boolean;
   stargazers: number;
   forks: number;
   size: number; // KB
@@ -52,6 +54,8 @@ export async function getRepoMeta(owner: string, repo: string): Promise<RepoMeta
     defaultBranch: d.default_branch,
     description: d.description,
     language: d.language,
+    visibility: d.visibility ?? (d.private ? "private" : "public"),
+    publicAccess: d.private === false,
     stargazers: d.stargazers_count,
     forks: d.forks_count,
     size: d.size,

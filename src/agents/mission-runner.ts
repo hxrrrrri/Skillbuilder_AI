@@ -93,6 +93,24 @@ export const PIPELINE: AgentName[] = [
   "profile-gen",
 ];
 
+const PHASE_LABELS: Record<AgentName, string> = {
+  orchestrator: "validation contract generating",
+  "repo-scanner": "repo scanning",
+  architecture: "architecture review",
+  "code-quality": "code quality review",
+  testing: "testing review",
+  security: "security review",
+  "ai-collaboration": "AI collaboration review",
+  "git-evidence": "git evidence review",
+  documentation: "documentation review",
+  authenticity: "authenticity review",
+  "interview-gen": "interview generation",
+  "answer-evaluator": "answer evaluation",
+  validator: "validation",
+  "skill-graph": "skill graph generation",
+  "profile-gen": "profile/report generation",
+};
+
 async function recordEvent(runId: string, agent: AgentName, order: number) {
   return prisma.agentEvent.create({
     data: { runId, agentName: agent, status: "running", order, startedAt: new Date() },
@@ -173,6 +191,7 @@ export async function runMission(opts: {
   jobDescription?: string;
   executionMode?: ExecutionMode;
   localInstallApproved?: boolean;
+  ownershipToken?: string;
 }) {
   const mode: ExecutionMode = opts.executionMode ?? "api";
   const state: MissionState = {
@@ -208,9 +227,9 @@ export async function runMission(opts: {
 
   // Run local proof runner first when execution mode uses CLI/hybrid.
   let proof: Awaited<ReturnType<typeof runProof>> | null = null;
-  const ownershipToken = opts.githubUsername
+  const ownershipToken = opts.ownershipToken ?? (opts.githubUsername
     ? `skillproof:${opts.githubUsername}:${opts.runId}:${opts.runId.slice(-8)}`
-    : null;
+    : null);
   if ((mode === "cli" || mode === "hybrid" || mode === "local") && opts.repoUrl) {
     try {
       proof = await runProof({
@@ -253,7 +272,7 @@ export async function runMission(opts: {
     where: { id: opts.runId },
     data: {
       status: "running",
-      statusMessage: `Execution mode: ${mode}`,
+      statusMessage: `provider readiness checked; execution mode: ${mode}`,
       executionMode: mode,
       localInstallApproved: !!opts.localInstallApproved,
       providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
@@ -311,13 +330,20 @@ export async function runMission(opts: {
       await skipEvent(evId, handoff as Handoff);
       await prisma.analysisRun.update({
         where: { id: opts.runId },
-        data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+        data: {
+          providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
+          statusMessage: `${PHASE_LABELS[name] ?? name} skipped: disabled in admin`,
+        },
       });
       return handoff;
     }
     await prisma.agentEvent.update({
       where: { id: evId },
       data: { status: "running", startedAt: new Date() },
+    });
+    await prisma.analysisRun.update({
+      where: { id: opts.runId },
+      data: { statusMessage: PHASE_LABELS[name] ?? `${name} running` },
     });
     try {
       const handoff = await fn();
@@ -328,7 +354,10 @@ export async function runMission(opts: {
       await completeEvent(evId, enriched as Handoff);
       await prisma.analysisRun.update({
         where: { id: opts.runId },
-        data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+        data: {
+          providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
+          statusMessage: `${PHASE_LABELS[name] ?? name} completed`,
+        },
       });
       return enriched;
     } catch (err) {
@@ -342,7 +371,10 @@ export async function runMission(opts: {
         await skipEvent(evId, handoff as Handoff);
         await prisma.analysisRun.update({
           where: { id: opts.runId },
-          data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+          data: {
+            providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
+            statusMessage: `${PHASE_LABELS[name] ?? name} skipped: ${err.message || "provider skipped"}`,
+          },
         });
         return handoff;
       }
@@ -368,7 +400,10 @@ export async function runMission(opts: {
     await skipEvent(evId, handoff as Handoff);
     await prisma.analysisRun.update({
       where: { id: opts.runId },
-      data: { providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null },
+      data: {
+        providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,
+        statusMessage: `${PHASE_LABELS[name] ?? name} skipped: ${reason}`,
+      },
     });
     return handoff;
   }
@@ -461,6 +496,7 @@ export async function runMission(opts: {
       where: { id: opts.runId },
       data: {
         status: "completed",
+        statusMessage: "completed",
         completedAt: new Date(),
         overallScore: graph.skill_graph.length ? graph.overall_score : null,
         roleFit: graph.skill_graph.length ? graph.role_fit : null,

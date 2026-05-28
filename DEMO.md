@@ -22,20 +22,40 @@ Configure at least one real provider:
 
 Open `/admin/providers/health` and run provider tests until required agents have passing JSON contract results.
 
-## Demo Flow
+## 5-Minute Demo Flow
+
+0:00 - Admin provider proof:
 
 1. Sign in as `admin@skillproof.dev`.
-2. Confirm provider health and agent configuration.
-3. Sign in as `candidate@skillproof.dev`.
-4. Start a verification from `/candidate/new-verification` using a real GitHub repo URL.
-5. Watch the run page for provider readiness, agent progress, evidence locker, ownership state, terminal proof, score breakdown, and not-measured skills.
-6. Complete the own-code interview.
-7. Complete the AI-collaboration challenge.
-8. Run allowlisted terminal commands from the run terminal and save existing command output as proof.
-9. Publish the profile and choose whether terminal proof is included.
-10. Sign in as `employer@skillproof.dev` and inspect search, candidate detail, compare, role fit, reports, and interview kit.
-11. Sign in as `college@skillproof.dev` and inspect tenant dashboard, students, cohorts, skill gaps, placement readiness, reports, and employer-share links.
-12. Sign in as `admin@skillproof.dev` and inspect run trace, evidence, provider matrix, provider health, agents, prompts, security, rubrics, and audit logs.
+2. Open `/admin/providers/health`.
+3. Show required providers are enabled, authenticated, model-configured, and passing JSON contract tests.
+
+0:45 - Candidate mission:
+
+4. Sign in as `candidate@skillproof.dev`.
+5. Open `/candidate/new-verification`.
+6. Enter GitHub username, paste a real repo URL, show metadata preview and ownership token.
+7. Select role, level, `Hybrid` or configured mode, and show provider readiness blockers/pass state.
+8. Start the mission.
+
+2:00 - Live proof command center:
+
+9. Open the run detail page.
+10. Show animated mission stages and section-level skeletons.
+11. As data arrives, show validation contract, repo intelligence, agent timeline, evidence locker, skill graph, terminal proof state, interview questions, and report preview.
+
+3:15 - Upgrade evidence:
+
+12. Complete `/candidate/interview/[runId]` and show verification level becomes `repo_interview_verified`.
+13. Complete `/candidate/ai-challenge/[runId]`.
+14. If terminal proof is enabled, run an allowlisted command from `/candidate/runs/[id]/terminal` and save the existing output as evidence.
+
+4:15 - Hiring surfaces:
+
+15. Publish the profile only after gates pass; choose whether terminal proof is included.
+16. Sign in as `employer@skillproof.dev` and show search, filters, detail, compare, report export, and interview kit.
+17. Sign in as `college@skillproof.dev` and show cohorts, skill gaps, placement readiness, reports, and employer-share links.
+18. Sign in as `admin@skillproof.dev` and show run trace, evidence, terminal commands, provider matrix, prompts, rubrics, and audit logs.
 
 ## Failure Demo
 

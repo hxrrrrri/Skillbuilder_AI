@@ -16,6 +16,7 @@ The product policy is strict: real providers only, no silent fallback, no fabric
 ```bash
 npm install
 cp .env.example .env
+npm run db:generate
 npm run db:push
 npm run db:seed-users
 npm run db:seed-registry -- --force
@@ -196,6 +197,7 @@ Required certification sequence:
 
 ```bash
 npm install
+npm run db:generate
 npm run db:push
 npm run db:seed-users
 npm run db:seed-registry -- --force
@@ -205,6 +207,22 @@ npm run test
 npm run build
 npm run dev
 ```
+
+Recommended hackathon demo process:
+
+```bash
+SKILLPROOF_WORKER_MODE=1 npm run dev
+npm run worker
+```
+
+PowerShell:
+
+```powershell
+$env:SKILLPROOF_WORKER_MODE="1"; npm run dev
+npm run worker
+```
+
+If `SKILLPROOF_WORKER_MODE` is not set in local development, runs use the visible in-process fallback banner on the run detail page.
 
 ## Real-Provider Demo Script
 

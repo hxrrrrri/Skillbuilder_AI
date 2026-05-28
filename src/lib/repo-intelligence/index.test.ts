@@ -10,6 +10,7 @@ describe("buildRepoIntelligenceIndex", () => {
         { path: "src/app/api/users/route.ts", type: "blob" },
         { path: "src/components/ProfileCard.tsx", type: "blob" },
         { path: "src/lib/user.test.ts", type: "blob" },
+        { path: ".env", type: "blob" },
         { path: ".github/workflows/ci.yml", type: "blob" },
       ],
       snippets: [
@@ -17,7 +18,7 @@ describe("buildRepoIntelligenceIndex", () => {
           path: "package.json",
           content: JSON.stringify({
             scripts: { test: "vitest", build: "next build" },
-            dependencies: { next: "14.0.0", react: "18.0.0", zod: "3.0.0" },
+            dependencies: { next: "14.0.0", react: "18.0.0", zod: "3.0.0", vm2: "latest" },
             devDependencies: { vitest: "2.0.0" },
           }),
         },
@@ -46,6 +47,11 @@ export async function POST(req: Request) { return fetch("/api"); }`,
     expect(index.apiClients.some((a) => a.kind === "fetch")).toBe(true);
     expect(index.testFiles[0].cases).toContain("user");
     expect(index.ciFiles).toContain(".github/workflows/ci.yml");
+    expect(index.fileTreeSummary.totalFiles).toBeGreaterThan(0);
+    expect(index.serverClientBoundaries.apiFiles).toContain("src/app/api/users/route.ts");
+    expect(index.envConfigFiles.some((e) => e.file === ".env" && e.exposesSecrets)).toBe(true);
+    expect(index.dependencyRisks.some((r) => r.packageName === "vm2")).toBe(true);
+    expect(index.scriptMap.test).toBe("vitest");
+    expect(index.testToSourceProximity.some((p) => p.testFile === "src/lib/user.test.ts")).toBe(true);
   });
 });
-

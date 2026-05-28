@@ -72,8 +72,53 @@ export type RepoRiskFlag = {
   line_start?: number;
 };
 
+export type ServerClientBoundarySummary = {
+  serverFiles: string[];
+  clientFiles: string[];
+  apiFiles: string[];
+  sharedFiles: string[];
+};
+
+export type EnvConfigSummary = {
+  file: string;
+  kind: "example" | "committed_env" | "config";
+  exposesSecrets: boolean;
+};
+
+export type DependencyRiskSummary = {
+  packageName: string;
+  severity: "low" | "medium" | "high";
+  reason: string;
+};
+
+export type TestProximitySummary = {
+  testFile: string;
+  nearestSource: string | null;
+  signal: "same_directory" | "same_basename" | "distant" | "unknown";
+};
+
+export type CommitActivitySummary = {
+  commitCount: number;
+  firstCommitAt: string | null;
+  lastCommitAt: string | null;
+};
+
+export type ContributorSummary = {
+  name: string;
+  commits: number;
+};
+
 export type RepoIntelligenceIndex = {
   files: RepoFileSummary[];
+  fileTreeSummary: {
+    totalFiles: number;
+    sourceFiles: number;
+    testFiles: number;
+    configFiles: number;
+    docsFiles: number;
+    ciFiles: number;
+    largestFiles: Array<{ path: string; size: number }>;
+  };
   languages: Record<string, number>;
   packageManagers: string[];
   frameworks: string[];
@@ -86,6 +131,14 @@ export type RepoIntelligenceIndex = {
   testFiles: TestFileSummary[];
   configFiles: ConfigFileSummary[];
   ciFiles: string[];
+  serverClientBoundaries: ServerClientBoundarySummary;
+  prismaSchemaMap: SchemaSummary[];
+  envConfigFiles: EnvConfigSummary[];
+  dependencyRisks: DependencyRiskSummary[];
+  scriptMap: Record<string, string>;
+  testToSourceProximity: TestProximitySummary[];
+  commitActivity?: CommitActivitySummary;
+  contributors?: ContributorSummary[];
   dependencyGraph: DependencyEdge[];
   riskFlags: RepoRiskFlag[];
 };
@@ -354,11 +407,45 @@ function scanConfig(snippet: IntelligenceSnippetInput, index: RepoIntelligenceIn
   if (kind === "package.json") {
     const pkg = parsePackage(snippet.content);
     if (pkg?.scripts) config.scripts = pkg.scripts;
+    if (pkg?.scripts) {
+      for (const key of ["test", "test:ci", "build", "typecheck", "type-check", "lint"]) {
+        if (typeof pkg.scripts[key] === "string") index.scriptMap[key] = pkg.scripts[key];
+      }
+    }
     for (const fw of detectFrameworksFromPackage(pkg)) addUnique(index.frameworks, fw, (x) => x);
     const deps = { ...(pkg?.dependencies ?? {}), ...(pkg?.devDependencies ?? {}) };
-    for (const dep of Object.keys(deps)) index.dependencyGraph.push({ from: "package.json", to: dep, kind: "package" });
+    for (const [dep, version] of Object.entries(deps)) {
+      index.dependencyGraph.push({ from: "package.json", to: dep, kind: "package" });
+      if (String(version).includes("*") || String(version).toLowerCase().includes("latest")) {
+        index.dependencyRisks.push({ packageName: dep, severity: "medium", reason: "Unpinned wildcard/latest dependency version." });
+      }
+      if (["eval", "serialize-javascript", "vm2"].includes(dep)) {
+        index.dependencyRisks.push({ packageName: dep, severity: "high", reason: "Dependency commonly needs security review." });
+      }
+    }
   }
   index.configFiles.push(config);
+}
+
+function boundaryForPath(file: string): keyof ServerClientBoundarySummary | null {
+  if (/^(?:src\/)?app\/.*\/route\.(tsx?|jsx?)$/.test(file) || /^(?:src\/)?pages\/api\//.test(file)) return "apiFiles";
+  if (/(^|\/)(server|actions|middleware)\.(tsx?|jsx?)$/.test(file) || /server-only|\.server\./.test(file)) return "serverFiles";
+  if (/\.client\.(tsx?|jsx?)$/.test(file)) return "clientFiles";
+  return null;
+}
+
+function inferTestProximity(files: RepoFileSummary[]): TestProximitySummary[] {
+  const sources = files.filter((f) => f.role === "source").map((f) => f.path);
+  const tests = files.filter((f) => f.role === "test").map((f) => f.path);
+  return tests.slice(0, 120).map((testFile) => {
+    const dir = testFile.split("/").slice(0, -1).join("/");
+    const base = testFile.split("/").pop()?.replace(/\.(test|spec)\.[^.]+$/i, "").replace(/^test_/, "") ?? "";
+    const sameBase = sources.find((s) => s.split("/").pop()?.replace(/\.[^.]+$/, "") === base);
+    if (sameBase) return { testFile, nearestSource: sameBase, signal: "same_basename" };
+    const sameDir = sources.find((s) => s.startsWith(dir ? `${dir}/` : ""));
+    if (sameDir) return { testFile, nearestSource: sameDir, signal: "same_directory" };
+    return { testFile, nearestSource: sources[0] ?? null, signal: sources.length ? "distant" : "unknown" };
+  });
 }
 
 export function buildRepoIntelligenceIndex(input: {
@@ -368,6 +455,15 @@ export function buildRepoIntelligenceIndex(input: {
   const blobs = input.files.filter((f) => f.type !== "tree");
   const index: RepoIntelligenceIndex = {
     files: [],
+    fileTreeSummary: {
+      totalFiles: 0,
+      sourceFiles: 0,
+      testFiles: 0,
+      configFiles: 0,
+      docsFiles: 0,
+      ciFiles: 0,
+      largestFiles: [],
+    },
     languages: {},
     packageManagers: [],
     frameworks: [],
@@ -380,22 +476,41 @@ export function buildRepoIntelligenceIndex(input: {
     testFiles: [],
     configFiles: [],
     ciFiles: [],
+    serverClientBoundaries: { serverFiles: [], clientFiles: [], apiFiles: [], sharedFiles: [] },
+    prismaSchemaMap: [],
+    envConfigFiles: [],
+    dependencyRisks: [],
+    scriptMap: {},
+    testToSourceProximity: [],
     dependencyGraph: [],
     riskFlags: [],
   };
 
   for (const f of blobs) {
     const language = languageForPath(f.path);
-    index.files.push({ path: f.path, size: f.size, language, role: roleForPath(f.path) });
+    const role = roleForPath(f.path);
+    index.files.push({ path: f.path, size: f.size, language, role });
     index.languages[language] = (index.languages[language] ?? 0) + (f.size ?? 1);
     if (/^\.github\/workflows\//i.test(f.path)) index.ciFiles.push(f.path);
     if (f.path === "package-lock.json") addUnique(index.packageManagers, "npm", (x) => x);
     if (f.path === "pnpm-lock.yaml") addUnique(index.packageManagers, "pnpm", (x) => x);
     if (f.path === "yarn.lock") addUnique(index.packageManagers, "yarn", (x) => x);
     if (f.path === "bun.lockb" || f.path === "bun.lock") addUnique(index.packageManagers, "bun", (x) => x);
+    if (/\.env($|\.)/i.test(f.path)) {
+      index.envConfigFiles.push({
+        file: f.path,
+        kind: /\.env\.example$/i.test(f.path) ? "example" : "committed_env",
+        exposesSecrets: !/\.env\.example$/i.test(f.path),
+      });
+    }
     if (/\.env($|\.)/i.test(f.path) && !/\.env\.example$/i.test(f.path)) {
       index.riskFlags.push({ severity: "high", reason: "Environment file appears committed.", file: f.path });
     }
+    if (/^(?:src\/)?app\/.*\/page\.(tsx?|jsx?)$/.test(f.path) || /^(?:src\/)?components\//.test(f.path)) {
+      addUnique(index.serverClientBoundaries.sharedFiles, f.path, (x) => x);
+    }
+    const boundary = boundaryForPath(f.path);
+    if (boundary) addUnique(index.serverClientBoundaries[boundary], f.path, (x) => x);
     const route = routeFromNextFile(f.path);
     if (route && !index.routes.some((r) => r.file === f.path)) {
       index.routes.push({ route, file: f.path, kind: /route\.[jt]sx?$/.test(f.path) || /pages\/api\//.test(f.path) ? "next_api" : "next_page" });
@@ -415,7 +530,31 @@ export function buildRepoIntelligenceIndex(input: {
     if (/sk-[a-zA-Z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}/.test(snippet.content)) {
       index.riskFlags.push({ severity: "high", reason: "Possible committed credential pattern.", file: snippet.path });
     }
+    for (const m of snippet.content.matchAll(/\b(TODO|FIXME|HACK)\b[: ]?(.{0,100})/gi)) {
+      index.riskFlags.push({
+        severity: m[1].toLowerCase() === "hack" ? "medium" : "low",
+        reason: `${m[1].toUpperCase()} marker: ${m[2]?.trim() || "review required"}`,
+        file: snippet.path,
+        line_start: lineNumberAt(snippet.content, m.index ?? 0),
+      });
+    }
   }
+
+  index.fileTreeSummary = {
+    totalFiles: index.files.length,
+    sourceFiles: index.files.filter((f) => f.role === "source").length,
+    testFiles: index.files.filter((f) => f.role === "test").length,
+    configFiles: index.files.filter((f) => f.role === "config").length,
+    docsFiles: index.files.filter((f) => f.role === "docs").length,
+    ciFiles: index.files.filter((f) => f.role === "ci").length,
+    largestFiles: index.files
+      .filter((f) => typeof f.size === "number")
+      .sort((a, b) => (b.size ?? 0) - (a.size ?? 0))
+      .slice(0, 12)
+      .map((f) => ({ path: f.path, size: f.size ?? 0 })),
+  };
+  index.prismaSchemaMap = index.schemas.filter((s) => s.library === "prisma");
+  index.testToSourceProximity = inferTestProximity(index.files);
 
   index.components = index.components.slice(0, 80);
   index.functions = index.functions.slice(0, 160);
@@ -423,5 +562,7 @@ export function buildRepoIntelligenceIndex(input: {
   index.schemas = index.schemas.slice(0, 80);
   index.apiClients = index.apiClients.slice(0, 80);
   index.dependencyGraph = index.dependencyGraph.slice(0, 300);
+  index.dependencyRisks = index.dependencyRisks.slice(0, 80);
+  index.riskFlags = index.riskFlags.slice(0, 160);
   return index;
 }

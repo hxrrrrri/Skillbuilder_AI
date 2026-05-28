@@ -4,9 +4,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { runCommand, summarize } from "./terminal";
 import { runsRoot } from "./workspace";
-import type { LocalProofPolicy, TerminalEvidence } from "./types";
+import { prisma } from "@/lib/db";
+import type { CommandRun, LocalProofPolicy, TerminalEvidence } from "./types";
 
 export type ProofResult = {
   workspace: string;
@@ -55,7 +57,9 @@ function evidenceFrom(
   usedFor: TerminalEvidence["usedFor"],
   statusLabel?: TerminalEvidence["statusLabel"],
 ): TerminalEvidence {
+  const outputSha256 = createHash("sha256").update(run.stdout).update("\0").update(run.stderr).digest("hex");
   return {
+    commandRunId: run.id,
     command: [run.command, ...run.args].join(" "),
     cwd: run.cwd,
     exitCode: run.exitCode,
@@ -63,8 +67,47 @@ function evidenceFrom(
     stderrSummary: summarize(run.stderr, 800),
     durationMs: run.durationMs,
     usedFor,
+    outputSha256,
+    redactionWarning: /\[REDACTED[_A-Z]*\]/.test(`${run.stdout}\n${run.stderr}`),
+    evidenceSource: "local_proof_runner",
     statusLabel: statusLabel ?? (run.exitCode === 0 ? "passed" : run.exitCode === null ? undefined : "failed"),
   };
+}
+
+async function persistCommandRun(runId: string, run: CommandRun, usedFor: TerminalEvidence["usedFor"]) {
+  const outputHash = createHash("sha256").update(run.stdout).update("\0").update(run.stderr).digest("hex");
+  await prisma.terminalCommandRun.upsert({
+    where: { id: run.id },
+    update: {},
+    create: {
+      id: run.id,
+      command: run.command,
+      args: JSON.stringify(run.args),
+      cwd: run.cwd,
+      exitCode: run.exitCode,
+      stdoutSummary: summarize(run.stdout, 1200),
+      stderrSummary: summarize(run.stderr, 800),
+      durationMs: run.durationMs,
+      outputHash,
+      usedFor,
+      ranAt: run.completedAt ? new Date(run.completedAt) : new Date(),
+      runId,
+      savedAsEvidence: false,
+    },
+  }).catch(() => {
+    /* terminal persistence must not interrupt proof collection */
+  });
+}
+
+async function runAndRecord(
+  runId: string,
+  usedFor: TerminalEvidence["usedFor"],
+  opts: Parameters<typeof runCommand>[0],
+  statusLabel?: TerminalEvidence["statusLabel"],
+) {
+  const run = await runCommand(opts);
+  await persistCommandRun(runId, run, usedFor);
+  return { run, evidence: evidenceFrom(run, usedFor, statusLabel) };
 }
 
 function detectPackageManager(workspace: string): "npm" | "pnpm" | "yarn" | "bun" | null {
@@ -148,7 +191,7 @@ function skippedEvidence(args: {
 }
 
 // Quick grep for obvious security risks (uses `git grep` so .gitignore is respected).
-async function securityScan(workspace: string, evidence: TerminalEvidence[]) {
+async function securityScan(runId: string, workspace: string, evidence: TerminalEvidence[]) {
   const patterns: Array<{ label: string; regex: string }> = [
     { label: "secret tokens", regex: "sk-[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]{20,}" },
     { label: "eval(", regex: "\\beval\\(" },
@@ -156,7 +199,7 @@ async function securityScan(workspace: string, evidence: TerminalEvidence[]) {
     { label: "process.env dump", regex: "console\\.log\\(.*process\\.env|JSON\\.stringify\\(process\\.env" },
   ];
   for (const p of patterns) {
-    const r = await runCommand({
+    const { run: r } = await runAndRecord(runId, "security", {
       command: "git",
       args: ["grep", "-In", "-E", p.regex],
       cwd: workspace,
@@ -164,7 +207,9 @@ async function securityScan(workspace: string, evidence: TerminalEvidence[]) {
       approved: true,
     });
     if (r.exitCode === 0 && r.stdout.trim().length > 0) {
+      const outputSha256 = createHash("sha256").update(r.stdout).update("\0").update(r.stderr).digest("hex");
       evidence.push({
+        commandRunId: r.id,
         command: `git grep · ${p.label}`,
         cwd: r.cwd,
         exitCode: 0,
@@ -172,6 +217,9 @@ async function securityScan(workspace: string, evidence: TerminalEvidence[]) {
         stderrSummary: summarize(r.stderr, 200),
         durationMs: r.durationMs,
         usedFor: "security",
+        outputSha256,
+        redactionWarning: /\[REDACTED[_A-Z]*\]/.test(`${r.stdout}\n${r.stderr}`),
+        evidenceSource: "local_proof_runner",
       });
     }
   }
@@ -194,13 +242,13 @@ export async function runProof(opts: {
   let cloned = false;
   let reused = false;
   if (!fs.existsSync(workspace)) {
-    const clone = await runCommand({
+    const { run: clone, evidence: cloneEvidence } = await runAndRecord(opts.runId, "git", {
       command: "git",
       args: ["clone", "--depth", "50", "--single-branch", opts.repoUrl, workspace],
       timeoutMs: opts.timeoutMs ?? CLONE_TIMEOUT_MS,
       approved: true,
     });
-    evidence.push(evidenceFrom(clone, "git"));
+    evidence.push(cloneEvidence);
     cloned = clone.exitCode === 0;
   } else {
     cloned = true;
@@ -247,14 +295,14 @@ export async function runProof(opts: {
     ["status", "--short"],
     ["remote", "-v"],
   ]) {
-    const r = await runCommand({
+    const { evidence: ev } = await runAndRecord(opts.runId, "git", {
       command: "git",
       args,
       cwd: workspace,
       timeoutMs: GIT_INFO_TIMEOUT_MS,
       approved: true,
     });
-    evidence.push(evidenceFrom(r, "git"));
+    evidence.push(ev);
   }
 
   const pkgPath = path.join(workspace, "package.json");
@@ -311,7 +359,7 @@ export async function runProof(opts: {
     } else {
       const install = pmInstall(packageManager, workspace);
       if (install) {
-        const r = await runCommand({
+        const { run: r, evidence: installEvidence } = await runAndRecord(opts.runId, "install", {
           ...install,
           cwd: workspace,
           timeoutMs: policy.maxInstallMs,
@@ -319,7 +367,8 @@ export async function runProof(opts: {
           env: { CI: "1" },
         });
         installStatus = r.exitCode === 0 ? "completed" : "failed";
-        evidence.push(evidenceFrom(r, "install", r.exitCode === 0 ? "install_completed" : "failed"));
+        installEvidence.statusLabel = r.exitCode === 0 ? "install_completed" : "failed";
+        evidence.push(installEvidence);
         hasNodeModules = fs.existsSync(path.join(workspace, "node_modules"));
       }
     }
@@ -338,14 +387,14 @@ export async function runProof(opts: {
     const script = scripts["test:ci"] ? "test:ci" : "test";
     const cmd = pmRun(packageManager, script);
     if (cmd) {
-      const t = await runCommand({
+      const { evidence: testEvidence } = await runAndRecord(opts.runId, "testing", {
         ...cmd,
         cwd: workspace,
         timeoutMs: policy.maxCommandMs,
         approved: true,
         env: { CI: "1" },
       });
-      evidence.push(evidenceFrom(t, "testing"));
+      evidence.push(testEvidence);
     }
   } else if (hasNode && hasNodeModules) {
     evidence.push(skippedEvidence({
@@ -356,27 +405,27 @@ export async function runProof(opts: {
     }));
   } else if (hasPython) {
     // Only run pytest if it's importable; non-fatal if not.
-    const py = await runCommand({
+    const { evidence: pyEvidence } = await runAndRecord(opts.runId, "testing", {
       command: "python",
       args: ["-m", "pytest", "-q", "--maxfail=5"],
       cwd: workspace,
       timeoutMs: policy.maxCommandMs,
       approved: true,
     });
-    evidence.push(evidenceFrom(py, "testing"));
+    evidence.push(pyEvidence);
   }
 
   // build
   if (hasNode && hasNodeModules && scripts.build) {
     const cmd = pmRun(packageManager, "build");
     if (cmd) {
-      const b = await runCommand({
+      const { evidence: buildEvidence } = await runAndRecord(opts.runId, "build", {
         ...cmd,
         cwd: workspace,
         timeoutMs: policy.maxCommandMs,
         approved: true,
       });
-      evidence.push(evidenceFrom(b, "build"));
+      evidence.push(buildEvidence);
     }
   } else if (hasNode && hasNodeModules) {
     evidence.push(skippedEvidence({
@@ -392,25 +441,25 @@ export async function runProof(opts: {
     const tcScript = scripts.typecheck ? "typecheck" : "type-check";
     const cmd = pmRun(packageManager, tcScript);
     if (cmd) {
-      const tc = await runCommand({
+      const { evidence: typecheckEvidence } = await runAndRecord(opts.runId, "typecheck", {
         ...cmd,
         cwd: workspace,
         timeoutMs: policy.maxCommandMs,
         approved: true,
       });
-      evidence.push(evidenceFrom(tc, "typecheck"));
+      evidence.push(typecheckEvidence);
     }
   } else if (hasNode && hasNodeModules && fs.existsSync(path.join(workspace, "tsconfig.json"))) {
     const localTsc = path.join(workspace, "node_modules", ".bin", process.platform === "win32" ? "tsc.cmd" : "tsc");
     if (fs.existsSync(localTsc)) {
-      const tc = await runCommand({
+      const { evidence: typecheckEvidence } = await runAndRecord(opts.runId, "typecheck", {
         command: localTsc,
         args: ["--noEmit"],
         cwd: workspace,
         timeoutMs: policy.maxCommandMs,
         approved: true,
       });
-      evidence.push(evidenceFrom(tc, "typecheck"));
+      evidence.push(typecheckEvidence);
     } else {
       evidence.push(skippedEvidence({
         command: "# typecheck skipped",
@@ -431,14 +480,14 @@ export async function runProof(opts: {
   if (hasNode && hasNodeModules && hasLint) {
     const cmd = pmRun(packageManager, "lint");
     if (cmd) {
-      const lint = await runCommand({
+      const { evidence: lintEvidence } = await runAndRecord(opts.runId, "lint", {
         ...cmd,
         cwd: workspace,
         timeoutMs: policy.maxCommandMs,
         approved: true,
         env: { CI: "1" },
       });
-      evidence.push(evidenceFrom(lint, "lint"));
+      evidence.push(lintEvidence);
     }
   } else if (hasNode && hasNodeModules) {
     evidence.push(skippedEvidence({
@@ -451,7 +500,7 @@ export async function runProof(opts: {
 
   // Security grep scans.
   try {
-    await securityScan(workspace, evidence);
+    await securityScan(opts.runId, workspace, evidence);
   } catch {
     // Non-fatal.
   }
@@ -460,7 +509,7 @@ export async function runProof(opts: {
   let owner_match = false;
   let gh_user: string | null = null;
   try {
-    const who = await runCommand({
+    const { run: who, evidence: whoEvidence } = await runAndRecord(opts.runId, "ownership", {
       command: "gh",
       args: ["api", "user", "-q", ".login"],
       timeoutMs: 8000,
@@ -471,7 +520,7 @@ export async function runProof(opts: {
       gh_user = login || null;
       if (login && login.toLowerCase() === opts.repoOwner.toLowerCase()) owner_match = true;
     }
-    evidence.push(evidenceFrom(who, "ownership"));
+    evidence.push(whoEvidence);
   } catch {}
 
   let repo_token_verified = false;

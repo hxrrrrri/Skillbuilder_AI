@@ -52,8 +52,8 @@ export async function POST(req: Request) {
   }
 
   const username = run.candidate?.githubUsername ?? null;
-  const token = username ? `skillproof:${username}:${run.id}:${run.id.slice(-8)}` : null;
   const previous = safeJsonParse<OwnershipStatus | null>(run.ownershipStatus, null);
+  const token = previous?.verification_token ?? (username ? `skillproof:${username}:${run.id}:${run.id.slice(-8)}` : null);
   let repoTokenVerified = false;
   const checkedFiles = ["README.md", "README", "readme.md", ".skillproof-verify.json"];
 

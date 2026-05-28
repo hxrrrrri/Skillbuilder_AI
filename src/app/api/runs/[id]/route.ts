@@ -237,6 +237,8 @@ function buildLimitedRunPayload(
   const aiCollaboration = safeJsonParse(run.aiCollaboration, null);
   const validationSummary = safeJsonParse(run.validationSummary, null);
   const providerMatrix = safeJsonParse(run.providerMatrix, null);
+  const validationContract = safeJsonParse(run.validationContract, null);
+  const repoIntelligence = safeJsonParse(run.repoIntelligence, null);
 
   return {
     id: run.id,
@@ -319,12 +321,20 @@ function buildLimitedRunPayload(
       verified: run.verificationLevel === "repo_interview_verified",
     },
     validation_summary: validationSummary,
+    validation_contract: validationContract,
+    validation_coverage: safeJsonParse(run.validationCoverage, []),
+    repo_intelligence: repoIntelligence,
     authenticity: safeJsonParse(run.authenticitySignals, null),
     improvement_plan: safeJsonParse(run.improvementPlan, null),
     employer_verifier: safeJsonParse(run.employerVerifier, null),
     ai_collaboration: aiCollaboration,
     profile_summary: safeJsonParse(run.profileSummary, null),
     execution_mode: run.executionMode,
+    provider_matrix: providerMatrix,
+    processing_mode:
+      process.env.SKILLPROOF_WORKER_MODE === "1" || process.env.NODE_ENV === "production"
+        ? "worker"
+        : "in_process",
     terminal_summary: summarizeTerminalEvidence(terminalEvidence),
     terminal_evidence: isCandidateView ? terminalEvidence.map(sanitizeTerminalEvidence) : [],
     ownership_status: ownershipStatus,

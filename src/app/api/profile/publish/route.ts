@@ -5,6 +5,7 @@ import { slugify } from "@/lib/utils";
 import { getCurrentUser } from "@/lib/auth/session";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
+import { getPublicProfilePublishBlockers } from "@/lib/profile-publish-gates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,6 +14,7 @@ const Body = z.object({
   run_id: z.string(),
   name: z.string().min(2).max(80).optional(),
   visibility: z.enum(["public", "unlisted", "private"]).default("public"),
+  include_terminal_proof: z.boolean().default(false),
 });
 
 export async function POST(req: Request) {
@@ -25,26 +27,9 @@ export async function POST(req: Request) {
 
   const run = await prisma.analysisRun.findUnique({
     where: { id: body.run_id },
-    include: { repository: true, candidate: true },
+    include: { repository: true, candidate: true, scores: true },
   });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
-  if (run.status !== "completed") {
-    return NextResponse.json({ error: "run_incomplete", status: run.status }, { status: 409 });
-  }
-  const unsafeScores = await prisma.skillScore.findMany({
-    where: { runId: run.id, scoreSource: { in: ["mock", "heuristic"] } },
-    select: { skillName: true, scoreSource: true },
-  });
-  if (run.executionMode === "mock" || unsafeScores.length) {
-    return NextResponse.json(
-      {
-        error: "unverified_profile_blocked",
-        reason: "Public profiles cannot be generated from unverified legacy score sources.",
-        unsafe_scores: unsafeScores,
-      },
-      { status: 409 },
-    );
-  }
 
   const sessionUser = await getCurrentUser();
   const decision = evaluateRunMutationAccess(sessionUser, {
@@ -67,6 +52,31 @@ export async function POST(req: Request) {
     return decision.response;
   }
 
+  if (body.visibility !== "private") {
+    const blockers = getPublicProfilePublishBlockers(run);
+    if (blockers.length) {
+      await writeAuditLog({
+        action: "profile.publish.blocked",
+        actorUserId: sessionUser?.id ?? null,
+        tenantId: run.tenantId ?? sessionUser?.primaryTenantId ?? null,
+        targetType: "run",
+        targetId: run.id,
+        metadata: { visibility: body.visibility, blockers },
+        ip: req.headers.get("x-forwarded-for") ?? null,
+        userAgent: req.headers.get("user-agent") ?? null,
+      }).catch(() => {});
+      return NextResponse.json(
+        {
+          error: "public_profile_blocked",
+          reason: "Public and unlisted profiles require evidence-backed, validated, provider-backed scores.",
+          blockers,
+          allowed_visibility: ["private"],
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const baseSlug = slugify(
     `${body.name ?? run.candidate?.name ?? run.repository.owner}-${run.repository.repoName}`,
   );
@@ -83,6 +93,7 @@ export async function POST(req: Request) {
       ownerUserId: sessionUser?.id ?? run.candidate?.userId ?? null,
       slug,
       visibility: body.visibility,
+      includeTerminalProof: body.include_terminal_proof,
     },
   });
 
@@ -92,7 +103,7 @@ export async function POST(req: Request) {
     tenantId: run.tenantId ?? sessionUser?.primaryTenantId ?? null,
     targetType: "profile",
     targetId: profile.id,
-    metadata: { run_id: run.id, slug, visibility: body.visibility },
+    metadata: { run_id: run.id, slug, visibility: body.visibility, include_terminal_proof: body.include_terminal_proof },
     ip: req.headers.get("x-forwarded-for") ?? null,
     userAgent: req.headers.get("user-agent") ?? null,
   });

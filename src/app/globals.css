@@ -79,6 +79,25 @@ textarea {
   );
 }
 
+.skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(90deg, rgba(33, 31, 28, 0.75), rgba(52, 49, 45, 0.85), rgba(33, 31, 28, 0.75));
+}
+
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(250, 249, 245, 0.08), transparent);
+  animation: shimmer 1.35s infinite;
+}
+
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
 * {
   scrollbar-color: #4b4640 #151513;
 }

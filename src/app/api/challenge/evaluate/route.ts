@@ -221,5 +221,40 @@ Return the JSON now.`;
     data: { overallScore: overall },
   });
 
+  await prisma.evidenceFinding.create({
+    data: {
+      runId: body.run_id,
+      category: "ai_collaboration",
+      claim: `AI-collaboration challenge evaluated with ${out.tool_used}.`,
+      evidenceType: "challenge_submission",
+      filePath: body.target_files[0] ?? null,
+      lineStart: null,
+      lineEnd: null,
+      confidence: 0.8,
+      severity: null,
+      candidateSafe: true,
+      employerSafe: true,
+      publicSafe: true,
+      adminOnly: false,
+      redactedText: `AI collaboration score ${out.overall_score}/100. ${out.feedback}`,
+    },
+  });
+
+  await writeAuditLog({
+    action: "challenge.evaluate.completed",
+    actorUserId: sessionUser?.id ?? null,
+    tenantId: access.tenantId ?? sessionUser?.primaryTenantId ?? null,
+    targetType: "AnalysisRun",
+    targetId: body.run_id,
+    metadata: {
+      overall_score: out.overall_score,
+      new_overall_score: overall,
+      tool_used: out.tool_used,
+      challenge_id: out.challenge_id ?? null,
+    },
+    ip: req.headers.get("x-forwarded-for") ?? null,
+    userAgent: req.headers.get("user-agent") ?? null,
+  }).catch(() => {});
+
   return NextResponse.json({ evaluation: out, new_overall_score: overall });
 }

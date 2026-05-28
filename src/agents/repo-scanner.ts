@@ -151,6 +151,21 @@ export async function runRepoScanner(state: MissionState, owner: string, repo: s
     files: tree.map((t) => ({ path: t.path, size: t.size, type: t.type })),
     snippets: snippets.map((s) => ({ path: s.path, content: s.content })),
   });
+  const commitDates = commits.map((c) => c.date).filter(Boolean).sort();
+  const contributors = new Map<string, number>();
+  for (const commit of commits) {
+    const author = commit.author ?? "unknown";
+    contributors.set(author, (contributors.get(author) ?? 0) + 1);
+  }
+  intelligence.commitActivity = {
+    commitCount: commits.length,
+    firstCommitAt: commitDates[0] ?? null,
+    lastCommitAt: commitDates[commitDates.length - 1] ?? null,
+  };
+  intelligence.contributors = [...contributors.entries()]
+    .map(([name, count]) => ({ name, commits: count }))
+    .sort((a, b) => b.commits - a.commits)
+    .slice(0, 20);
 
   const pack: RepoContextPack = {
     meta: {

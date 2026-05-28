@@ -32,18 +32,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${display.variable} ${sans.variable} ${mono.variable} min-h-screen font-sans antialiased`}>
         <AuthSessionProvider>
-          <header className="fixed left-1/2 top-5 z-50 -translate-x-1/2 w-[700px] max-w-[calc(100vw-2rem)]">
-            <div className="flex w-full items-center rounded-full border border-white/[0.08] bg-panel2/95 px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md">
-              <div className="flex flex-1 items-center">
-                <a href="/" className="flex items-center justify-center h-8 w-8 rounded-full bg-ink text-bg text-sm font-bold shrink-0">
+          <header className="fixed left-1/2 top-5 z-50 w-[920px] max-w-[calc(100vw-2rem)] -translate-x-1/2">
+            <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-5 rounded-full border border-white/[0.08] bg-panel2/95 px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md">
+              <a href="/" className="flex min-w-0 items-center gap-2 justify-self-start">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink text-sm font-bold text-bg">
                   S
-                </a>
-              </div>
-              <nav className="hidden items-center gap-6 text-sm text-muted sm:flex">
+                </span>
+                <span className="hidden truncate text-sm font-semibold text-ink md:inline">SkillProof</span>
+              </a>
+              <nav className="hidden items-center gap-5 justify-self-center text-sm text-muted sm:flex">
                 <a href="/" className="transition hover:text-ink">Home</a>
                 <a href="/campus-preview" className="transition hover:text-ink">Campus</a>
+                <a href="/candidate/new-verification" className="transition hover:text-ink">Verify</a>
+                <a href="/employer/search" className="transition hover:text-ink">Talent</a>
               </nav>
-              <div className="flex flex-1 items-center justify-end">
+              <div className="justify-self-end">
                 <NavUser />
               </div>
             </div>

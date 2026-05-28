@@ -21,6 +21,7 @@ const Body = z.object({
   job_description: z.string().max(4000).optional(),
   execution_mode: z.enum(["api", "cli", "hybrid", "local"]).default("api"),
   local_install_approved: z.boolean().default(false),
+  ownership_token: z.string().min(8).max(240).optional(),
 });
 
 export async function POST(req: Request) {
@@ -104,6 +105,10 @@ export async function POST(req: Request) {
       candidateLevel: body.candidate_level,
       jobDescription: body.job_description,
       status: "pending",
+      statusMessage:
+        process.env.SKILLPROOF_WORKER_MODE === "1" || process.env.NODE_ENV === "production"
+          ? "Queued for out-of-process worker."
+          : "Queued for local in-process fallback. Set SKILLPROOF_WORKER_MODE=1 and run `npm run worker` for demo/production.",
       executionMode: body.execution_mode,
       localInstallApproved: body.local_install_approved,
     },
@@ -119,6 +124,7 @@ export async function POST(req: Request) {
       repo: `${parsed.owner}/${parsed.repo}`,
       target_role: body.target_role,
       execution_mode: body.execution_mode,
+      ownership_token: body.ownership_token ? "supplied" : "not_supplied",
     },
     ip: req.headers.get("x-forwarded-for") ?? null,
     userAgent: req.headers.get("user-agent") ?? null,
@@ -127,9 +133,11 @@ export async function POST(req: Request) {
   await preCreateEvents(run.id);
   await createSnapshotIfReVerify(run.id);
 
-  // In-process fallback for hackathon/local demos. Set SKILLPROOF_WORKER_MODE=1
-  // and run `npm run worker` to process pending missions out-of-process.
-  if (process.env.SKILLPROOF_WORKER_MODE !== "1") {
+  // Recommended demo/production path: set SKILLPROOF_WORKER_MODE=1 and run
+  // `npm run worker` to process pending missions out-of-process. In-process
+  // remains available only as a local fallback.
+  const useWorker = process.env.SKILLPROOF_WORKER_MODE === "1" || process.env.NODE_ENV === "production";
+  if (!useWorker) {
     runMission({
       runId: run.id,
       owner: parsed.owner,
@@ -142,6 +150,7 @@ export async function POST(req: Request) {
       jobDescription: body.job_description,
       executionMode: body.execution_mode,
       localInstallApproved: body.local_install_approved,
+      ownershipToken: body.ownership_token,
     }).catch(async (err) => {
       console.error("[mission] failed", err);
       await prisma.analysisRun.update({
@@ -154,5 +163,5 @@ export async function POST(req: Request) {
     });
   }
 
-  return NextResponse.json({ run_id: run.id, candidate_id: candidate.id }, { status: 202 });
+  return NextResponse.json({ run_id: run.id, candidate_id: candidate.id, worker_mode: useWorker ? "worker" : "in_process" }, { status: 202 });
 }

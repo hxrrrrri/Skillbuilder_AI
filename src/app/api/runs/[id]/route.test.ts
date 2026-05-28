@@ -146,7 +146,9 @@ describe("/api/runs/[id]", () => {
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.context_pack).toBeUndefined();
-    expect(data.provider_matrix).toBeUndefined();
+    expect(data.provider_matrix.agents.architecture.provider).toBe("anthropic_api");
+    expect(data.validation_contract).toEqual({ assertions: [] });
+    expect(data.repo_intelligence).toEqual({ files: [] });
     expect(data.events[0].output).toBeUndefined();
     expect(data.events[0].key_findings).toContain("Checked architecture");
     expect(data.questions[0].answer).toBe("It wires the app.");

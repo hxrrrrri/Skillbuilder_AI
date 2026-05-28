@@ -1,35 +1,37 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth/session";
+import { prisma } from "@/lib/db";
 import { RoleShell } from "@/components/role-shell";
-import { Card, CardBody } from "@/components/ui/card";
 import { CANDIDATE_NAV as NAV } from "../_nav";
+import { NewVerificationWizard } from "./verification-wizard";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewVerificationPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login?callbackUrl=/candidate/new-verification");
+
+  const candidate = await prisma.candidate.findUnique({
+    where: { userId: user.id },
+    select: { name: true, email: true, githubUsername: true },
+  });
+
   return (
     <RoleShell
-      title="Start a verification"
-      subtitle="Submit a real GitHub repository you own. SkillProof will analyze, audit, and verify your work."
+      title="New verification mission"
+      subtitle="Turn a real GitHub repository into evidence-backed hiring proof. No mock scoring, no silent fallback."
       navLinks={NAV}
       activeHref="/candidate/new-verification"
     >
-      <Card>
-        <CardBody className="space-y-3">
-          <p className="text-sm text-muted">
-            The mission submission flow is hosted on the public landing page. It will pre-fill your
-            candidate name and GitHub username from your account.
-          </p>
-          <a
-            href="/?candidate=me"
-            className="inline-flex items-center justify-center rounded-md border border-accent/70 bg-accent px-4 py-2 text-sm font-semibold text-cream shadow-glow hover:bg-[#ba654f]"
-          >
-            Open submission form →
-          </a>
-        </CardBody>
-      </Card>
+      <NewVerificationWizard
+        user={{
+          id: user.id,
+          name: candidate?.name || user.name || "Candidate",
+          email: candidate?.email || user.email,
+          role: user.role,
+          githubUsername: candidate?.githubUsername ?? "",
+        }}
+      />
     </RoleShell>
   );
 }
