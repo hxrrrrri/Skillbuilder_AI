@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 const Body = z.object({
   run_id: z.string(),
   name: z.string().min(2).max(80).optional(),
-  visibility: z.enum(["public", "unlisted", "private"]).default("public"),
+  visibility: z.enum(["public", "unlisted", "private"]),
   include_terminal_proof: z.boolean().default(false),
 });
 

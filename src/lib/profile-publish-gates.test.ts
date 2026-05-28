@@ -9,6 +9,7 @@ function baseRun(overrides: Partial<Parameters<typeof getPublicProfilePublishBlo
     validationSummary: JSON.stringify({ total: 1, passed: 1 }),
     profileSummary: JSON.stringify({ developer_summary: "Evidence-backed profile." }),
     employerVerifier: JSON.stringify({ hiring_recommendation: "Consider with reservations" }),
+    ownershipStatus: JSON.stringify({ confidence: "verified", verification_method: "repo_token_verified" }),
     scores: [
       {
         skillName: "Testing",
@@ -43,5 +44,18 @@ describe("getPublicProfilePublishBlockers", () => {
   it("blocks missing provider matrix and validation summary", () => {
     const blockers = getPublicProfilePublishBlockers(baseRun({ providerMatrix: null, validationSummary: null }));
     expect(blockers.map((b) => b.code)).toEqual(expect.arrayContaining(["provider_matrix_missing", "validation_summary_missing"]));
+  });
+
+  it("blocks public publishing when public-safe report artifacts are missing", () => {
+    const blockers = getPublicProfilePublishBlockers(baseRun({
+      profileSummary: null,
+      employerVerifier: null,
+      ownershipStatus: null,
+    }));
+    expect(blockers.map((b) => b.code)).toEqual(expect.arrayContaining([
+      "profile_summary_missing",
+      "employer_verifier_missing",
+      "ownership_status_missing",
+    ]));
   });
 });

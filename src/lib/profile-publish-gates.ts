@@ -14,6 +14,7 @@ type RunLike = {
   validationSummary: string | null;
   profileSummary?: string | null;
   employerVerifier?: string | null;
+  ownershipStatus?: string | null;
   scores: ScoreLike[];
 };
 
@@ -72,6 +73,15 @@ export function getPublicProfilePublishBlockers(run: RunLike): PublishBlocker[] 
   }
   if (!hasObject(run.validationSummary)) {
     blockers.push({ code: "validation_summary_missing", message: "Validation summary must be stored before publishing." });
+  }
+  if (!hasObject(run.profileSummary)) {
+    blockers.push({ code: "profile_summary_missing", message: "Employer-safe profile summary must be generated before publishing." });
+  }
+  if (!hasObject(run.employerVerifier)) {
+    blockers.push({ code: "employer_verifier_missing", message: "Employer verifier summary must be generated before publishing." });
+  }
+  if (!hasObject(run.ownershipStatus)) {
+    blockers.push({ code: "ownership_status_missing", message: "Ownership status must be recorded before publishing." });
   }
 
   const publicPayload = [

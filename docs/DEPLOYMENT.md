@@ -21,10 +21,20 @@ Recommended demo/production mode:
 
 ```bash
 SKILLPROOF_WORKER_MODE=1 npm run dev
-npm run worker
+SKILLPROOF_WORKER_MODE=1 npm run worker
 ```
 
 With `SKILLPROOF_WORKER_MODE=1`, `/api/analyze` queues pending runs and the worker claims them out-of-process. Without it in local development, the API uses an in-process fallback and the run page shows a visible banner.
+
+PowerShell:
+
+```powershell
+# terminal 1
+$env:SKILLPROOF_WORKER_MODE="1"; npm run dev
+
+# terminal 2
+$env:SKILLPROOF_WORKER_MODE="1"; npm run worker
+```
 
 ## Provider Setup
 
@@ -46,6 +56,15 @@ Environment variables commonly used:
 - `SKILLPROOF_WORKER_MODE=1`
 - `SKILLPROOF_TERMINAL_ENABLED=1`
 - `SKILLPROOF_PUBLIC_REPORTS_ENABLED=0`
+- `SKILLPROOF_OWNERSHIP_SECRET`
+
+## Ownership Challenge Setup
+
+Set `NEXTAUTH_SECRET` in all environments. Optionally set `SKILLPROOF_OWNERSHIP_SECRET` to rotate ownership-token signing separately. Ownership challenge tokens expire, are stored by hash, and are linked to an `AnalysisRun` when `/api/analyze` starts.
+
+## Sandbox Guidance
+
+Current local demo execution uses the `local_process` sandbox abstraction: run-scoped workspace, allowlist, timeout, truncation, secret redaction, and audit logs. Production should move the same interface behind Docker or isolated workers before enabling terminal execution. Do not mount SSH directories, private keys, global credential stores, or broad network access into the proof workspace.
 
 ## Production Warnings
 

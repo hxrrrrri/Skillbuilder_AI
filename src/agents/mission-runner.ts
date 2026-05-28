@@ -37,8 +37,9 @@ function buildOwnershipStatus(opts: {
   repoOwner: string;
   githubUsername: string | null;
   verificationToken?: string | null;
+  ownershipChallengeId?: string | null;
 }): OwnershipStatus {
-  const { raw, repoOwner, githubUsername, verificationToken } = opts;
+  const { raw, repoOwner, githubUsername, verificationToken, ownershipChallengeId } = opts;
   const notes: string[] = [];
   let confidence: OwnershipStatus["confidence"] = "unverified";
   let verification_method: OwnershipStatus["verification_method"] = "unverified";
@@ -46,14 +47,14 @@ function buildOwnershipStatus(opts: {
     confidence = "verified";
     verification_method = "owner_match";
     notes.push(`gh authenticated user matches repo owner '${repoOwner}'.`);
-  } else if (raw.repo_token_verified) {
-    confidence = "verified";
-    verification_method = "repo_token_verified";
-    notes.push(`Repo contains SkillProof ownership token for '${githubUsername}'.`);
   } else if (raw.collaborator_verified) {
     confidence = "verified";
     verification_method = "collaborator_verified";
     notes.push(`gh authenticated user is a collaborator on '${repoOwner}'.`);
+  } else if (raw.repo_token_verified) {
+    confidence = "verified";
+    verification_method = "repo_token_verified";
+    notes.push(`Repo contains the server-issued SkillProof ownership challenge token.`);
   } else if (githubUsername) {
     confidence = "self_declared";
     verification_method = "self_declared";
@@ -67,7 +68,8 @@ function buildOwnershipStatus(opts: {
     collaborator_verified: !!raw.collaborator_verified,
     self_declared: !raw.owner_match && !raw.repo_token_verified && !raw.collaborator_verified && !!githubUsername,
     verification_method,
-    verification_token: verificationToken ?? null,
+    verification_token: verificationToken ? "server_issued_challenge_token_redacted" : null,
+    ownership_challenge_id: ownershipChallengeId ?? null,
     gh_user: raw.gh_user ?? null,
     github_username: githubUsername,
     repo_owner: repoOwner,
@@ -192,6 +194,8 @@ export async function runMission(opts: {
   executionMode?: ExecutionMode;
   localInstallApproved?: boolean;
   ownershipToken?: string;
+  ownershipTokenHash?: string | null;
+  ownershipChallengeId?: string | null;
 }) {
   const mode: ExecutionMode = opts.executionMode ?? "api";
   const state: MissionState = {
@@ -238,6 +242,7 @@ export async function runMission(opts: {
         repoOwner: opts.owner,
         githubUsername: opts.githubUsername ?? null,
         ownershipToken,
+        ownershipTokenHash: opts.ownershipTokenHash ?? null,
         policy: {
           allowInstall: true,
           installRequiresApproval: true,
@@ -257,14 +262,22 @@ export async function runMission(opts: {
       repoOwner: opts.owner,
       githubUsername: opts.githubUsername ?? null,
       verificationToken: ownershipToken,
+      ownershipChallengeId: opts.ownershipChallengeId ?? null,
     });
     state.ownership_status = ownership;
+    if (proof.ownership.repo_token_verified && opts.ownershipChallengeId) {
+      await prisma.ownershipChallenge.updateMany({
+        where: { id: opts.ownershipChallengeId, runId: opts.runId, consumedAt: null },
+        data: { consumedAt: new Date(), status: "consumed" },
+      }).catch(() => {});
+    }
   } else {
     state.ownership_status = buildOwnershipStatus({
-      raw: { owner_match: false, repo_token_verified: false, self_declared: !!opts.githubUsername },
+      raw: { owner_match: false, repo_token_verified: false, collaborator_verified: false, self_declared: !!opts.githubUsername },
       repoOwner: opts.owner,
       githubUsername: opts.githubUsername ?? null,
       verificationToken: ownershipToken,
+      ownershipChallengeId: opts.ownershipChallengeId ?? null,
     });
   }
 

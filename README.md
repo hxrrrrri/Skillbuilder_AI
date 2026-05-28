@@ -51,6 +51,7 @@ Runtime controls:
 - `SKILLPROOF_WORKER_MODE=1` makes API requests enqueue pending runs for `npm run worker`.
 - `SKILLPROOF_TERMINAL_ENABLED=1` is required for production terminal execution.
 - `SKILLPROOF_PUBLIC_REPORTS_ENABLED=0` disables public profile report downloads.
+- `SKILLPROOF_OWNERSHIP_SECRET` optionally overrides the HMAC secret for server-issued ownership challenge tokens. If omitted, `NEXTAUTH_SECRET` is used.
 
 Model overrides:
 
@@ -152,6 +153,17 @@ Controls:
 
 Saving terminal evidence marks an existing command run as evidence. It does not rerun the command.
 
+## Ownership Verification
+
+The candidate wizard calls `/api/ownership/challenge` to issue a signed token before analysis. The token is tied to:
+
+- signed-in user ID
+- GitHub repo owner/name
+- ownership challenge ID
+- expiration
+
+Only the token hash is stored. Candidates can place the token in `.skillproof-verify.json` or README. The local proof runner and `/api/ownership/verify` scan for server-issued tokens and compare hashes. If no owner, collaborator, or token proof is found, ownership remains `self_declared` and public trust badges stay capped.
+
 ## Public Profiles And Reports
 
 Public profiles and employer reports use public/shared profile data only. They do not expose raw context packs, raw prompts, raw model outputs, admin traces, private terminal output, private interview answers, secrets, or unpublished/private data.
@@ -212,14 +224,54 @@ Recommended hackathon demo process:
 
 ```bash
 SKILLPROOF_WORKER_MODE=1 npm run dev
-npm run worker
+SKILLPROOF_WORKER_MODE=1 npm run worker
 ```
 
 PowerShell:
 
 ```powershell
+# terminal 1
 $env:SKILLPROOF_WORKER_MODE="1"; npm run dev
-npm run worker
+
+# terminal 2
+$env:SKILLPROOF_WORKER_MODE="1"; npm run worker
+```
+
+PowerShell setup/check sequence:
+
+```powershell
+npm install
+Copy-Item .env.example .env
+npm run db:generate
+npm run db:push
+npm run db:seed-users
+npm run db:seed-registry -- --force
+npm run db:seed-prompts
+npm run typecheck
+npm run test
+npm run build
+```
+
+Worker demo mode, Bash:
+
+```bash
+SKILLPROOF_WORKER_MODE=1 npm run dev
+SKILLPROOF_WORKER_MODE=1 npm run worker
+```
+
+Worker demo mode, PowerShell:
+
+```powershell
+$env:SKILLPROOF_WORKER_MODE="1"; npm run dev
+$env:SKILLPROOF_WORKER_MODE="1"; npm run worker
+```
+
+Run the dev server and worker in separate terminals.
+
+Plain local fallback:
+
+```bash
+npm run dev
 ```
 
 If `SKILLPROOF_WORKER_MODE` is not set in local development, runs use the visible in-process fallback banner on the run detail page.

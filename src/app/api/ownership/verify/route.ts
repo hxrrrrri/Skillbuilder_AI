@@ -7,6 +7,7 @@ import type { OwnershipStatus } from "@/agents/types";
 import { getCurrentUser } from "@/lib/auth/session";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { contentHasOwnershipTokenHash } from "@/lib/ownership-challenge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -53,14 +54,28 @@ export async function POST(req: Request) {
 
   const username = run.candidate?.githubUsername ?? null;
   const previous = safeJsonParse<OwnershipStatus | null>(run.ownershipStatus, null);
-  const token = previous?.verification_token ?? (username ? `skillproof:${username}:${run.id}:${run.id.slice(-8)}` : null);
+  const challenge = await prisma.ownershipChallenge.findFirst({
+    where: { runId: run.id, consumedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  const token = previous?.verification_token && !previous.verification_token.includes("redacted")
+    ? previous.verification_token
+    : username
+      ? `skillproof:${username}:${run.id}:${run.id.slice(-8)}`
+      : null;
   let repoTokenVerified = false;
   const checkedFiles = ["README.md", "README", "readme.md", ".skillproof-verify.json"];
 
-  if (token) {
+  if (token || challenge) {
     for (const file of checkedFiles) {
       const content = await getFile(run.repository.owner, run.repository.repoName, file).catch(() => null);
-      if (content && content.toLowerCase().includes(token.toLowerCase())) {
+      if (
+        content &&
+        (
+          (challenge?.tokenHash && contentHasOwnershipTokenHash(content, challenge.tokenHash)) ||
+          (token ? content.toLowerCase().includes(token.toLowerCase()) : false)
+        )
+      ) {
         repoTokenVerified = true;
         break;
       }
@@ -75,7 +90,8 @@ export async function POST(req: Request) {
     collaborator_verified: previous?.collaborator_verified ?? false,
     self_declared: !verified && !!username,
     verification_method: ownerMatch ? "owner_match" : repoTokenVerified ? "repo_token_verified" : username ? "self_declared" : "unverified",
-    verification_token: token,
+    verification_token: challenge ? "server_issued_challenge_token_redacted" : token,
+    ownership_challenge_id: challenge?.id ?? previous?.ownership_challenge_id ?? null,
     gh_user: previous?.gh_user ?? null,
     github_username: username,
     repo_owner: run.repository.owner,
@@ -91,6 +107,13 @@ export async function POST(req: Request) {
     where: { id: run.id },
     data: { ownershipStatus: JSON.stringify(status) },
   });
+
+  if (repoTokenVerified && challenge) {
+    await prisma.ownershipChallenge.update({
+      where: { id: challenge.id },
+      data: { consumedAt: new Date(), status: "consumed" },
+    }).catch(() => {});
+  }
 
   return NextResponse.json({ ownership_status: status });
 }

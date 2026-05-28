@@ -21,6 +21,11 @@ async function claimNextRun() {
 async function processOne() {
   const run = await claimNextRun();
   if (!run) return false;
+  const ownershipChallenge = await prisma.ownershipChallenge.findFirst({
+    where: { runId: run.id },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, tokenHash: true },
+  });
   try {
     await runMission({
       runId: run.id,
@@ -34,6 +39,8 @@ async function processOne() {
       jobDescription: run.jobDescription ?? undefined,
       executionMode: run.executionMode as any,
       localInstallApproved: run.localInstallApproved,
+      ownershipTokenHash: ownershipChallenge?.tokenHash ?? null,
+      ownershipChallengeId: ownershipChallenge?.id ?? null,
     });
   } catch (err) {
     await prisma.analysisRun.update({

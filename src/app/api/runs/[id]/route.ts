@@ -479,20 +479,33 @@ function buildTrustLabels(input: {
   const labels: Array<{ label: string; tone: "default" | "good" | "warn" | "bad" | "accent" }> = [];
   const evidenceSources = new Set(input.scores.flatMap((s) => s.evidence.map((e: any) => e?.source).filter(Boolean)));
   const scoreSources = new Set(input.scores.map((s) => s.source));
-  if (input.terminalEvidence.some((t) => t.exitCode === 0)) labels.push({ label: "Terminal verified", tone: "good" });
+  if (input.terminalEvidence.some((t) => t.exitCode === 0)) labels.push({ label: "Terminal Proof Included", tone: "good" });
   if (evidenceSources.has("github_api")) labels.push({ label: "GitHub API verified", tone: "good" });
   if (evidenceSources.has("local_clone")) labels.push({ label: "Local clone verified", tone: "good" });
   if (scoreSources.has("llm")) labels.push({ label: "LLM judged", tone: "accent" });
   if (input.validationSummary || input.scores.some((s) => s.evidence.some((e: any) => e?.validator_note))) {
     labels.push({ label: "Validator audited", tone: "good" });
   }
+  if (input.providerMatrix && input.validationSummary && input.scores.some((s) => s.score != null && s.evidence.length > 0)) {
+    labels.push({ label: "Evidence-Backed Profile", tone: "good" });
+  }
   if (scoreSources.has("heuristic")) labels.push({ label: "Unverified legacy source", tone: "bad" });
   if (scoreSources.has("mock") || input.executionMode === "mock") labels.push({ label: "Unverified legacy source", tone: "bad" });
-  if (input.verificationLevel === "repo_interview_verified") labels.push({ label: "Interview verified", tone: "good" });
-  if (input.aiCollaboration) labels.push({ label: "Challenge verified", tone: "good" });
-  if (input.ownershipStatus?.confidence === "verified") labels.push({ label: "Ownership verified", tone: "good" });
+  if (input.verificationLevel === "repo_interview_verified") labels.push({ label: "Repo + Interview Verified Profile", tone: "good" });
+  if (input.aiCollaboration) labels.push({ label: "Challenge Verified", tone: "good" });
+  if (input.ownershipStatus?.confidence === "verified") labels.push({ label: "Owner Verified Profile", tone: "good" });
   else if (input.ownershipStatus?.confidence === "self_declared") labels.push({ label: "Self-declared", tone: "warn" });
   else labels.push({ label: "Ownership unverified", tone: "warn" });
+  const fullyVerified =
+    input.ownershipStatus?.confidence === "verified" &&
+    input.verificationLevel === "repo_interview_verified" &&
+    input.providerMatrix &&
+    input.validationSummary &&
+    !scoreSources.has("mock") &&
+    !scoreSources.has("heuristic") &&
+    input.scores.some((s) => s.score != null) &&
+    input.scores.filter((s) => s.score != null).every((s) => s.evidence.length > 0);
+  if (fullyVerified) labels.unshift({ label: "Fully Verified", tone: "good" });
   if (input.scores.some((s) => s.score == null)) labels.push({ label: "Not measured", tone: "default" });
   const agentEntries = Object.values(input.providerMatrix?.agents ?? {}) as any[];
   if (agentEntries.some((a) => a?.actualProvider && a.actualProvider !== a.provider)) {

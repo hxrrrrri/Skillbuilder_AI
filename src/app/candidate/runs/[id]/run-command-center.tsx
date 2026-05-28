@@ -108,6 +108,7 @@ const STAGES: Array<{ key: string; label: string; agent?: string }> = [
   { key: "quality", label: "code quality review", agent: "code-quality" },
   { key: "testing", label: "testing review", agent: "testing" },
   { key: "security", label: "security review", agent: "security" },
+  { key: "ai-collaboration", label: "AI collaboration review", agent: "ai-collaboration" },
   { key: "git", label: "git evidence review", agent: "git-evidence" },
   { key: "docs", label: "documentation review", agent: "documentation" },
   { key: "authenticity", label: "authenticity review", agent: "authenticity" },
@@ -233,6 +234,13 @@ export function RunCommandCenter({ runId }: { runId: string }) {
               {run?.terminal_summary?.passed ? <Badge tone="good">Terminal proof included</Badge> : <Badge>Terminal not measured</Badge>}
               {run?.mock_mode && <Badge tone="bad">Unverified score source</Badge>}
             </div>
+            {run?.trust_labels?.length ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {run.trust_labels.map((label) => (
+                  <Badge key={label.label} tone={label.tone}>{label.label}</Badge>
+                ))}
+              </div>
+            ) : null}
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <Metric label="Overall score" value={run?.overall_score == null ? "not measured" : `${run.overall_score}/100`} detail={run?.role_fit ?? "Waiting for validator summary."} />
               <Metric label="Agent progress" value={`${completedAgentCount}/${totalAgentCount}`} detail={`${progressPercent}% based on completed agent events`} />

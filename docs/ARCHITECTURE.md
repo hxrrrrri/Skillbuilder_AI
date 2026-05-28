@@ -11,10 +11,11 @@ The orchestrator runs before repo analysis and creates a validation contract: di
 Default demo/production flow is out-of-process:
 
 1. Candidate starts `/candidate/new-verification`.
-2. `/api/analyze` validates repository URL, role input, ownership declarations, and provider readiness.
-3. A pending `AnalysisRun` and pending `AgentEvent` rows are created.
-4. `npm run worker` claims one pending run at a time and executes the mission.
-5. The candidate run page polls `/api/runs/[id]` and progressively renders contract, repo intelligence, timeline, evidence, skill graph, terminal proof, interview questions, and report preview.
+2. `/api/ownership/challenge` issues and persists a signed repo ownership challenge token.
+3. `/api/analyze` validates repository URL, role input, ownership challenge linkage, and provider readiness.
+4. A pending `AnalysisRun` and pending `AgentEvent` rows are created.
+5. `npm run worker` claims one pending run at a time and executes the mission.
+6. The candidate run page polls `/api/runs/[id]` and progressively renders contract, repo intelligence, timeline, evidence, skill graph, terminal proof, interview questions, and report preview.
 
 Agent order:
 
@@ -35,12 +36,17 @@ Evidence is stored across:
 - `SkillScore`: measured or not-measured skill score, source, confidence, validator notes, evidence JSON.
 - `EvidenceFinding`: candidate/employer/public/admin-safe finding records.
 - `TerminalCommandRun`: command, args, redacted summaries, output hash, duration, run scope.
+- `OwnershipChallenge`: server-issued ownership challenge hash, repo/user binding, expiration, run linkage, and consumption timestamp.
 
 Every measured public score must cite evidence. Missing evidence becomes `not_measured` or blocks public publishing.
 
 ## Terminal Proof Safety
 
 Terminal proof uses a run-scoped workspace under `.skillproof/runs/<run_id>`. Commands are allowlisted, destructive patterns and env dumps are blocked, installs require approval, outputs are redacted/truncated/hashed, and saving evidence marks an existing command run instead of rerunning it.
+
+## Ownership Proof
+
+Ownership proof prefers authenticated GitHub signals, then server-issued repo token proof, then self-declaration. Challenge tokens are signed, expire, and are stored only by hash. Local proof and remote verification scan `.skillproof-verify.json` and README for the token and compare hashes before marking ownership verified.
 
 ## Trust Surfaces
 

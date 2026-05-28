@@ -74,6 +74,23 @@ type Readiness = {
 
 type ExecutionMode = "api" | "cli" | "hybrid" | "local";
 
+type OwnershipChallenge = {
+  challenge_id: string;
+  token: string;
+  expires_at: string;
+  placement: {
+    file: string;
+    json: {
+      provider: string;
+      github_username: string;
+      repo: string;
+      ownership_challenge_id: string;
+      token: string;
+    };
+    readme_line: string;
+  };
+};
+
 const STEPS = [
   "GitHub identity",
   "Repository",
@@ -156,7 +173,9 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
   const [executionMode, setExecutionMode] = useState<ExecutionMode>("hybrid");
   const [installApproved, setInstallApproved] = useState(false);
   const [includeToken, setIncludeToken] = useState(true);
-  const [tokenSeed] = useState(() => Math.random().toString(36).slice(2, 10));
+  const [ownershipChallenge, setOwnershipChallenge] = useState<OwnershipChallenge | null>(null);
+  const [challengeLoading, setChallengeLoading] = useState(false);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
   const [preview, setPreview] = useState<RepoPreview | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -167,15 +186,14 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
 
   const parsedRepo = useMemo(() => parseGithubUrl(repoUrl), [repoUrl]);
   const ownershipToken = useMemo(() => {
-    if (!githubUsername.trim() || !parsedRepo) return "";
-    return `skillproof:${githubUsername.trim()}:${parsedRepo.owner}/${parsedRepo.repo}:${tokenSeed}`;
-  }, [githubUsername, parsedRepo, tokenSeed]);
+    return ownershipChallenge?.token ?? "";
+  }, [ownershipChallenge]);
 
   const strongestOwnership = useMemo(() => {
     if (githubUsername && parsedRepo && githubUsername.toLowerCase() === parsedRepo.owner.toLowerCase()) {
       return "verified owner candidate";
     }
-    if (includeToken && ownershipToken) return "repo token available";
+    if (includeToken && ownershipToken) return "server-issued repo token available";
     if (githubUsername) return "self-declared until token or OAuth proof is found";
     return "unverified";
   }, [githubUsername, includeToken, ownershipToken, parsedRepo]);
@@ -195,6 +213,17 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
     void fetchReadiness(executionMode);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [executionMode]);
+
+  useEffect(() => {
+    setOwnershipChallenge(null);
+    setChallengeError(null);
+    if (!includeToken || !githubUsername.trim() || !parsedRepo) return;
+    const handle = window.setTimeout(() => {
+      void fetchOwnershipChallenge();
+    }, 650);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [includeToken, githubUsername, repoUrl]);
 
   async function fetchPreview() {
     if (!parseGithubUrl(repoUrl)) return;
@@ -230,6 +259,28 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
     }
   }
 
+  async function fetchOwnershipChallenge() {
+    if (!parseGithubUrl(repoUrl) || !githubUsername.trim()) return;
+    setChallengeLoading(true);
+    setChallengeError(null);
+    try {
+      const res = await fetch("/api/ownership/challenge", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ repo_url: repoUrl, github_username: githubUsername.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setOwnershipChallenge(null);
+        setChallengeError(data.message || data.error || "ownership_challenge_failed");
+      } else {
+        setOwnershipChallenge(data);
+      }
+    } finally {
+      setChallengeLoading(false);
+    }
+  }
+
   async function startMission() {
     setStartError(null);
     if (!parsedRepo) {
@@ -240,6 +291,11 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
     if (!readiness?.ok) {
       setStartError("provider_not_ready: fix the provider blockers before starting.");
       setStep(4);
+      return;
+    }
+    if (includeToken && !ownershipChallenge) {
+      setStartError("ownership_challenge_unavailable: generate a server-issued challenge token or disable token verification for a self-declared run.");
+      setStep(1);
       return;
     }
     setStarting(true);
@@ -257,6 +313,7 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
           execution_mode: executionMode,
           local_install_approved: installApproved,
           ownership_token: includeToken && ownershipToken ? ownershipToken : undefined,
+          ownership_challenge_id: includeToken && ownershipChallenge ? ownershipChallenge.challenge_id : undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -342,25 +399,43 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
               </div>
               <div className="rounded-md border border-accent/30 bg-accent/10 p-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={ownershipToken ? "good" : "warn"}>{ownershipToken ? "token generated" : "token pending repo"}</Badge>
+                  <Badge tone={ownershipToken ? "good" : challengeError ? "bad" : "warn"}>
+                    {challengeLoading ? "issuing token" : ownershipToken ? "server token issued" : challengeError ? "token issue failed" : "token pending repo"}
+                  </Badge>
                   <label className="flex items-center gap-2 text-sm text-ink">
                     <input type="checkbox" checked={includeToken} onChange={(e) => setIncludeToken(e.target.checked)} />
                     Use repo token verification when OAuth/gh proof is unavailable
                   </label>
+                  <Button type="button" variant="outline" size="sm" onClick={fetchOwnershipChallenge} disabled={!parsedRepo || !githubUsername.trim() || challengeLoading || !includeToken}>
+                    Issue new token
+                  </Button>
                 </div>
                 <p className="mt-3 text-sm text-muted">
-                  Add this token to either `.skillproof-verify.json` or your README before terminal proof runs. If you skip it and no authenticated owner/collaborator signal exists, ownership remains self-declared.
+                  SkillProof issues and stores a signed challenge token before analysis. Add it to either `.skillproof-verify.json` or your README before terminal proof runs. If you skip it and no authenticated owner/collaborator signal exists, ownership remains self-declared.
                 </p>
+                {ownershipChallenge?.expires_at && (
+                  <p className="mt-2 font-mono text-xs text-muted">
+                    challenge_id={ownershipChallenge.challenge_id} expires={formatDate(ownershipChallenge.expires_at)}
+                  </p>
+                )}
+                {challengeError && <p className="mt-2 text-xs text-bad">{challengeError}</p>}
                 <pre className="mt-3 overflow-auto rounded-md border border-border bg-bg/70 p-3 font-mono text-xs text-ink">
-                  {ownershipToken || "Enter GitHub username and repository URL to generate the exact token."}
+                  {ownershipToken || "Enter GitHub username and repository URL, then issue a server challenge token."}
                 </pre>
                 <pre className="mt-3 overflow-auto rounded-md border border-border bg-bg/70 p-3 font-mono text-xs text-muted">
-{`{
+{ownershipChallenge ? JSON.stringify(ownershipChallenge.placement.json, null, 2) : `{
   "provider": "skillproof.ai",
   "github_username": "${githubUsername || "your-github-username"}",
-  "token": "${ownershipToken || "generated-after-repo-url"}"
+  "repo": "${parsedRepo ? `${parsedRepo.owner}/${parsedRepo.repo}` : "owner/repo"}",
+  "ownership_challenge_id": "server-issued",
+  "token": "server-issued-after-repo-url"
 }`}
                 </pre>
+                {ownershipChallenge?.placement.readme_line && (
+                  <pre className="mt-3 overflow-auto rounded-md border border-border bg-bg/70 p-3 font-mono text-xs text-muted">
+                    {ownershipChallenge.placement.readme_line}
+                  </pre>
+                )}
               </div>
             </CardBody>
           </Card>
@@ -552,7 +627,7 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
                 <InfoBox label="Repository" value={parsedRepo ? `${parsedRepo.owner}/${parsedRepo.repo}` : "invalid"} detail={repoUrl || "not supplied"} />
                 <InfoBox label="Role" value={targetRole} detail={candidateLevel} />
                 <InfoBox label="Execution mode" value={MODE_LABELS[executionMode].label} detail={readiness?.ok ? "provider checks passed" : "provider checks blocked"} />
-                <InfoBox label="Ownership" value={strongestOwnership} detail={ownershipToken ? "repo token included in mission request" : "no token"} />
+                <InfoBox label="Ownership" value={strongestOwnership} detail={ownershipChallenge ? `challenge ${ownershipChallenge.challenge_id} linked before run` : "no server token"} />
               </div>
               {startError && (
                 <pre className="whitespace-pre-wrap rounded-md border border-bad/30 bg-bad/10 p-3 text-xs text-bad">{startError}</pre>

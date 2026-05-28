@@ -28,6 +28,8 @@ Blocked public sources:
 - `self-declared`: user supplied a GitHub username, but no stronger signal exists.
 - `unverified`: no usable ownership signal.
 
+Repo token proof uses `/api/ownership/challenge`. The server signs a token tied to user ID, repo owner/name, challenge ID, and expiration. The database stores only the token hash. Verification scans README and `.skillproof-verify.json`, extracts SkillProof challenge tokens, hashes them, and compares against the stored challenge.
+
 Self-declared ownership caps trust badges and employer recommendations.
 
 ## Public Publishing Gates
@@ -40,9 +42,23 @@ Public and unlisted profiles require:
 - every measured skill has evidence
 - provider matrix stored
 - validation summary stored
+- profile summary stored
+- employer verifier stored
+- ownership status stored
 - public report redaction passes
 - candidate-selected visibility
 - explicit control over terminal proof inclusion
+
+Trust tiers visible on candidate and public profile surfaces:
+
+- Published Profile
+- Evidence-Backed Profile
+- Owner Verified Profile
+- Repo + Interview Verified Profile
+- Terminal Proof Included
+- Challenge Verified
+
+The fully verified badge additionally requires verified ownership, completed repo analysis, validator completion, evaluated interview evidence, no unsafe score source, no high-risk security signal, and evidence-backed measured scores.
 
 If gates fail, only a private draft profile is allowed.
 

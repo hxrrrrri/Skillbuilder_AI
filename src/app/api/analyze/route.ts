@@ -8,6 +8,7 @@ import { isAdminRole } from "@/lib/auth/roles";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { createSnapshotIfReVerify } from "@/lib/reverification";
 import { checkProviderReadinessForMode } from "@/lib/providers/provider-router";
+import { verifyOwnershipChallengeToken } from "@/lib/ownership-challenge";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ const Body = z.object({
   job_description: z.string().max(4000).optional(),
   execution_mode: z.enum(["api", "cli", "hybrid", "local"]).default("api"),
   local_install_approved: z.boolean().default(false),
-  ownership_token: z.string().min(8).max(240).optional(),
+  ownership_token: z.string().min(8).max(512).optional(),
+  ownership_challenge_id: z.string().optional(),
 });
 
 export async function POST(req: Request) {
@@ -59,6 +61,56 @@ export async function POST(req: Request) {
       },
       { status: 409 },
     );
+  }
+
+  let ownershipChallenge: {
+    id: string;
+    userId: string;
+    repoOwner: string;
+    repoName: string;
+    tokenHash: string;
+    expiresAt: Date;
+    consumedAt: Date | null;
+  } | null = null;
+  if (body.ownership_challenge_id || body.ownership_token) {
+    if (!body.ownership_challenge_id || !body.ownership_token) {
+      return NextResponse.json(
+        { error: "invalid_ownership_challenge", message: "Ownership challenge ID and token must be submitted together." },
+        { status: 400 },
+      );
+    }
+    const verified = verifyOwnershipChallengeToken(body.ownership_token);
+    if (!verified.ok) {
+      return NextResponse.json({ error: "invalid_ownership_challenge", reason: verified.reason }, { status: 400 });
+    }
+    if (
+      verified.payload.challengeId !== body.ownership_challenge_id ||
+      verified.payload.userId !== sessionUser.id ||
+      verified.payload.owner.toLowerCase() !== parsed.owner.toLowerCase() ||
+      verified.payload.repo.toLowerCase() !== parsed.repo.toLowerCase()
+    ) {
+      return NextResponse.json({ error: "invalid_ownership_challenge", reason: "challenge_payload_mismatch" }, { status: 400 });
+    }
+    ownershipChallenge = await prisma.ownershipChallenge.findUnique({
+      where: { id: body.ownership_challenge_id },
+      select: { id: true, userId: true, repoOwner: true, repoName: true, tokenHash: true, expiresAt: true, consumedAt: true },
+    });
+    if (
+      !ownershipChallenge ||
+      ownershipChallenge.userId !== sessionUser.id ||
+      ownershipChallenge.repoOwner.toLowerCase() !== parsed.owner.toLowerCase() ||
+      ownershipChallenge.repoName.toLowerCase() !== parsed.repo.toLowerCase() ||
+      ownershipChallenge.tokenHash !== verified.tokenHash
+    ) {
+      return NextResponse.json({ error: "invalid_ownership_challenge", reason: "challenge_not_found" }, { status: 400 });
+    }
+    if (ownershipChallenge.expiresAt.getTime() <= Date.now()) {
+      await prisma.ownershipChallenge.update({ where: { id: ownershipChallenge.id }, data: { status: "expired" } }).catch(() => {});
+      return NextResponse.json({ error: "invalid_ownership_challenge", reason: "expired" }, { status: 400 });
+    }
+    if (ownershipChallenge.consumedAt) {
+      return NextResponse.json({ error: "invalid_ownership_challenge", reason: "already_consumed" }, { status: 400 });
+    }
   }
 
   // If the signed-in user is a candidate, reuse their Candidate row; otherwise create anonymous.
@@ -114,6 +166,13 @@ export async function POST(req: Request) {
     },
   });
 
+  if (ownershipChallenge) {
+    await prisma.ownershipChallenge.update({
+      where: { id: ownershipChallenge.id },
+      data: { runId: run.id, status: "linked" },
+    });
+  }
+
   await writeAuditLog({
     action: "run.started",
     actorUserId: sessionUser.id,
@@ -125,6 +184,7 @@ export async function POST(req: Request) {
       target_role: body.target_role,
       execution_mode: body.execution_mode,
       ownership_token: body.ownership_token ? "supplied" : "not_supplied",
+      ownership_challenge_id: ownershipChallenge?.id ?? null,
     },
     ip: req.headers.get("x-forwarded-for") ?? null,
     userAgent: req.headers.get("user-agent") ?? null,
@@ -151,6 +211,8 @@ export async function POST(req: Request) {
       executionMode: body.execution_mode,
       localInstallApproved: body.local_install_approved,
       ownershipToken: body.ownership_token,
+      ownershipTokenHash: ownershipChallenge?.tokenHash ?? null,
+      ownershipChallengeId: ownershipChallenge?.id ?? null,
     }).catch(async (err) => {
       console.error("[mission] failed", err);
       await prisma.analysisRun.update({

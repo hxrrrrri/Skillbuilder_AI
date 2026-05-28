@@ -22,6 +22,25 @@ Configure at least one real provider:
 
 Open `/admin/providers/health` and run provider tests until required agents have passing JSON contract results.
 
+Seeded accounts:
+
+- `candidate@skillproof.dev`
+- `employer@skillproof.dev`
+- `college@skillproof.dev`
+- `admin@skillproof.dev`
+
+Password for each seeded account: `demo1234`.
+
+Recommended demo runtime:
+
+```powershell
+# terminal 1
+$env:SKILLPROOF_WORKER_MODE="1"; npm run dev
+
+# terminal 2
+$env:SKILLPROOF_WORKER_MODE="1"; npm run worker
+```
+
 ## 5-Minute Demo Flow
 
 0:00 - Admin provider proof:
@@ -34,28 +53,29 @@ Open `/admin/providers/health` and run provider tests until required agents have
 
 4. Sign in as `candidate@skillproof.dev`.
 5. Open `/candidate/new-verification`.
-6. Enter GitHub username, paste a real repo URL, show metadata preview and ownership token.
-7. Select role, level, `Hybrid` or configured mode, and show provider readiness blockers/pass state.
-8. Start the mission.
+6. Enter GitHub username, paste a real repo URL, and show the server-issued ownership challenge token.
+7. Put the token in `.skillproof-verify.json` or README when demonstrating owner-level proof. Otherwise call out that ownership remains self-declared and low trust.
+8. Select role, level, `Hybrid` or configured mode, and show provider readiness blockers/pass state.
+9. Start the mission.
 
 2:00 - Live proof command center:
 
-9. Open the run detail page.
-10. Show animated mission stages and section-level skeletons.
-11. As data arrives, show validation contract, repo intelligence, agent timeline, evidence locker, skill graph, terminal proof state, interview questions, and report preview.
+10. Open the run detail page.
+11. Show animated mission stages and section-level skeletons.
+12. As data arrives, show validation contract, repo intelligence, agent timeline, evidence locker, skill graph, terminal proof state, interview questions, and report preview.
 
 3:15 - Upgrade evidence:
 
-12. Complete `/candidate/interview/[runId]` and show verification level becomes `repo_interview_verified`.
-13. Complete `/candidate/ai-challenge/[runId]`.
-14. If terminal proof is enabled, run an allowlisted command from `/candidate/runs/[id]/terminal` and save the existing output as evidence.
+13. Complete `/candidate/interview/[runId]` and show verification level becomes `repo_interview_verified`.
+14. Complete `/candidate/ai-challenge/[runId]`.
+15. If terminal proof is enabled, run an allowlisted command from `/candidate/runs/[id]/terminal` and save the existing output as evidence.
 
 4:15 - Hiring surfaces:
 
-15. Publish the profile only after gates pass; choose whether terminal proof is included.
-16. Sign in as `employer@skillproof.dev` and show search, filters, detail, compare, report export, and interview kit.
-17. Sign in as `college@skillproof.dev` and show cohorts, skill gaps, placement readiness, reports, and employer-share links.
-18. Sign in as `admin@skillproof.dev` and show run trace, evidence, terminal commands, provider matrix, prompts, rubrics, and audit logs.
+16. Publish the profile only after gates pass; choose whether terminal proof is included.
+17. Sign in as `employer@skillproof.dev` and show search, filters, detail, compare, report export, and interview kit.
+18. Sign in as `college@skillproof.dev` and show cohorts, skill gaps, placement readiness, reports, and employer-share links.
+19. Sign in as `admin@skillproof.dev` and show run trace, evidence, terminal commands, provider matrix, prompts, rubrics, and audit logs.
 
 ## Failure Demo
 

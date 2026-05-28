@@ -89,6 +89,14 @@ export default async function PublicProfile({ params }: { params: { slug: string
     }
     return { total: terminalEvidence.length, passed, failed, byUsedFor };
   })();
+  const measuredScores = scores.filter((s) => s.score != null);
+  const unsafeScoreSource = scores.some((s) => s.source === "mock" || s.source === "heuristic");
+  const evidenceBacked = measuredScores.length > 0 && measuredScores.every((s) => s.evidence.length > 0) && !unsafeScoreSource;
+  const fullyVerified =
+    ownership?.confidence === "verified" &&
+    run.verificationLevel === "repo_interview_verified" &&
+    evidenceBacked &&
+    !((authenticity?.risk_signals ?? []) as string[]).some((r) => /high|critical/i.test(String(r)));
 
   return (
     <div className="space-y-8">
@@ -101,17 +109,23 @@ export default async function PublicProfile({ params }: { params: { slug: string
       <header className="rounded-lg border border-border bg-panel/88 p-8 shadow-glow">
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="accent">Verified Profile</Badge>
+          <Badge tone="accent">Published Profile</Badge>
+          {evidenceBacked && <Badge tone="good">Evidence-Backed Profile</Badge>}
+          {ownership?.confidence === "verified" && <Badge tone="good">Owner Verified Profile</Badge>}
+          {fullyVerified && <Badge tone="good">Fully Verified</Badge>}
           <Badge tone={run.verificationLevel === "repo_interview_verified" ? "good" : "default"}>
             {run.verificationLevel === "repo_interview_verified" ? "Repo + Interview verified" : "Repo-only verified"}
           </Badge>
+          {run.verificationLevel === "repo_interview_verified" && <Badge tone="good">Repo + Interview Verified Profile</Badge>}
           <Badge tone="good">Validator audited</Badge>
           <Badge tone={mode === "api" ? "default" : "accent"}>mode: {mode}</Badge>
           {ownership?.confidence === "verified" && <Badge tone="good">ownership: verified</Badge>}
           {ownership?.confidence === "self_declared" && <Badge tone="warn">ownership: self-declared</Badge>}
           {ownership?.confidence === "unverified" && <Badge tone="warn">ownership: unverified</Badge>}
           {terminalEvidence.length > 0 && (
-            <Badge tone="good">Local proof · {terminalEvidence.length} cmds</Badge>
+            <Badge tone="good">Terminal Proof Included</Badge>
           )}
+          {ai && <Badge tone="good">Challenge Verified</Badge>}
         </div>
         <h1 className="mt-3 text-3xl font-bold md:text-4xl">
           {candidate?.name ?? "Anonymous Candidate"}

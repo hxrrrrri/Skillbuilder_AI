@@ -286,6 +286,7 @@ export type OwnershipStatus = {
   self_declared: boolean;
   verification_method?: "owner_match" | "repo_token_verified" | "collaborator_verified" | "self_declared" | "unverified";
   verification_token?: string | null;
+  ownership_challenge_id?: string | null;
   gh_user?: string | null;
   github_username?: string | null;
   repo_owner: string;

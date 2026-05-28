@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 import { runCommand, summarize } from "./terminal";
 import { runsRoot } from "./workspace";
 import { prisma } from "@/lib/db";
+import { contentHasOwnershipTokenHash } from "@/lib/ownership-challenge";
 import type { CommandRun, LocalProofPolicy, TerminalEvidence } from "./types";
 
 export type ProofResult = {
@@ -30,6 +31,7 @@ export type ProofResult = {
   ownership: {
     owner_match: boolean;
     repo_token_verified: boolean;
+    collaborator_verified: boolean;
     self_declared: boolean;
     gh_user?: string | null;
   };
@@ -139,6 +141,15 @@ function detectFramework(pkg: any | null): string | null {
   return null;
 }
 
+function repoNameFromUrl(repoUrl: string): string | null {
+  try {
+    const parts = new URL(repoUrl).pathname.split("/").filter(Boolean);
+    return parts[1]?.replace(/\.git$/, "") ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function pmRun(pm: "npm" | "pnpm" | "yarn" | "bun" | null, script: string): { command: string; args: string[] } | null {
   switch (pm) {
     case "pnpm":
@@ -231,6 +242,7 @@ export async function runProof(opts: {
   githubUsername?: string | null;
   repoOwner: string;
   ownershipToken?: string | null;
+  ownershipTokenHash?: string | null;
   policy?: Partial<LocalProofPolicy>;
   timeoutMs?: number;
 }): Promise<ProofResult> {
@@ -283,7 +295,7 @@ export async function runProof(opts: {
         hasLint: false,
         framework: null,
       },
-      ownership: { owner_match: false, repo_token_verified: false, self_declared: !!opts.githubUsername, gh_user: null },
+      ownership: { owner_match: false, repo_token_verified: false, collaborator_verified: false, self_declared: !!opts.githubUsername, gh_user: null },
     };
   }
 
@@ -507,6 +519,7 @@ export async function runProof(opts: {
 
   // Ownership: gh auth status user vs repo owner.
   let owner_match = false;
+  let collaborator_verified = false;
   let gh_user: string | null = null;
   try {
     const { run: who, evidence: whoEvidence } = await runAndRecord(opts.runId, "ownership", {
@@ -523,21 +536,37 @@ export async function runProof(opts: {
     evidence.push(whoEvidence);
   } catch {}
 
+  if (gh_user && !owner_match) {
+    try {
+      const { run: permission, evidence: permissionEvidence } = await runAndRecord(opts.runId, "ownership", {
+        command: "gh",
+        args: ["api", `repos/${opts.repoOwner}/${repoNameFromUrl(opts.repoUrl) ?? path.basename(workspace)}/collaborators/${gh_user}/permission`, "-q", ".permission"],
+        timeoutMs: 8000,
+        approved: true,
+      });
+      const permissionValue = permission.stdout.trim().toLowerCase();
+      collaborator_verified = permission.exitCode === 0 && ["admin", "maintain", "write"].includes(permissionValue);
+      evidence.push(permissionEvidence);
+    } catch {}
+  }
+
   let repo_token_verified = false;
   try {
     const readme = ["README.md", "README", "readme.md"]
       .map((f) => path.join(workspace, f))
       .find((p) => fs.existsSync(p));
-    if (readme && opts.githubUsername) {
+    if (readme && (opts.githubUsername || opts.ownershipTokenHash)) {
       const txt = fs.readFileSync(readme, "utf8");
       const tag = opts.ownershipToken ?? `skillproof:${opts.githubUsername}`;
-      if (txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
+      if (opts.ownershipTokenHash && contentHasOwnershipTokenHash(txt, opts.ownershipTokenHash)) repo_token_verified = true;
+      if (!repo_token_verified && opts.githubUsername && txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
     }
     const verifyFile = path.join(workspace, ".skillproof-verify.json");
     if (!repo_token_verified && fs.existsSync(verifyFile)) {
       const txt = fs.readFileSync(verifyFile, "utf8");
       const tag = opts.ownershipToken ?? (opts.githubUsername ? `skillproof:${opts.githubUsername}` : "");
-      if (tag && txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
+      if (opts.ownershipTokenHash && contentHasOwnershipTokenHash(txt, opts.ownershipTokenHash)) repo_token_verified = true;
+      if (!repo_token_verified && tag && txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
     }
   } catch {}
 
@@ -550,7 +579,8 @@ export async function runProof(opts: {
     ownership: {
       owner_match,
       repo_token_verified,
-      self_declared: !!opts.githubUsername && !owner_match && !repo_token_verified,
+      collaborator_verified,
+      self_declared: !!opts.githubUsername && !owner_match && !repo_token_verified && !collaborator_verified,
       gh_user,
     },
   };
