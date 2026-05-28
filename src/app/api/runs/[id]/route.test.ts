@@ -154,6 +154,17 @@ describe("/api/runs/[id]", () => {
     expect(data.questions[0].answer).toBe("It wires the app.");
   });
 
+  it("includes progress and terminal summary in candidate payload", async () => {
+    mocks.getCurrentUser.mockResolvedValue({ id: "owner-1", role: "candidate", tenantIds: [] });
+    const { GET } = await import("./route");
+    const res = await GET(req(), { params: { id: "r1" } });
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.progress).toEqual({ completed: 1, total: 1 });
+    expect(data.processing_mode).toBe("in_process");
+    expect(data.terminal_summary.total).toBe(0);
+  });
+
   it("returns the full admin payload only to admins", async () => {
     mocks.getCurrentUser.mockResolvedValue({ id: "admin-1", role: "admin", tenantIds: [] });
     const { GET } = await import("./route");

@@ -23,6 +23,16 @@ function baseRun(overrides: Partial<Parameters<typeof getPublicProfilePublishBlo
 }
 
 describe("getPublicProfilePublishBlockers", () => {
+  it("blocks incomplete runs", () => {
+    const blockers = getPublicProfilePublishBlockers(baseRun({ status: "running" }));
+    expect(blockers.map((b) => b.code)).toContain("run_incomplete");
+  });
+
+  it("blocks mock execution mode", () => {
+    const blockers = getPublicProfilePublishBlockers(baseRun({ executionMode: "mock" }));
+    expect(blockers.map((b) => b.code)).toContain("mock_execution_mode");
+  });
+
   it("blocks mock and heuristic score sources", () => {
     const blockers = getPublicProfilePublishBlockers(baseRun({
       scores: [

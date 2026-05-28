@@ -3,7 +3,7 @@ import { runMission } from "./agents/mission-runner";
 
 const POLL_MS = Number(process.env.SKILLPROOF_WORKER_POLL_MS ?? 3000);
 
-async function claimNextRun() {
+export async function claimNextRun() {
   const run = await prisma.analysisRun.findFirst({
     where: { status: "pending" },
     orderBy: { createdAt: "asc" },
@@ -18,7 +18,7 @@ async function claimNextRun() {
   return run;
 }
 
-async function processOne() {
+export async function processOne() {
   const run = await claimNextRun();
   if (!run) return false;
   const ownershipChallenge = await prisma.ownershipChallenge.findFirst({
@@ -54,7 +54,7 @@ async function processOne() {
   return true;
 }
 
-async function main() {
+export async function main() {
   console.log(`[worker] SkillProof worker started. poll=${POLL_MS}ms`);
   while (true) {
     const worked = await processOne();
@@ -62,7 +62,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error("[worker] fatal", err);
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  main().catch((err) => {
+    console.error("[worker] fatal", err);
+    process.exit(1);
+  });
+}

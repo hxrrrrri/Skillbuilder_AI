@@ -198,6 +198,9 @@ export function RunCommandCenter({ runId }: { runId: string }) {
   const totalAgentCount = run?.events.length ?? STAGES.filter((s) => s.agent).length;
   const progressPercent = totalAgentCount ? Math.round((completedAgentCount / totalAgentCount) * 100) : 0;
   const failedEvent = run?.events.find((e) => e.status === "failed");
+  const terminalTotal = run?.terminal_summary?.total ?? 0;
+  const terminalLoading = isActive && (!run || (run.execution_mode !== "api" && terminalTotal === 0));
+  const terminalReady = !!run && (run.execution_mode === "api" || !isActive || terminalTotal > 0);
 
   return (
     <div className="space-y-4">
@@ -334,9 +337,9 @@ export function RunCommandCenter({ runId }: { runId: string }) {
 
         <ReportSection
           title="Terminal Proof"
-          loading={isActive && run?.execution_mode !== "api" && !run?.terminal_summary?.total}
+          loading={terminalLoading}
           loadingText="Waiting for sandbox policy and terminal proof..."
-          ready={!!run?.terminal_summary?.total || run?.execution_mode === "api"}
+          ready={terminalReady}
           emptyText="No terminal proof saved yet."
         >
           <TerminalProof run={run} />
