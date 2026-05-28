@@ -492,7 +492,7 @@ function buildTrustLabels(input: {
   if (scoreSources.has("heuristic")) labels.push({ label: "Unverified legacy source", tone: "bad" });
   if (scoreSources.has("mock") || input.executionMode === "mock") labels.push({ label: "Unverified legacy source", tone: "bad" });
   if (input.verificationLevel === "repo_interview_verified") labels.push({ label: "Repo + Interview Verified Profile", tone: "good" });
-  if (input.aiCollaboration) labels.push({ label: "Challenge Verified", tone: "good" });
+  if (input.aiCollaboration) labels.push({ label: "AI Collaboration Verified", tone: "good" });
   if (input.ownershipStatus?.confidence === "verified") labels.push({ label: "Owner Verified Profile", tone: "good" });
   else if (input.ownershipStatus?.confidence === "self_declared") labels.push({ label: "Self-declared", tone: "warn" });
   else labels.push({ label: "Ownership unverified", tone: "warn" });

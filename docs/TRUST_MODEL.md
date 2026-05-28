@@ -49,6 +49,8 @@ Public and unlisted profiles require:
 - candidate-selected visibility
 - explicit control over terminal proof inclusion
 
+The same gates run when an existing profile is edited from private to public or unlisted. Visibility updates cannot bypass missing evidence, unsafe sources, missing validation summaries, or redaction failures.
+
 Trust tiers visible on candidate and public profile surfaces:
 
 - Published Profile
@@ -61,6 +63,10 @@ Trust tiers visible on candidate and public profile surfaces:
 The fully verified badge additionally requires verified ownership, completed repo analysis, validator completion, evaluated interview evidence, no unsafe score source, no high-risk security signal, and evidence-backed measured scores.
 
 If gates fail, only a private draft profile is allowed.
+
+## Demo Data
+
+Seeded demo data is allowed only when clearly labeled. It must still use evidence-backed score rows, confidence values, validator notes, source labels, provider matrix, validation summary, ownership status, and redacted public-safe artifacts. It must never be described as a live verification.
 
 ## Redaction
 

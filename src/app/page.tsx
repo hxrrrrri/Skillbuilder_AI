@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
 import { Card, CardBody } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { HeroProofGraphic, SectionPictogram } from "@/components/brand/skillproof-mark";
 
 const SAMPLE_REPOS = [
   "https://github.com/vercel/next.js",
@@ -63,7 +64,9 @@ export default function Landing() {
           candidate_level: level,
           job_description: jd || undefined,
           execution_mode: executionMode,
-          local_install_approved: localInstallApproved && (executionMode === "cli" || executionMode === "hybrid" || executionMode === "local"),
+          local_install_approved:
+            localInstallApproved &&
+            (executionMode === "cli" || executionMode === "hybrid" || executionMode === "local"),
         }),
       });
       const data = await r.json();
@@ -80,67 +83,76 @@ export default function Landing() {
   }
 
   return (
-    <div className="space-y-14">
-      <section className="grid items-center gap-8 pt-2 lg:grid-cols-12 lg:gap-10">
-        <div className="lg:col-span-6">
-          <Badge tone="accent" className="mb-5">Proof-of-work hiring infrastructure</Badge>
-          <h1 className="max-w-3xl font-display text-5xl leading-[1.03] text-ink md:text-6xl">
+    <div className="space-y-20">
+      <section className="border-b border-border pb-16 pt-4 text-center">
+        <div className="mx-auto flex max-w-4xl flex-col items-center">
+          <Badge tone="accent" className="mb-8">
+            Proof-of-work hiring infrastructure
+          </Badge>
+          <HeroProofGraphic className="mb-7" />
+          <h1 className="max-w-4xl font-display text-5xl font-medium leading-[1.05] text-ink md:text-6xl lg:text-7xl">
             Turn real GitHub work into verified hiring evidence.
           </h1>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-body md:text-lg">
+          <p className="mt-6 max-w-2xl text-base leading-8 text-muted md:text-xl">
             SkillProof runs specialist agents against a candidate repo, audits every score with a
             fresh-context validator, and publishes a credibility profile employers can inspect.
           </p>
-          <div className="mt-7 flex flex-wrap gap-2 text-xs text-muted">
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
             <Badge>Validation contract first</Badge>
             <Badge>Creator-verifier separation</Badge>
             <Badge>Evidence locker</Badge>
             <Badge>Own-code interview</Badge>
           </div>
-
-          <div className="mt-8 grid max-w-2xl gap-3 sm:grid-cols-3">
-            {[
-              ["13", "specialist agents"],
-              ["100%", "file-backed claims"],
-              ["1", "shareable profile"],
-            ].map(([value, label]) => (
-              <div key={label} className="rounded-lg border border-border bg-panel/70 p-4">
-                <div className="font-display text-3xl text-ink">{value}</div>
-                <div className="mt-1 text-xs uppercase tracking-wide text-muted">{label}</div>
-              </div>
-            ))}
-          </div>
         </div>
 
-        <div className="lg:col-span-6">
-          <Card className="overflow-hidden shadow-glow">
-            <div className="border-b border-border bg-panel2/70 px-5 py-4">
-              <div className="mb-4 flex items-center gap-2">
-                <span className="h-3 w-3 rounded-full bg-bad" />
-                <span className="h-3 w-3 rounded-full bg-warn" />
-                <span className="h-3 w-3 rounded-full bg-good" />
-                <span className="ml-auto rounded border border-border px-2 py-1 font-mono text-[11px] text-muted">
-                  mission.config.ts
-                </span>
-              </div>
-              <pre className="overflow-x-auto rounded-md border border-border bg-bg/70 p-4 font-mono text-xs leading-6 text-body">
-                <code>{`const mission = await skillproof.verify({
+        <div className="mx-auto mt-14 grid max-w-4xl gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3">
+          {[
+            ["13", "specialist agents"],
+            ["100%", "file-backed claims"],
+            ["1", "shareable profile"],
+          ].map(([value, label]) => (
+            <div key={label} className="bg-bg px-6 py-7 text-left">
+              <div className="font-display text-4xl text-ink">{value}</div>
+              <div className="mt-2 text-xs uppercase tracking-wide text-muted">{label}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="start-verification" className="grid gap-8 lg:grid-cols-12 lg:items-start">
+        <div className="lg:col-span-5">
+          <SectionPictogram type="contract" className="mb-6 text-accent" />
+          <h2 className="max-w-xl font-display text-4xl font-medium leading-tight text-ink md:text-5xl">
+            Start a verification mission
+          </h2>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-muted">
+            Paste a public repo and SkillProof will build the evidence pack.
+          </p>
+          <pre className="mt-8 overflow-x-auto rounded-lg border border-border bg-panel/72 p-5 font-mono text-xs leading-6 text-body">
+            <code>{`const mission = await skillproof.verify({
   repo: "github.com/owner/repo",
   contract: "role-fit-first",
   validator: "fresh-context",
   output: "public-profile"
 })`}</code>
-              </pre>
+          </pre>
+        </div>
+
+        <div className="lg:col-span-7">
+          <Card className="overflow-hidden">
+            <div className="flex items-center gap-2 border-b border-border bg-panel2/70 px-5 py-4">
+              <span className="h-3 w-3 rounded-full bg-bad" />
+              <span className="h-3 w-3 rounded-full bg-warn" />
+              <span className="h-3 w-3 rounded-full bg-good" />
+              <span className="ml-auto rounded border border-border px-2 py-1 font-mono text-[11px] text-muted">
+                mission.config.ts
+              </span>
             </div>
-            <CardBody className="space-y-4 bg-panel/92">
+            <CardBody className="space-y-4 bg-panel/88">
               <div>
-                <div className="font-display text-2xl text-ink">Start a verification mission</div>
-                <p className="mt-1 text-sm text-muted">
-                  Paste a public repo and SkillProof will build the evidence pack.
-                </p>
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-wide text-muted">Public GitHub repo URL</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Public GitHub repo URL
+                </label>
                 <Input
                   className="mt-1"
                   placeholder="https://github.com/owner/repo"
@@ -150,7 +162,7 @@ export default function Landing() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-muted">Your name</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Your name</label>
                   <Input
                     className="mt-1"
                     placeholder="Jane Dev"
@@ -159,7 +171,9 @@ export default function Landing() {
                   />
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-muted">GitHub user (optional)</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">
+                    GitHub user (optional)
+                  </label>
                   <Input
                     className="mt-1"
                     placeholder="janedev"
@@ -170,16 +184,18 @@ export default function Landing() {
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-muted">Target role</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Target role</label>
                   <Input className="mt-1" value={role} onChange={(e) => setRole(e.target.value)} />
                 </div>
                 <div>
-                  <label className="text-xs uppercase tracking-wide text-muted">Level</label>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-muted">Level</label>
                   <Input className="mt-1" value={level} onChange={(e) => setLevel(e.target.value)} />
                 </div>
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-muted">Job description (optional)</label>
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted">
+                  Job description (optional)
+                </label>
                 <TextArea
                   className="mt-1"
                   placeholder="Paste a JD to focus the rubric…"
@@ -188,8 +204,8 @@ export default function Landing() {
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-wide text-muted">Execution mode</label>
-                <div className="mt-1 grid grid-cols-2 gap-1 text-xs sm:grid-cols-4">
+                <label className="text-xs font-semibold uppercase tracking-wide text-muted">Execution mode</label>
+                <div className="mt-2 grid grid-cols-2 gap-1 text-xs sm:grid-cols-4">
                   {(["api", "cli", "hybrid", "local"] as const).map((m) => (
                     <button
                       key={m}
@@ -197,8 +213,8 @@ export default function Landing() {
                       onClick={() => setExecutionMode(m)}
                       className={`rounded-md border px-2 py-2 font-medium transition ${
                         executionMode === m
-                          ? "border-accent bg-accent/10 text-accent"
-                          : "border-border bg-bg/30 text-muted hover:border-accent/50 hover:text-ink"
+                          ? "border-accent/70 bg-accent/10 text-ink"
+                          : "border-border bg-bg/40 text-muted hover:border-accent/50 hover:text-ink"
                       }`}
                     >
                       {m === "api" && "Cloud API"}
@@ -209,7 +225,7 @@ export default function Landing() {
                   ))}
                 </div>
                 {(executionMode === "cli" || executionMode === "hybrid" || executionMode === "local") && (
-                  <label className="mt-3 flex items-start gap-2 rounded-md border border-border bg-bg/30 p-3 text-xs text-muted">
+                  <label className="mt-3 flex items-start gap-2 rounded-md border border-border bg-bg/40 p-3 text-xs leading-5 text-muted">
                     <input
                       type="checkbox"
                       className="mt-0.5"
@@ -221,13 +237,13 @@ export default function Landing() {
                     </span>
                   </label>
                 )}
-                <div className="mt-1 text-[11px] text-muted">
+                <div className="mt-2 text-[11px] text-muted">
                   {recommendedMode && (
                     <span>
                       Recommended: <span className="text-accent">{recommendedMode}</span> ·{" "}
                     </span>
                   )}
-                  <a href="/local-setup" className="text-accent hover:underline">
+                  <a href="/local-setup" className="text-accent hover:text-ink">
                     Local setup ↗
                   </a>
                 </div>
@@ -242,7 +258,7 @@ export default function Landing() {
                   <button
                     key={r}
                     type="button"
-                    className="rounded border border-border bg-panel2 px-2 py-1 hover:border-accent/50 hover:text-accent"
+                    className="rounded-md border border-border bg-panel2 px-2 py-1.5 hover:border-accent/50 hover:text-ink"
                     onClick={() => setRepoUrl(r)}
                   >
                     {r.replace("https://github.com/", "")}
@@ -254,57 +270,51 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="border-y border-border py-10">
-        <div className="mb-6">
+      <section className="border-y border-border py-14">
+        <div className="mb-10">
           <div className="text-xs uppercase tracking-wide text-muted">Mission architecture</div>
-          <h2 className="mt-2 font-display text-4xl text-ink">Contract, audit, verify.</h2>
+          <h2 className="mt-3 font-display text-4xl font-medium text-ink md:text-5xl">
+            Contract, audit, verify.
+          </h2>
         </div>
-        <div className="grid gap-4 md:grid-cols-3">
-        <Card className="bg-panel2/70">
-          <CardBody>
-            <div className="text-xs uppercase tracking-wide text-accent">01 — Orchestrate</div>
-            <div className="mt-3 font-display text-2xl text-ink">Validation contract first</div>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              The orchestrator writes the rubric before any analysis. Correctness is defined
-              independently, before any scoring begins.
-            </p>
-          </CardBody>
-        </Card>
-        <Card className="bg-panel2/70">
-          <CardBody>
-            <div className="text-xs uppercase tracking-wide text-accent">02 — Audit</div>
-            <div className="mt-3 font-display text-2xl text-ink">Workers + validator</div>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Architecture, code quality, testing, security, git evidence, docs, authenticity —
-              each agent runs serially with structured handoffs. A separate validator audits every claim.
-            </p>
-          </CardBody>
-        </Card>
-        <Card className="bg-panel2/70">
-          <CardBody>
-            <div className="text-xs uppercase tracking-wide text-accent">03 — Verify</div>
-            <div className="mt-3 font-display text-2xl text-ink">Own-code interview</div>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Own-code interview questions are generated from the candidate&apos;s code. Every score is
-              backed by file evidence. The output is a shareable verified profile.
-            </p>
-          </CardBody>
-        </Card>
+        <div className="divide-y divide-border">
+          {[
+            ["contract", "01 — Orchestrate", "Validation contract first", "The orchestrator writes the rubric before any analysis. Correctness is defined independently, before any scoring begins."],
+            ["audit", "02 — Audit", "Workers + validator", "Architecture, code quality, testing, security, git evidence, docs, authenticity — each agent runs serially with structured handoffs. A separate validator audits every claim."],
+            ["verify", "03 — Verify", "Own-code interview", "Own-code interview questions are generated from the candidate's code. Every score is backed by file evidence. The output is a shareable verified profile."],
+          ].map(([icon, step, title, detail]) => (
+            <div key={step} className="grid gap-5 py-8 md:grid-cols-[220px_1fr] md:items-start">
+              <div className="flex items-center gap-4">
+                <SectionPictogram type={icon as "contract" | "audit" | "verify"} className="h-8 w-8 text-muted" />
+                <span className="text-xs uppercase tracking-wide text-accent">{step}</span>
+              </div>
+              <div className="grid gap-4 md:grid-cols-[280px_1fr]">
+                <h3 className="font-display text-2xl font-medium leading-tight text-body">{title}</h3>
+                <p className="text-sm leading-7 text-muted">{detail}</p>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-lg border border-accent/50 bg-accent p-8 text-cream">
-          <div className="text-xs uppercase tracking-wide text-cream/80">For candidates</div>
-          <h2 className="mt-3 font-display text-4xl text-cream">Show the work behind the resume.</h2>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-cream/90">
+        <div className="rounded-lg border border-accent/45 bg-accent/95 p-8 text-bg">
+          <SectionPictogram type="account" className="mb-8 text-bg/80" />
+          <div className="text-xs uppercase tracking-wide text-bg/75">For candidates</div>
+          <h2 className="mt-3 font-display text-4xl font-medium leading-tight text-bg">
+            Show the work behind the resume.
+          </h2>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-bg/85">
             Walk employers through your real repo, verified scores, and own-code interview evidence.
           </p>
         </div>
-        <div className="rounded-lg border border-border bg-panel2/70 p-8">
-          <div className="text-xs uppercase tracking-wide text-accent2">For employers</div>
-          <h2 className="mt-3 font-display text-4xl text-ink">Inspect strengths, risks, and follow-ups.</h2>
-          <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
+        <div className="rounded-lg border border-border bg-panel/75 p-8">
+          <SectionPictogram type="audit" className="mb-8 text-accent" />
+          <div className="text-xs uppercase tracking-wide text-accent">For employers</div>
+          <h2 className="mt-3 font-display text-4xl font-medium leading-tight text-ink">
+            Inspect strengths, risks, and follow-ups.
+          </h2>
+          <p className="mt-4 max-w-xl text-sm leading-7 text-muted">
             The verifier preview summarizes role fit, evidence quality, biggest risks, and suggested
             questions without hiding the underlying file references.
           </p>
@@ -312,8 +322,8 @@ export default function Landing() {
       </section>
 
       <section className="pb-4">
-        <a href="/campus-preview" className="text-sm font-semibold text-accent hover:underline">
-          ↗ Open Campus / Placement dashboard preview
+        <a href="/campus-preview" className="text-sm font-semibold text-accent hover:text-ink">
+          Open Campus / Placement dashboard preview
         </a>
       </section>
     </div>

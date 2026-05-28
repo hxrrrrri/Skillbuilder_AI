@@ -1,5 +1,6 @@
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { SectionPictogram } from "@/components/brand/skillproof-mark";
 
 export const dynamic = "force-static";
 
@@ -23,11 +24,14 @@ const DIST = [
 
 export default function CampusPreview() {
   return (
-    <div className="space-y-8">
-      <header>
-        <Badge tone="warn" className="mb-2">Preview · sample data</Badge>
-        <h1 className="text-3xl font-bold">Campus / Placement dashboard</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted">
+    <div className="space-y-10">
+      <header className="border-b border-border pb-8">
+        <SectionPictogram type="campus" className="mb-6 text-accent" />
+        <Badge tone="warn" className="mb-4">Preview · sample data</Badge>
+        <h1 className="font-display text-4xl font-medium leading-tight text-ink md:text-5xl">
+          Campus / Placement dashboard
+        </h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
           What a college admin or training cell sees when a cohort of students publishes SkillProof
           profiles. Numbers below are illustrative, not from real students.
         </p>
@@ -71,7 +75,7 @@ export default function CampusPreview() {
           <CardBody>
             <ul className="space-y-2 text-sm">
               {LEADERBOARD.filter((c) => c.role === "Frontend").map((c) => (
-                <li key={c.name} className="flex items-center justify-between rounded border border-border bg-panel/70 px-3 py-2">
+              <li key={c.name} className="flex items-center justify-between rounded-md border border-border bg-panel2/50 px-3 py-2">
                   <span>{c.name} <span className="text-xs text-muted">· {c.level}</span></span>
                   <Badge tone="good">{c.overall}/100</Badge>
                 </li>
@@ -86,7 +90,7 @@ export default function CampusPreview() {
           <CardBody>
             <ul className="space-y-2 text-sm">
               {LEADERBOARD.filter((c) => c.role === "Backend").map((c) => (
-                <li key={c.name} className="flex items-center justify-between rounded border border-border bg-panel/70 px-3 py-2">
+              <li key={c.name} className="flex items-center justify-between rounded-md border border-border bg-panel2/50 px-3 py-2">
                   <span>{c.name} <span className="text-xs text-muted">· {c.level}</span></span>
                   <Badge tone="good">{c.overall}/100</Badge>
                 </li>
@@ -115,7 +119,7 @@ export default function CampusPreview() {
                 </thead>
                 <tbody>
                   {LEADERBOARD.map((c) => (
-                    <tr key={c.name} className="border-t border-border">
+                  <tr key={c.name} className="border-t border-border transition hover:bg-panel2/35">
                       <td className="p-2 text-ink">{c.name}</td>
                       <td className="p-2 text-muted">{c.role}</td>
                       <td className="p-2 text-muted">{c.level}</td>
@@ -144,7 +148,7 @@ export default function CampusPreview() {
                     <span>{d.avg}/100</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-panel2">
-                    <div className="h-full bg-gradient-to-r from-accent to-accent2" style={{ width: `${d.avg}%` }} />
+                    <div className="h-full bg-accent" style={{ width: `${d.avg}%` }} />
                   </div>
                 </div>
               ))}

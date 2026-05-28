@@ -33,6 +33,36 @@ Default local seeded users:
 
 Local seeded account password: `demo1234`.
 
+`npm run db:seed-users` also creates a clearly labeled judge demo dataset:
+
+- completed run: `casey-candidate/skillproof-commerce`
+- public profile: `/profile/casey-candidate-skillproof-ai-demo`
+- demo launcher: `/demo`
+- demo cohort: `SkillProof AI Judge Demo Cohort`
+- employer shortlist: `Hackathon judge shortlist`
+
+The seeded run is marked `DEMO DATA` in the run/profile surfaces. It exists so judges can inspect a completed flow immediately; it is not presented as a live verification.
+
+## Judge Demo Mode
+
+Open `/demo` after seeding. It provides:
+
+- one-line product explanation
+- problem/solution framing
+- Candidate, Employer, College, and Admin demo buttons
+- completed run/profile/report links
+- live repository verification path
+- seeded account emails and the shared local password
+
+Recommended judging order:
+
+1. `/demo`
+2. Candidate seeded account -> completed run -> public profile
+3. Candidate seeded account -> `/candidate/new-verification` for a live repo run
+4. Employer seeded account -> search, compare, shortlist, interview kit
+5. College seeded account -> dashboard, cohort, skill gaps, placement readiness, employer share
+6. Admin seeded account -> provider health, runs, evidence, agents, prompts, audit logs
+
 ## Environment
 
 Required:
@@ -170,6 +200,8 @@ Public profiles and employer reports use public/shared profile data only. They d
 
 Private reports require owner/admin access. College reports are tenant-scoped. Employer reports are public-safe.
 
+Changing an existing profile from private to public/unlisted re-runs the same publish gates as first publish. Unsafe or missing evidence cannot be made public by editing visibility.
+
 ## Scoring
 
 Rubric:
@@ -219,6 +251,36 @@ npm run test
 npm run build
 npm run dev
 ```
+
+Route checklist for judges:
+
+- `/demo`
+- `/login`
+- `/candidate/dashboard`
+- `/candidate/new-verification`
+- `/candidate/runs/[id]`
+- `/candidate/interview/[runId]`
+- `/candidate/ai-challenge/[runId]`
+- `/profile/casey-candidate-skillproof-ai-demo`
+- `/employer/search`
+- `/employer/compare`
+- `/employer/shortlist`
+- `/college/dashboard`
+- `/college/cohorts`
+- `/college/skill-gaps`
+- `/admin/dashboard`
+- `/admin/providers/health`
+- `/admin/runs`
+- `/admin/evidence`
+
+Additional docs:
+
+- `docs/DEMO_SCRIPT.md`
+- `docs/JUDGE_WALKTHROUGH.md`
+- `docs/ARCHITECTURE.md`
+- `docs/TRUST_MODEL.md`
+- `docs/PROVIDER_SETUP.md`
+- `docs/SECURITY_MODEL.md`
 
 Recommended hackathon demo process:
 

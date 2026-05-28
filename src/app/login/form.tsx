@@ -61,7 +61,7 @@ export function LoginForm({
   }
 
   return (
-    <Card className="mt-6">
+    <Card className="mt-7">
       <CardBody>
         {(githubEnabled || googleEnabled) && (
           <div className="mb-4 space-y-2">
@@ -126,13 +126,13 @@ export function LoginForm({
         <div className="mt-6 border-t border-border pt-4 text-xs text-muted">
           <p className="font-semibold uppercase tracking-wide text-ink">Local seeded accounts</p>
           <p className="mt-1">Password is <code className="rounded bg-panel2 px-1">demo1234</code> for every local seeded account.</p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
             {SEEDED_ACCOUNTS.map((acct) => (
               <button
                 key={acct.email}
                 type="button"
                 onClick={() => fillSeededAccount(acct.email)}
-                className="rounded-md border border-border bg-panel2 px-2 py-1.5 text-left text-xs text-ink transition hover:border-accent/60 hover:text-accent"
+                className="rounded-md border border-border bg-panel2/70 px-3 py-2 text-left text-xs text-ink transition hover:border-accent/60 hover:text-ink"
               >
                 <div className="font-semibold">{acct.label}</div>
                 <div className="text-muted">{acct.email}</div>
