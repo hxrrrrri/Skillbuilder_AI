@@ -1,18 +1,13 @@
 import type { Metadata } from "next";
-import { EB_Garamond, Inter, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { NavUser } from "@/components/nav-user";
 
-const display = EB_Garamond({
-  subsets: ["latin"],
-  variable: "--font-display",
-  weight: ["400", "500", "600", "700"],
-});
-
-const sans = Inter({
+const sans = Manrope({
   subsets: ["latin"],
   variable: "--font-sans",
+  weight: ["300", "400", "500", "600", "700", "800"],
 });
 
 const mono = JetBrains_Mono({
@@ -30,7 +25,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${display.variable} ${sans.variable} ${mono.variable} min-h-screen font-sans antialiased`}>
+      <body className={`${sans.variable} ${mono.variable} min-h-screen font-sans antialiased`}>
         <AuthSessionProvider>
           <header className="fixed left-1/2 top-5 z-50 w-[920px] max-w-[calc(100vw-2rem)] -translate-x-1/2">
             <div className="grid w-full grid-cols-[1fr_auto_1fr] items-center gap-5 rounded-full border border-white/[0.08] bg-panel2/95 px-3 py-2 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md">
