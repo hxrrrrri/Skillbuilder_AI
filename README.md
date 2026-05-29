@@ -1,4 +1,4 @@
-![SkillProof](public/skillsproof.png)
+![SkillProof](public/skillproof.png)
 
 # SkillProof AI
 
