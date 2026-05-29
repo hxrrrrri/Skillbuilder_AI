@@ -1,3 +1,5 @@
+![SkillProof](public/skillsproof.png)
+
 # SkillProof AI
 
 SkillProof AI is a proof-of-work developer verification SaaS. It verifies real GitHub projects, local terminal proof, own-code interviews, AI-collaboration challenges, ownership signals, provider-audited analysis, and evidence-backed scoring into candidate profiles that employers and colleges can trust.
