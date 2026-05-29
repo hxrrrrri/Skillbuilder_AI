@@ -4,6 +4,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { prisma } from "@/lib/db";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { revalidatePublicProfile } from "@/lib/profile-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,10 @@ export async function POST(req: Request) {
     where: { id: profile.id },
     data: { visibility: body.visibility },
   });
+
+  // Visibility just changed (e.g. → private): bust the cached public read now
+  // so the change takes effect immediately, not after the revalidate window.
+  revalidatePublicProfile(updated.slug);
 
   await writeAuditLog({
     action: "profile.unpublish",

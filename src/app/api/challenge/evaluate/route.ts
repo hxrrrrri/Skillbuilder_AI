@@ -12,6 +12,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { applyAiChallengeScoreCaps, buildAiChallengeExecutionProof } from "@/lib/ai-challenge/evaluation";
+import { RATE_LIMITS, rateLimitKey, rateLimitedResponseInit } from "@/lib/rate-limit";
 import {
   completeEvaluatorSkillRun,
   failEvaluatorSkillRun,
@@ -118,6 +119,13 @@ export async function POST(req: Request) {
       userAgent: req.headers.get("user-agent") ?? null,
     }).catch(() => {});
     return decision.response;
+  }
+
+  // Throttle before the workspace diff application + LLM evaluation below.
+  const rl = RATE_LIMITS.challenge.consume(rateLimitKey(req, sessionUser?.id));
+  if (!rl.allowed) {
+    const init = rateLimitedResponseInit(rl);
+    return NextResponse.json(init.body, { status: init.status, headers: init.headers });
   }
 
   const deterministic = deterministicContext(body);

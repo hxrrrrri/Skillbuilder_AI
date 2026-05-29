@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
@@ -162,6 +162,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
   const [run, setRun] = useState<RunPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const runRef = useRef<RunPayload | null>(null);
 
   async function load() {
     try {
@@ -171,6 +172,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
         setError(data.error || "run_load_failed");
         return;
       }
+      runRef.current = data;
       setRun(data);
       setError(null);
     } catch (err: any) {
@@ -183,11 +185,13 @@ export function RunCommandCenter({ runId }: { runId: string }) {
   useEffect(() => {
     void load();
     const id = window.setInterval(() => {
-      setRun((current) => {
-        if (current && current.status !== "pending" && current.status !== "running" && current.status !== "in_progress") return current;
-        void load();
-        return current;
-      });
+      const current = runRef.current;
+      const shouldPoll =
+        !current ||
+        current.status === "pending" ||
+        current.status === "running" ||
+        current.status === "in_progress";
+      if (shouldPoll) void load();
     }, 2500);
     return () => window.clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -377,7 +381,7 @@ function MissionProgress({ run }: { run: RunPayload | null }) {
         const status = stageStatus(run, stage);
         const ev = agentEvent(run, stage.agent);
         return (
-          <li key={stage.key} className="flex gap-3 rounded-md border border-border bg-panel2/35 p-2.5">
+          <li key={stage.key} className="flex gap-3 rounded-xl border border-border bg-panel2/35 p-2.5">
             <span className={cn("dot mt-1", status === "completed" ? "dot-completed" : status === "running" || status === "in_progress" ? "dot-running" : status === "failed" ? "dot-failed" : status === "skipped" ? "dot-skipped" : "dot-pending")} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
@@ -431,12 +435,12 @@ function SectionSkeleton({ text }: { text: string }) {
         <span className="dot dot-running" />
         {text}
       </div>
-      <div className="skeleton-shimmer h-10 rounded-md" />
-      <div className="skeleton-shimmer h-24 rounded-md" />
+      <div className="skeleton-shimmer h-10 rounded-xl" />
+      <div className="skeleton-shimmer h-24 rounded-xl" />
       <div className="grid gap-2 md:grid-cols-3">
-        <div className="skeleton-shimmer h-16 rounded-md" />
-        <div className="skeleton-shimmer h-16 rounded-md" />
-        <div className="skeleton-shimmer h-16 rounded-md" />
+        <div className="skeleton-shimmer h-16 rounded-xl" />
+        <div className="skeleton-shimmer h-16 rounded-xl" />
+        <div className="skeleton-shimmer h-16 rounded-xl" />
       </div>
     </div>
   );
@@ -449,13 +453,13 @@ function ProviderMatrix({ matrix }: { matrix: any }) {
     <div className="space-y-3">
       <div className="grid gap-2 md:grid-cols-5">
         {["orchestrator", "worker", "validator", "interview", "profile"].map((role) => (
-          <div key={role} className="rounded-md border border-border bg-panel2/35 p-3">
+          <div key={role} className="rounded-xl border border-border bg-panel2/35 p-3">
             <div className="text-xs uppercase text-muted">{role}</div>
             <div className="mt-1 font-mono text-xs text-ink">{matrix[role] ?? "not set"}</div>
           </div>
         ))}
       </div>
-      <div className="max-h-72 overflow-auto rounded-md border border-border">
+      <div className="max-h-72 overflow-auto rounded-xl border border-border">
         <table className="w-full text-left text-xs">
           <thead className="bg-panel2 text-muted">
             <tr>
@@ -494,7 +498,7 @@ function ValidationContract({ contract, summary }: { contract: any; summary: any
       )}
       <ul className="space-y-2">
         {assertions.slice(0, 8).map((a: any) => (
-          <li key={a.id} className="rounded-md border border-border bg-panel2/35 p-3 text-sm">
+          <li key={a.id} className="rounded-xl border border-border bg-panel2/35 p-3 text-sm">
             <div className="flex flex-wrap gap-2">
               <Badge>{a.id}</Badge>
               <Badge>{a.dimension}</Badge>
@@ -529,30 +533,119 @@ function RepoIntelligence({ data }: { data: any }) {
   );
 }
 
+const AGENT_META: Record<string, { title: string; subtitle: string }> = {
+  orchestrator: { title: "Orchestrator", subtitle: "Writes validation contract" },
+  "repo-scanner": { title: "Repo Scanner", subtitle: "Deterministic — no LLM" },
+  architecture: { title: "Architecture Analyst", subtitle: "Module boundaries" },
+  "code-quality": { title: "Code Quality", subtitle: "Naming, typing, complexity" },
+  testing: { title: "Testing & Reliability", subtitle: "Tests, CI, coverage" },
+  security: { title: "Security Awareness", subtitle: "Secrets, validation" },
+  "ai-collaboration": { title: "AI Collaboration", subtitle: "AI usage patterns" },
+  "git-evidence": { title: "Git Evidence", subtitle: "Commit cadence + quality" },
+  documentation: { title: "Documentation", subtitle: "README specificity" },
+  authenticity: { title: "Authenticity Signals", subtitle: "Ownership and provenance" },
+  "interview-gen": { title: "Interview Generator", subtitle: "Questions from real code" },
+  validator: { title: "Validator", subtitle: "Fresh context audit" },
+  "skill-graph": { title: "Skill Graph", subtitle: "Weighted aggregation" },
+  "profile-gen": { title: "Profile Generator", subtitle: "Verified credibility" },
+};
+
 function AgentTimeline({ events, partial }: { events: RunPayload["events"]; partial: boolean }) {
   return (
-    <div className="space-y-2">
-      {partial && <StateNotice tone="warn" title="Partial" detail="Some evaluators completed. Remaining agents still running." />}
-      {events.map((event) => {
-        const keyFindings = event.key_findings ?? [];
-        const missingProof = event.missing_proof ?? [];
-        return (
-          <div key={`${event.order}-${event.agent}`} className="rounded-md border border-border bg-panel2/35 p-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={statusTone(event.status)}>{event.status}</Badge>
-              <span className="font-mono text-xs text-ink">{event.agent}</span>
-              {event.duration_ms != null && <span className="text-xs text-muted">{event.duration_ms}ms</span>}
+    <div className="space-y-4">
+      {partial && (
+        <StateNotice tone="warn" title="Partial" detail="Some evaluators completed. Remaining agents still running." />
+      )}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {events.map((event) => {
+          const meta = AGENT_META[event.agent] ?? { title: event.agent, subtitle: "" };
+          const keyFindings = event.key_findings ?? [];
+          const missingProof = event.missing_proof ?? [];
+          const isRunning = event.status === "running" || event.status === "in_progress";
+          const isDone = event.status === "completed";
+          const isFailed = event.status === "failed";
+
+          return (
+            <div
+              key={`${event.order}-${event.agent}`}
+              className={cn(
+                "group relative overflow-hidden rounded-2xl border bg-panel/60 p-5 transition-all duration-300",
+                isDone && "border-accent/25 bg-panel/75",
+                isRunning && "border-warn/40 bg-warn/5 ring-1 ring-warn/20",
+                isFailed && "border-bad/35 bg-bad/5",
+                !isDone && !isRunning && !isFailed && "border-border/60"
+              )}
+            >
+              {isDone && (
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 20% 50%, rgba(217,119,87,0.06) 0%, transparent 70%)",
+                  }}
+                />
+              )}
+              <div className="relative flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={cn("dot flex-shrink-0",
+                    event.status === "completed" ? "dot-completed" :
+                    event.status === "running" || event.status === "in_progress" ? "dot-running" :
+                    event.status === "failed" ? "dot-failed" :
+                    event.status === "skipped" ? "dot-skipped" :
+                    "dot-pending"
+                  )} />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-ink">{meta.title}</div>
+                    <div className="truncate text-xs text-muted">{meta.subtitle}</div>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-muted">
+                    {event.status}
+                  </span>
+                  {event.duration_ms != null && (
+                    <span className="font-mono text-[10px] text-muted/60">{event.duration_ms}ms</span>
+                  )}
+                </div>
+              </div>
+
+              {event.checked && (
+                <p className="relative mt-3 text-xs leading-5 text-muted line-clamp-2">{event.checked}</p>
+              )}
+
+              {keyFindings.length > 0 && (
+                <ul className="relative mt-3 space-y-1">
+                  {keyFindings.slice(0, 2).map((f, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-xs text-ink/80">
+                      <span className="mt-1 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-accent/50" />
+                      <span className="line-clamp-1">{f}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {event.score_contribution && (
+                <div className="relative mt-3 flex items-center gap-2">
+                  <span className="text-xs text-muted">{event.score_contribution.metric}</span>
+                  <span className="font-mono text-xs font-semibold text-accent">
+                    {event.score_contribution.score}/100
+                  </span>
+                </div>
+              )}
+
+              {missingProof.length > 0 && (
+                <p className="relative mt-3 text-xs text-warn">{missingProof.join(" ")}</p>
+              )}
+
+              {isRunning && (
+                <div className="relative mt-4 h-0.5 w-full overflow-hidden rounded-full bg-border">
+                  <div className="skeleton-shimmer absolute inset-y-0 left-0 w-1/2 bg-warn" />
+                </div>
+              )}
             </div>
-            <p className="mt-2 text-sm text-muted">{event.checked}</p>
-            {keyFindings.length > 0 && (
-              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-ink">
-                {keyFindings.slice(0, 3).map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            )}
-            {missingProof.length > 0 && <p className="mt-2 text-xs text-warn">{missingProof.join(" ")}</p>}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -563,7 +656,7 @@ function EvidenceLocker({ run }: { run: RunPayload | null }) {
     return (
       <ul className="space-y-2">
         {findings.slice(0, 16).map((f) => (
-          <li key={f.id} className="rounded-md border border-border bg-panel2/35 p-3 text-sm">
+          <li key={f.id} className="rounded-xl border border-border bg-panel2/35 p-3 text-sm">
             <div className="flex flex-wrap gap-2">
               <Badge>{f.category}</Badge>
               {f.severity && <Badge tone={f.severity === "high" || f.severity === "critical" ? "bad" : f.severity === "medium" ? "warn" : "default"}>{f.severity}</Badge>}
@@ -579,7 +672,7 @@ function EvidenceLocker({ run }: { run: RunPayload | null }) {
   return (
     <div className="space-y-2">
       {(run?.scores ?? []).flatMap((s) => s.evidence.map((e, i) => ({ s, e, i }))).slice(0, 16).map(({ s, e, i }) => (
-        <div key={`${s.skill}-${i}`} className="rounded-md border border-border bg-panel2/35 p-3 text-sm">
+        <div key={`${s.skill}-${i}`} className="rounded-xl border border-border bg-panel2/35 p-3 text-sm">
           <div className="flex flex-wrap gap-2">
             <Badge>{s.skill}</Badge>
             <Badge>{e.source ?? s.source}</Badge>
@@ -598,7 +691,7 @@ function SkillGraph({ scores }: { scores: RunPayload["scores"] }) {
     <div className="space-y-3">
       <div className="grid gap-2 md:grid-cols-2">
         {scores.map((s) => (
-          <div key={s.skill} className="rounded-md border border-border bg-panel2/35 p-3">
+          <div key={s.skill} className="rounded-xl border border-border bg-panel2/35 p-3">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-ink">{s.skill}</div>
               <Badge tone={s.score == null ? "default" : s.source === "not_measured" ? "default" : "good"}>{s.score == null ? "not_measured" : `${s.score}/100`}</Badge>
@@ -639,7 +732,7 @@ function TerminalProof({ run }: { run: RunPayload | null }) {
       </div>
       <ul className="space-y-2">
         {run.terminal_evidence.slice(0, 8).map((t, i) => (
-          <li key={`${t.command}-${i}`} className="rounded-md border border-border bg-bg/45 p-3">
+          <li key={`${t.command}-${i}`} className="rounded-xl border border-border bg-bg/45 p-3">
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <Badge tone={t.exitCode === 0 ? "good" : t.exitCode == null ? "default" : "bad"}>{t.exitCode == null ? t.statusLabel ?? "skipped" : `exit ${t.exitCode}`}</Badge>
               <Badge>{t.usedFor}</Badge>
@@ -672,7 +765,7 @@ function InterviewQuestions({ run }: { run: RunPayload | null }) {
       </div>
       <ul className="space-y-2">
         {run.questions.map((q, i) => (
-          <li key={q.id} className="rounded-md border border-border bg-panel2/35 p-3 text-sm">
+          <li key={q.id} className="rounded-xl border border-border bg-panel2/35 p-3 text-sm">
             <div className="flex items-start justify-between gap-3">
               <p className="text-ink">Q{i + 1}. {q.question}</p>
               {q.answer_score != null && <Badge tone="good">{q.answer_score}/100</Badge>}
@@ -699,7 +792,7 @@ function ProfilePreview({ run }: { run: RunPayload | null }) {
   return (
     <div className="space-y-4">
       {profile?.developer_summary ? (
-        <div className="rounded-md border border-border bg-panel2/35 p-4">
+        <div className="rounded-xl border border-border bg-panel2/35 p-4">
           <div className="text-sm font-semibold text-ink">Developer summary</div>
           <p className="mt-2 text-sm text-muted">{profile.developer_summary}</p>
         </div>
@@ -713,7 +806,7 @@ function ProfilePreview({ run }: { run: RunPayload | null }) {
         </div>
       )}
       {blockers.length > 0 ? (
-        <div className="rounded-md border border-warn/30 bg-warn/10 p-3">
+        <div className="rounded-xl border border-warn/30 bg-warn/10 p-3">
           <div className="text-sm font-semibold text-warn">Public publishing blockers</div>
           <ul className="mt-2 list-disc pl-5 text-xs text-muted">
             {blockers.map((b, i) => <li key={i}>{b}</li>)}
@@ -723,11 +816,11 @@ function ProfilePreview({ run }: { run: RunPayload | null }) {
         <PublishRunButton runId={run.id} />
       )}
       <div className="flex flex-wrap gap-2">
-        <Link href={`/api/report/export?run_id=${run.id}`} className="rounded-md border border-border px-3 py-2 text-xs text-ink hover:border-accent">
+        <Link href={`/api/report/export?run_id=${run.id}`} className="rounded-xl border border-border px-3 py-2 text-xs text-ink hover:border-accent">
           Export owner report
         </Link>
         {run.questions.length > 0 && (
-          <Link href={`/candidate/interview/${run.id}`} className="rounded-md border border-border px-3 py-2 text-xs text-ink hover:border-accent">
+          <Link href={`/candidate/interview/${run.id}`} className="rounded-xl border border-border px-3 py-2 text-xs text-ink hover:border-accent">
             Continue interview
           </Link>
         )}
@@ -738,7 +831,7 @@ function ProfilePreview({ run }: { run: RunPayload | null }) {
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
   return (
-    <div className="rounded-md border border-border bg-panel2/35 p-3">
+    <div className="rounded-xl border border-border bg-panel2/35 p-3">
       <div className="text-xs uppercase text-muted">{label}</div>
       <div className="mt-1 break-words font-mono text-lg text-ink">{value}</div>
       {detail && <div className="mt-1 text-xs text-muted">{detail}</div>}
@@ -748,7 +841,7 @@ function Metric({ label, value, detail }: { label: string; value: string; detail
 
 function MiniList({ title, items, empty = "None detected yet." }: { title: string; items: string[]; empty?: string }) {
   return (
-    <div className="rounded-md border border-border bg-panel2/35 p-3">
+    <div className="rounded-xl border border-border bg-panel2/35 p-3">
       <div className="text-sm font-semibold text-ink">{title}</div>
       {items.length ? (
         <ul className="mt-2 space-y-1 text-xs text-muted">
@@ -768,7 +861,7 @@ function StateNotice({ title = "No data yet", detail, tone = "default" }: { titl
       ? "border-warn/35 bg-warn/10 text-warn"
       : "border-border bg-bg/35 text-muted";
   return (
-    <div className={cn("rounded-md border px-3 py-2 text-xs", styles)}>
+    <div className={cn("rounded-xl border px-3 py-2 text-xs", styles)}>
       <span className="font-semibold text-ink">{title}.</span> {detail}
     </div>
   );

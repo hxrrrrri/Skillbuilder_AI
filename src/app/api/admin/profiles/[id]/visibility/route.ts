@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser, HttpAuthError, authErrorResponse } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/roles";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { revalidatePublicProfile } from "@/lib/profile-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       where: { id: params.id },
       data: { visibility: body.visibility },
     });
+
+    // Admin flipped visibility — invalidate the cached public read immediately.
+    revalidatePublicProfile(profile.slug);
 
     await writeAuditLog({
       action: "admin.profile.visibility",

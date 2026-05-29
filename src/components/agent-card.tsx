@@ -27,27 +27,51 @@ export function AgentCard({
   notes?: string | null;
 }) {
   const meta = LABELS[agent] ?? { title: agent, subtitle: "" };
+  const isRunning = status === "running";
+  const isDone = status === "completed";
+  const isFailed = status === "failed";
+
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-panel/70 p-4 transition",
-        status === "running" && "ring-1 ring-warn/40",
-        status === "completed" && "border-accent/30",
-        status === "skipped" && "border-warn/30",
-        status === "failed" && "border-bad/40"
+        "group relative overflow-hidden rounded-2xl border bg-panel/70 p-5 transition-all duration-300",
+        isDone && "border-accent/30 bg-panel/80",
+        isRunning && "border-warn/40 bg-warn/5 ring-1 ring-warn/20",
+        isFailed && "border-bad/35 bg-bad/5",
+        status === "skipped" && "border-warn/20 opacity-60",
+        !isDone && !isRunning && !isFailed && status !== "skipped" && "border-border/60"
       )}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className={`dot dot-${status}`} />
-            <div className="font-medium text-ink truncate">{meta.title}</div>
+      {isDone && (
+        <div
+          className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+          style={{ background: "radial-gradient(circle at 20% 50%, rgba(217,119,87,0.06) 0%, transparent 70%)" }}
+        />
+      )}
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <span className={cn("dot flex-shrink-0",
+          status === "completed" ? "dot-completed" :
+          status === "running" ? "dot-running" :
+          status === "failed" ? "dot-failed" :
+          status === "skipped" ? "dot-skipped" :
+          "dot-pending"
+        )} />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-semibold text-ink">{meta.title}</div>
+            <div className="truncate text-xs text-muted">{meta.subtitle}</div>
           </div>
-          <div className="text-xs text-muted truncate">{meta.subtitle}</div>
         </div>
-        <span className="text-xs uppercase tracking-wide text-muted">{status}</span>
+        <span className="flex-shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted">{status}</span>
       </div>
-      {notes && <div className="mt-2 text-xs text-muted line-clamp-2">{notes}</div>}
+      {notes && (
+        <p className="relative mt-3 line-clamp-2 text-xs leading-5 text-muted">{notes}</p>
+      )}
+      {isRunning && (
+        <div className="relative mt-4 h-0.5 w-full overflow-hidden rounded-full bg-border">
+          <div className="absolute inset-y-0 left-0 w-1/3 animate-[shimmer_1.5s_ease-in-out_infinite] bg-warn" />
+        </div>
+      )}
     </div>
   );
 }

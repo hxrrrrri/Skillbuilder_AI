@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { prisma } from "./lib/db";
 import { runMission } from "./agents/mission-runner";
+import { logger } from "./lib/logger";
+
+const log = logger.child({ component: "worker" });
 
 const POLL_MS = Number(process.env.SKILLPROOF_WORKER_POLL_MS ?? 3000);
 const HEARTBEAT_MS = Number(process.env.SKILLPROOF_WORKER_HEARTBEAT_MS ?? 10_000);
@@ -78,7 +81,7 @@ export async function processOne(workerId = defaultWorkerId()) {
   const run = await claimNextRun(workerId);
   if (!run) return false;
   const beat = setInterval(() => {
-    heartbeat(run.id, workerId).catch((err) => console.error("[worker] heartbeat failed", err));
+    heartbeat(run.id, workerId).catch((err) => log.error("heartbeat failed", { runId: run.id, workerId, err }));
   }, HEARTBEAT_MS);
   const ownershipChallenge = await prisma.ownershipChallenge.findFirst({
     where: { runId: run.id },
@@ -129,22 +132,22 @@ export async function main() {
   let stopping = false;
   const stop = () => {
     stopping = true;
-    console.log(`[worker] ${workerId} graceful shutdown requested`);
+    log.info("graceful shutdown requested", { workerId });
   };
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
 
-  console.log(`[worker] SkillProof worker started. id=${workerId} poll=${POLL_MS}ms`);
+  log.info("worker started", { workerId, pollMs: POLL_MS });
   while (!stopping) {
     const worked = await processOne(workerId);
     if (!worked) await new Promise((resolve) => setTimeout(resolve, POLL_MS));
   }
-  console.log(`[worker] ${workerId} stopped`);
+  log.info("worker stopped", { workerId });
 }
 
 if (process.env.NODE_ENV !== "test") {
   main().catch((err) => {
-    console.error("[worker] fatal", err);
+    log.error("worker fatal", { err });
     process.exit(1);
   });
 }

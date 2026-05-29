@@ -35,6 +35,9 @@ export default async function ProviderHealthPage() {
       lastTestJsonOk: row?.lastTestJsonOk ?? null,
       fix: h.fix,
       command: row?.command ?? h.command,
+      apiKeyEnv: row?.apiKeyEnv ?? null,
+      baseUrl: row?.baseUrl ?? null,
+      notes: row?.notes ?? null,
     };
   });
 

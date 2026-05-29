@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/db";
+import { PROFILE_REVALIDATE_SECONDS, publicProfileTag } from "@/lib/profile-cache";
 import { safeJsonParse } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,23 +15,36 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/roles";
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-export default async function PublicProfile({ params }: { params: { slug: string } }) {
-  const profile = await prisma.publicProfile.findUnique({
-    where: { slug: params.slug },
-    include: {
-      candidate: true,
-      run: {
+// Cache the heavy read in the Next data cache (keyed + tagged by slug) so a
+// burst of public views doesn't re-run this multi-relation query each time.
+// Per-request session gating below stays uncached; visibility writes bust the
+// tag immediately (see src/lib/profile-cache.ts), so the freshness window is
+// only a fallback — documented at PROFILE_REVALIDATE_SECONDS.
+function loadPublicProfileBySlug(slug: string) {
+  return unstable_cache(
+    () =>
+      prisma.publicProfile.findUnique({
+        where: { slug },
         include: {
           candidate: true,
-          repository: true,
-          scores: true,
-          questions: true,
+          run: {
+            include: {
+              candidate: true,
+              repository: true,
+              scores: true,
+              questions: true,
+            },
+          },
         },
-      },
-    },
-  });
+      }),
+    ["public-profile", slug],
+    { revalidate: PROFILE_REVALIDATE_SECONDS, tags: [publicProfileTag(slug)] },
+  )();
+}
+
+export default async function PublicProfile({ params }: { params: { slug: string } }) {
+  const profile = await loadPublicProfileBySlug(params.slug);
 
   if (!profile) return notFound();
 

@@ -2,6 +2,7 @@
 // persisted to DB so Mission Control can stream progress.
 
 import { prisma } from "@/lib/db";
+import { logger } from "@/lib/logger";
 import { runProof } from "@/lib/local-runner/proof-runner";
 import { AgentSkippedError, selectProviderMatrix } from "@/lib/providers/provider-router";
 import { ProviderExecutionError } from "@/lib/providers/errors";
@@ -31,6 +32,8 @@ import {
   prepareEvaluatorSkillRun,
   AGENT_TO_EVALUATOR_SKILL,
 } from "@/lib/evaluator-runtime/skill-runner";
+
+const log = logger.child({ component: "mission" });
 
 type RawOwnership = { owner_match: boolean; repo_token_verified: boolean; collaborator_verified?: boolean; self_declared: boolean; gh_user?: string | null };
 
@@ -256,7 +259,7 @@ export async function runMission(opts: {
         },
       });
     } catch (err) {
-      console.error("[proof-runner] failed", err);
+      log.error("proof-runner failed", { runId: opts.runId, err });
     }
   }
 
@@ -564,7 +567,7 @@ export async function runMission(opts: {
       const { finalizeReVerificationForRun } = await import("@/lib/reverification");
       await finalizeReVerificationForRun(opts.runId);
     } catch (err) {
-      console.error("[mission] finalize reverification failed", err);
+      log.error("finalize reverification failed", { runId: opts.runId, err });
     }
   } catch (err) {
     await prisma.analysisRun.update({

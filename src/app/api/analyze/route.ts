@@ -9,6 +9,7 @@ import { writeAuditLog } from "@/lib/auth/audit";
 import { createSnapshotIfReVerify } from "@/lib/reverification";
 import { checkProviderReadinessForMode } from "@/lib/providers/provider-router";
 import { verifyOwnershipChallengeToken } from "@/lib/ownership-challenge";
+import { RATE_LIMITS, rateLimitKey, rateLimitedResponseInit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +49,14 @@ export async function POST(req: Request) {
   // from initiating runs on behalf of others via the API to reduce abuse.
   if (!isAdminRole(sessionUser.role) && sessionUser.role !== "candidate") {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+
+  // Strictest limit: each accepted request clones a repo and fires the full
+  // agent pipeline. Throttle per authenticated user before any expensive work.
+  const rl = RATE_LIMITS.analyze.consume(rateLimitKey(req, sessionUser.id));
+  if (!rl.allowed) {
+    const init = rateLimitedResponseInit(rl);
+    return NextResponse.json(init.body, { status: init.status, headers: init.headers });
   }
 
   const readiness = await checkProviderReadinessForMode(body.execution_mode);

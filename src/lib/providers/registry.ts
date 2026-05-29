@@ -13,6 +13,7 @@ import { prisma } from "@/lib/db";
 import type { FallbackStrategy, ProviderId, ProviderMatrixAgentEntry } from "./types";
 import { REASONING_BUDGETS, isReasoningBudget, type ReasoningBudget } from "./reasoning";
 import { PROVIDER_MODEL_CATALOG, PROVIDER_MODEL_DEFAULTS, LLM_AGENT_NAMES } from "./defaults";
+import { providerCache, invalidateProviderRegistryCache } from "./cache";
 
 export const PROVIDER_DEFAULTS: Array<{
   providerId: ProviderId;
@@ -151,7 +152,7 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
   {
     agentName: "orchestrator",
     providerId: "anthropic_api",
-    model: "claude-opus-4-7",
+    model: "claude-opus-4-8",
     reasoningBudget: "high",
     temperature: 0.1,
     maxTokens: 2000,
@@ -165,7 +166,7 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
   {
     agentName: "validator",
     providerId: "anthropic_api",
-    model: "claude-opus-4-7",
+    model: "claude-opus-4-8",
     reasoningBudget: "high",
     temperature: 0.0,
     maxTokens: 2500,
@@ -239,7 +240,10 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
 // --------------- Provider accessors ---------------
 
 export async function listProviderConfigs() {
-  return prisma.providerConfig.findMany({ orderBy: { providerId: "asc" } });
+  // Hot path: read on every analyze (via provider-router) + readiness check.
+  return providerCache.getOrLoad("providers:list", () =>
+    prisma.providerConfig.findMany({ orderBy: { providerId: "asc" } }),
+  );
 }
 
 export async function getProviderConfig(providerId: string) {
@@ -258,10 +262,12 @@ export async function updateProviderConfig(
     notes: string | null;
   }>,
 ) {
-  return prisma.providerConfig.update({
+  const updated = await prisma.providerConfig.update({
     where: { providerId },
     data: patch,
   });
+  invalidateProviderRegistryCache();
+  return updated;
 }
 
 export async function recordProviderTest(
@@ -275,7 +281,7 @@ export async function recordProviderTest(
     latencyMs?: number | null;
   },
 ) {
-  return prisma.providerConfig.update({
+  const updated = await prisma.providerConfig.update({
     where: { providerId },
     data: {
       lastTestedAt: new Date(),
@@ -287,6 +293,9 @@ export async function recordProviderTest(
       lastTestError: result.error ?? null,
     },
   });
+  // Readiness blockers key off lastTestStatus/lastTestJsonOk — bust the memo.
+  invalidateProviderRegistryCache();
+  return updated;
 }
 
 // --------------- Agent accessors ---------------
@@ -377,22 +386,25 @@ function normalizeAgentConfig(
 }
 
 export async function resolveAgentConfig(agentName: string): Promise<ResolvedAgentConfig> {
-  try {
-    const existing = await getAgentConfig(agentName);
-    if (existing) return normalizeAgentConfig(existing, "db");
-  } catch (err) {
-    console.error("[provider-registry] failed to resolve agent config", agentName, err);
-  }
-  const fallback = defaultForAgent(agentName);
-  return normalizeAgentConfig(
-    {
-      ...fallback,
-      fallbackModel: null,
-      timeoutMs: 60_000,
-      retryCount: 1,
-    },
-    "default",
-  );
+  // Hot path: resolved once per agent (18) on every analyze via the matrix.
+  return providerCache.getOrLoad(`agent:${agentName}`, async () => {
+    try {
+      const existing = await getAgentConfig(agentName);
+      if (existing) return normalizeAgentConfig(existing, "db");
+    } catch (err) {
+      console.error("[provider-registry] failed to resolve agent config", agentName, err);
+    }
+    const fallback = defaultForAgent(agentName);
+    return normalizeAgentConfig(
+      {
+        ...fallback,
+        fallbackModel: null,
+        timeoutMs: 60_000,
+        retryCount: 1,
+      },
+      "default",
+    );
+  });
 }
 
 export async function updateAgentConfig(
@@ -414,7 +426,9 @@ export async function updateAgentConfig(
     qualityTier: "low" | "medium" | "high";
   }>,
 ) {
-  return prisma.agentConfig.update({ where: { agentName }, data: patch });
+  const updated = await prisma.agentConfig.update({ where: { agentName }, data: patch });
+  invalidateProviderRegistryCache();
+  return updated;
 }
 
 // --------------- Seeding ---------------
@@ -489,6 +503,7 @@ export async function seedRegistry(options: { force?: boolean } = {}): Promise<{
     }
   }
 
+  invalidateProviderRegistryCache();
   return {
     providers: { created: providersCreated, updated: providersUpdated },
     agents: { created: agentsCreated, updated: agentsUpdated },

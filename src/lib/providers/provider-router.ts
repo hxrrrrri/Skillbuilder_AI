@@ -17,6 +17,7 @@ import {
   resolveAgentConfig,
   type ResolvedAgentConfig,
 } from "./registry";
+import { providerCache } from "./cache";
 import type {
   AgentRole,
   LLMProvider,
@@ -489,6 +490,25 @@ export async function listProviderHealth(): Promise<ProviderHealth[]> {
 }
 
 export async function checkProviderReadinessForMode(mode: ExecutionMode): Promise<{
+  ok: boolean;
+  mode: ExecutionMode;
+  matrix: ProviderMatrix | null;
+  blockers: Array<{
+    providerId: ProviderId;
+    agentName?: string;
+    reason: string;
+    fix: string;
+    lastTestStatus?: string | null;
+    lastTestJsonOk?: boolean | null;
+  }>;
+}> {
+  // Cache per mode: a burst of analyze requests would otherwise re-run the full
+  // matrix selection (incl. provider availability probes) + a DB read each time.
+  // Busted by invalidateProviderRegistryCache on any provider/agent config write.
+  return providerCache.getOrLoad(`readiness:${mode}`, () => computeProviderReadinessForMode(mode));
+}
+
+async function computeProviderReadinessForMode(mode: ExecutionMode): Promise<{
   ok: boolean;
   mode: ExecutionMode;
   matrix: ProviderMatrix | null;

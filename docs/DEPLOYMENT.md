@@ -27,6 +27,60 @@ npm run test
 npm run build
 ```
 
+## Database: SQLite (dev) → Postgres (prod)
+
+Development stays on SQLite — `DATABASE_URL="file:./dev.db"` with `prisma/schema.prisma`. Nothing about the dev flow changes.
+
+Production should use Postgres. SQLite serializes writes, so a concurrent web process + out-of-process worker hit `SQLITE_BUSY: database is locked`. Postgres handles the concurrent writers. A second schema, `prisma/schema.postgres.prisma`, is kept byte-for-byte in sync with the SQLite schema except for `provider = "postgresql"`.
+
+Postgres provisioning steps (greenfield — no data is migrated):
+
+```bash
+# 1. Point at your managed Postgres instance.
+export DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/skillproof?schema=public&sslmode=require"
+
+# 2. (Optional) static sanity check of the Postgres schema.
+npm run db:validate:postgres
+
+# 3. Generate the Prisma client against the Postgres schema.
+#    Run this AFTER `npm install` — `postinstall` generates the SQLite client by
+#    default, so the Postgres generate must come last in the deploy build step.
+npm run db:generate:postgres
+
+# 4. Create the tables.
+npm run db:push:postgres
+
+# 5. (Optional) seed registry/users/prompts — writes through the client generated in step 3.
+npm run db:seed-users
+npm run db:seed-registry -- --force
+npm run db:seed-prompts
+
+# 6. Build and run.
+npm run build
+SKILLPROOF_WORKER_MODE=1 npm run start   # web
+SKILLPROOF_WORKER_MODE=1 npm run worker  # worker (separate process)
+```
+
+PowerShell equivalents for steps 1–4:
+
+```powershell
+$env:DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/skillproof?schema=public&sslmode=require"
+npm run db:validate:postgres
+npm run db:generate:postgres
+npm run db:push:postgres
+```
+
+Notes:
+
+- The SQLite schema (`prisma/schema.prisma`) and `prisma/dev.db` stay in the repo. Do not delete them; dev depends on them.
+- After editing models, change `prisma/schema.prisma` and copy the changes into `prisma/schema.postgres.prisma` (only the `provider` line should differ). `npm run db:validate:postgres` catches drift.
+- A managed Postgres + a shared rate-limit/log store (see below) is the path to running more than one web replica.
+
+## Operational Environment
+
+- Rate limiting (in-memory token bucket; per-route burst then linear refill). Defaults are sane; override per route via `RATE_LIMIT_<ROUTE>_MAX` and `RATE_LIMIT_<ROUTE>_WINDOW_MS` where `<ROUTE>` is `ANALYZE` (default 5 / 5 min), `REGISTER` (10 / 1 h, IP-keyed), `INTERVIEW` (30 / 5 min), `CHALLENGE` (15 / 5 min). Set `RATE_LIMIT_DISABLED=1` to turn limiting off. Buckets are per-process — move to Redis before scaling web replicas horizontally.
+- Logging: `LOG_LEVEL` (`debug|info|warn|error`; defaults `info` in production, `debug` otherwise) and `LOG_FORMAT` (`json|pretty`; defaults `json` in production, `pretty` otherwise).
+
 ## Worker Mode
 
 Recommended demo/production mode:
