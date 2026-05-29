@@ -58,10 +58,14 @@ const RISK_BADGE: Record<RiskLevel, string> = {
 };
 
 const SUGGESTED = [
-  "Read provider health",
-  "Set Claude CLI for all agents",
-  "Show recent failed runs",
-  "Generate setup diagnostics",
+  "Show students whose profiles have been created",
+  "List all public profiles with candidate details",
+  "Search candidates with completed runs",
+  "Give platform overview",
+  "Explain where student/profile data is stored",
+  "Explain SkillProof dataflow from verification run to public profile",
+  "Show candidates with score above 70",
+  "Show private profiles that are not published",
 ];
 
 function uid() {
@@ -73,6 +77,110 @@ function RiskBadge({ risk }: { risk: RiskLevel }) {
     <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide", RISK_BADGE[risk])}>
       {risk.replace("_", " ")}
     </span>
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function collectRoutes(value: unknown, out = new Set<string>()): string[] {
+  if (typeof value === "string" && value.startsWith("/") && !value.includes("[")) out.add(value);
+  else if (Array.isArray(value)) value.forEach((v) => collectRoutes(v, out));
+  else if (isRecord(value)) Object.values(value).forEach((v) => collectRoutes(v, out));
+  return Array.from(out);
+}
+
+function flattenForTable(value: unknown, prefix = ""): Record<string, string> {
+  if (!isRecord(value)) return { value: String(value ?? "—") };
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (raw === null || raw === undefined) continue;
+    const label = prefix ? `${prefix}.${key}` : key;
+    if (typeof raw === "string" || typeof raw === "number" || typeof raw === "boolean") {
+      out[label] = String(raw);
+    } else if (isRecord(raw)) {
+      for (const [childKey, childValue] of Object.entries(raw)) {
+        if (typeof childValue === "string" || typeof childValue === "number" || typeof childValue === "boolean") {
+          out[`${label}.${childKey}`] = String(childValue);
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function pickRows(data: unknown): unknown[] {
+  if (Array.isArray(data)) return data;
+  if (!isRecord(data)) return [];
+  if (Array.isArray(data.items)) return data.items;
+  if (isRecord(data.detail) && Array.isArray(data.detail.students)) return data.detail.students;
+  return [];
+}
+
+function ToolResultView({ toolResult }: { toolResult: { toolName: string; data: unknown } }) {
+  const data = toolResult.data as any;
+  const rows = pickRows(toolResult.data);
+  const noData = isRecord(data) && data.ok === true && (data.count === 0 || (Array.isArray(data.items) && data.items.length === 0));
+  const flattened = rows.slice(0, 8).map((r) => flattenForTable(r));
+  const headers = Array.from(new Set(flattened.flatMap((r) => Object.keys(r)))).slice(0, 8);
+  const routes = collectRoutes(toolResult.data);
+
+  return (
+    <div className="rounded-md border border-border bg-bg/40 px-3 py-2 text-[12px]">
+      <div className="flex flex-wrap items-center gap-2 text-muted">
+        <span>tool used</span>
+        <code className="text-ink">{toolResult.toolName}</code>
+        {typeof data?.count === "number" && <span>· {data.count} result{data.count === 1 ? "" : "s"}</span>}
+      </div>
+
+      {noData && <p className="mt-2 rounded border border-zinc-600/40 bg-zinc-700/10 px-2 py-1 text-muted">No matching data found.</p>}
+
+      {headers.length > 0 && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full text-left text-[11px]">
+            <thead>
+              <tr className="border-b border-border text-muted">
+                {headers.map((h) => (
+                  <th key={h} className="max-w-[10rem] truncate py-1 pr-3 font-medium">
+                    {h.replace(/^candidate\./, "").replace(/^profile\./, "profile ")}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {flattened.map((row, i) => (
+                <tr key={i}>
+                  {headers.map((h) => (
+                    <td key={h} className="max-w-[12rem] truncate py-1 pr-3 text-ink" title={row[h]}>
+                      {row[h] ?? "—"}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {rows.length > 8 && <p className="mt-1 text-[11px] text-muted">Showing first 8 structured rows.</p>}
+        </div>
+      )}
+
+      {routes.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {routes.slice(0, 12).map((route) => (
+            <a key={route} href={route} className="rounded border border-border bg-panel2 px-1.5 py-0.5 font-mono text-[10px] text-accent hover:border-accent/60">
+              {route}
+            </a>
+          ))}
+        </div>
+      )}
+
+      <details className="mt-2">
+        <summary className="cursor-pointer text-muted">JSON debug</summary>
+        <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-[11px] text-ink">
+          {JSON.stringify(toolResult.data, null, 2)}
+        </pre>
+      </details>
+    </div>
   );
 }
 
@@ -327,16 +435,7 @@ export function CopilotConsole({ role }: { role: string }) {
                   </div>
                 )}
 
-                {m.toolResult && (
-                  <details className="rounded-md border border-border bg-bg/40 px-3 py-2 text-[12px]">
-                    <summary className="cursor-pointer text-muted">
-                      tool result · <code className="text-ink">{m.toolResult.toolName}</code>
-                    </summary>
-                    <pre className="mt-2 max-h-56 overflow-auto whitespace-pre-wrap text-[11px] text-ink">
-                      {JSON.stringify(m.toolResult.data, null, 2)}
-                    </pre>
-                  </details>
-                )}
+                {m.toolResult && <ToolResultView toolResult={m.toolResult} />}
 
                 {m.proposal && (
                   <ProposalCard

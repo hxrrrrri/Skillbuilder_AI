@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => {
       chatToolCall: { create: vi.fn(async () => ({ id: "tc1" })), update: vi.fn(async () => ({})), findUnique: vi.fn() },
       chatActionApproval: { create: vi.fn(async () => ({})), update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({})) },
       auditLog: { count: vi.fn(async () => 0), deleteMany: vi.fn(async () => ({ count: 0 })) },
+      publicProfile: { findMany: vi.fn(async () => []) },
     },
   };
 });
@@ -111,6 +112,45 @@ describe("runCopilotTurn — read tools", () => {
       expect.objectContaining({ data: expect.objectContaining({ status: "executed", riskLevel: "read" }) }),
     );
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(expect.objectContaining({ action: "admin_copilot.read_tool" }));
+  });
+
+  it("maps 'students whose profiles have been created' to list_students_with_profiles and summarizes the result", async () => {
+    mocks.prisma.publicProfile.findMany.mockResolvedValue([
+      {
+        id: "profile_1",
+        slug: "ada-lovelace-backend",
+        visibility: "public",
+        createdAt: new Date("2026-05-01T10:00:00Z"),
+        owner: { id: "u1", email: "student@x.dev" },
+        candidate: { id: "cand_1", name: "Ada Lovelace", email: "ada@example.com", githubUsername: "ada", cohortMemberships: [] },
+        run: {
+          id: "run_1",
+          status: "completed",
+          targetRole: "Backend Engineer",
+          overallScore: 91,
+          verificationLevel: "repo_interview_verified",
+          completedAt: new Date("2026-05-01T09:00:00Z"),
+          tenant: { id: "tenant_1", name: "Skill College", kind: "college" },
+          repository: { owner: "ada", repoName: "api", repoUrl: "https://github.com/ada/api" },
+          scores: [{ skillName: "Testing", score: 96, scoreSource: "terminal" }],
+        },
+      },
+    ] as any);
+    mocks.setEnvelope({ reply: "I can help with profiles.", tool_request: null });
+
+    const res = await runCopilotTurn({
+      user: admin,
+      mode: "admin",
+      sessionId: "s1",
+      message: "Give me the details of the students whose profiles have been created in the platform.",
+    });
+
+    expect(res.toolResult?.toolName).toBe("list_students_with_profiles");
+    expect(res.reply).toContain("Ada Lovelace");
+    expect(res.reply).toContain("/profile/ada-lovelace-backend");
+    expect(mocks.prisma.chatToolCall.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ toolName: "list_students_with_profiles", status: "executed" }) }),
+    );
   });
 });
 

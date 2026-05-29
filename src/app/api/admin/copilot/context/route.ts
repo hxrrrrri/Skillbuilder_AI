@@ -6,6 +6,7 @@ import {
 } from "@/lib/providers/registry";
 import { checkProviderReadinessForMode } from "@/lib/providers/provider-router";
 import { buildCopilotContext } from "@/lib/copilot/context";
+import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,27 @@ export async function GET(req: Request) {
       listProviderConfigs,
       listAgentConfigs,
       checkReadiness: (m) => checkProviderReadinessForMode(m),
+      platformOverviewSnapshot,
     },
   );
   return NextResponse.json({ context });
+}
+
+async function platformOverviewSnapshot() {
+  const [usersByRole, candidates, profilesByVisibility, runsByStatus, tenantsByKind, cohorts] = await Promise.all([
+    prisma.user.groupBy({ by: ["role"], _count: { _all: true } } as any),
+    prisma.candidate.count(),
+    prisma.publicProfile.groupBy({ by: ["visibility"], _count: { _all: true } } as any),
+    prisma.analysisRun.groupBy({ by: ["status"], _count: { _all: true } } as any),
+    prisma.tenant.groupBy({ by: ["kind"], _count: { _all: true } } as any),
+    prisma.cohort.count(),
+  ]);
+  return {
+    usersByRole: Object.fromEntries((usersByRole as any[]).map((r) => [r.role, r._count._all])),
+    candidates,
+    profilesByVisibility: Object.fromEntries((profilesByVisibility as any[]).map((r) => [r.visibility, r._count._all])),
+    runsByStatus: Object.fromEntries((runsByStatus as any[]).map((r) => [r.status, r._count._all])),
+    tenantsByKind: Object.fromEntries((tenantsByKind as any[]).map((r) => [r.kind, r._count._all])),
+    cohorts,
+  };
 }

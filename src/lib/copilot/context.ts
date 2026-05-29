@@ -31,17 +31,39 @@ export const ROUTE_MAP: Array<{ route: string; purpose: string; roles: string }>
   { route: "/admin/agents", purpose: "Per-agent provider/model/reasoning", roles: "admin" },
   { route: "/admin/prompts", purpose: "Prompt versions (create/activate)", roles: "admin" },
   { route: "/admin/runs", purpose: "Inspect runs, failures, evidence", roles: "admin" },
+  { route: "/admin/profiles", purpose: "Moderate profile visibility and inspect profile-linked candidates/runs", roles: "admin" },
+  { route: "/admin/users", purpose: "Search all users by role/status/tenant", roles: "admin" },
+  { route: "/admin/users/[id]", purpose: "Inspect one user with memberships, runs, and profiles", roles: "admin" },
+  { route: "/admin/tenants", purpose: "Manage tenant records", roles: "admin" },
+  { route: "/admin/tenants/[id]", purpose: "Inspect one tenant, memberships, cohorts, and scoped activity", roles: "admin" },
   { route: "/admin/evidence", purpose: "Evidence findings", roles: "admin" },
   { route: "/admin/audit-logs", purpose: "Audit trail", roles: "admin" },
   { route: "/admin/copilot", purpose: "Command Copilot (this assistant)", roles: "admin" },
+  { route: "/college/students/[id]", purpose: "Tenant-scoped student detail with runs, profiles, skill trajectory, and improvement plan", roles: "college" },
+  { route: "/college/cohorts/[id]", purpose: "Tenant-scoped cohort roster, invites, student runs, and best scores", roles: "college" },
+  { route: "/profile/[slug]", purpose: "Public/shared/private profile page backed by PublicProfile and AnalysisRun", roles: "public" },
 ];
 
-export const SCHEMA_SUMMARY = `Key models: User(role), Tenant, AnalysisRun(status, scores, evidence, ownershipStatus,
-providerMatrix, verificationLevel), SkillScore(score, scoreSource incl. not_measured), EvidenceFinding
-(candidateSafe/employerSafe/publicSafe/adminOnly, redactedText), TerminalCommandRun(stdoutSummary —
-summaries only), InterviewQuestion, OwnershipChallenge, PublicProfile(visibility), ProviderConfig,
-AgentConfig, PromptVersion, AuditLog. Copilot models: ChatSession, ChatMessage, ChatToolCall,
-ChatActionApproval, ChatKnowledgeSource.`;
+export const SCHEMA_SUMMARY = `SkillProof data dictionary:
+- User: account, RBAC role, status, optional githubUsername, primaryTenantId, tenant memberships, created runs, and owned PublicProfiles. passwordHash/session/account tokens are never exposed.
+- Candidate: student/candidate identity; optionally linked one-to-one to User; owns Repository, AnalysisRun, PublicProfile, CohortStudent, and reverification rows.
+- Repository: candidate GitHub repository metadata (owner, repoName, repoUrl, language/framework) used by AnalysisRun.
+- AnalysisRun: one verification workflow for a candidate/repo/targetRole; stores status, tenant, overallScore, roleFit, verificationLevel, providerMatrix, ownershipStatus, terminalEvidence summaries, profileSummary, improvementPlan, employerVerifier, authenticitySignals, completedAt.
+- SkillScore: per-run skill scores with scoreSource including llm, terminal, github_api, local_clone, interview, challenge, deterministic, and not_measured.
+- EvidenceFinding: per-run evidence claims with safe flags (candidateSafe/employerSafe/publicSafe/adminOnly), redactedText, file/commit references, confidence, rawTextHash; never raw private traces.
+- PublicProfile: profile slug, visibility public|unlisted|private, candidateId, ownerUserId, runId, includeTerminalProof, cached interviewKit.
+- Tenant / TenantMembership: college/employer/platform organizations and user memberships.
+- Cohort / CohortStudent / TenantInvite: college roster and invite data tied to Candidate rows.
+- ProviderConfig / AgentConfig / PromptVersion: admin-managed AI provider, evaluator-agent, and prompt registry.
+- ChatSession / ChatMessage / ChatToolCall / ChatActionApproval / ChatKnowledgeSource: copilot transcript, tool execution, approval, and knowledge metadata.
+- AuditLog: admin/security actions and tool usage audit trail.`;
+
+export const ADMIN_DATA_CAPABILITIES_SUMMARY = `Admin Intelligence Copilot data capabilities:
+- Can read platform overview counts, users, candidates/students, profiles, runs, scores, repositories, tenants, cohorts, provider readiness, agents, prompts, audit-log metadata, and safe evidence summaries through typed server-side tools.
+- Can answer "students whose profiles have been created" with list_students_with_profiles without requiring candidateId/profileId/runId.
+- Can explain where data is stored (explain_data_model), how verification data flows to profiles (explain_project_architecture), and which routes/files implement a feature (explain_route_or_feature).
+- Cannot read raw .env, secrets, account/session tokens, raw provider outputs, raw terminal logs, raw model traces, raw prompts, private keys, arbitrary SQL, or arbitrary shell output.
+- Read tools execute immediately and are audited. Write/sensitive/destructive tools require approval gates.`;
 
 export const ROLE_PERMISSIONS_SUMMARY = `RBAC: candidates mutate only their own runs/proof; employers consume
 PublicProfiles only (no run-level access); college members read runs within their tenant; admin/super_admin
@@ -118,6 +140,8 @@ export type CopilotContext = {
   roleGuidance: { role: string; steps: string[] };
   rolePermissions?: string;
   schemaSummary?: string;
+  adminDataCapabilities?: string;
+  platformOverviewSnapshot?: unknown;
   providerRegistry?: unknown; // admin only, redacted
 };
 
@@ -125,6 +149,7 @@ type RegistrySnapshotDeps = {
   listProviderConfigs: () => Promise<any[]>;
   listAgentConfigs: () => Promise<any[]>;
   checkReadiness: (mode: "api" | "cli" | "hybrid" | "local") => Promise<any>;
+  platformOverviewSnapshot?: () => Promise<unknown>;
 };
 
 /**
@@ -153,14 +178,19 @@ export async function buildCopilotContext(
 
   base.rolePermissions = ROLE_PERMISSIONS_SUMMARY;
   base.schemaSummary = SCHEMA_SUMMARY;
+  base.adminDataCapabilities = ADMIN_DATA_CAPABILITIES_SUMMARY;
 
   if (deps) {
     try {
-      const [providers, agents, readiness] = await Promise.all([
+      const [providers, agents, readiness, platformOverviewSnapshot] = await Promise.all([
         deps.listProviderConfigs(),
         deps.listAgentConfigs(),
         deps.checkReadiness("api").catch(() => null),
+        deps.platformOverviewSnapshot?.().catch(() => null) ?? Promise.resolve(null),
       ]);
+      if (platformOverviewSnapshot) {
+        base.platformOverviewSnapshot = redactDeep(platformOverviewSnapshot);
+      }
       base.providerRegistry = redactDeep({
         providers: providers.map((p) => ({
           providerId: p.providerId,

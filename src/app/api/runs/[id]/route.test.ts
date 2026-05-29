@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   getCurrentUser: vi.fn(),
@@ -109,6 +109,8 @@ const fullRun = {
   ],
 };
 
+const originalWorkerMode = process.env.SKILLPROOF_WORKER_MODE;
+
 function primeRunLookup() {
   mocks.prisma.analysisRun.findUnique.mockImplementation(async (args: any) => {
     if (args.select) return accessRow;
@@ -119,8 +121,17 @@ function primeRunLookup() {
 describe("/api/runs/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete (process.env as Record<string, string | undefined>).SKILLPROOF_WORKER_MODE;
     mocks.writeAuditLog.mockResolvedValue(undefined);
     primeRunLookup();
+  });
+
+  afterEach(() => {
+    if (originalWorkerMode === undefined) {
+      delete (process.env as Record<string, string | undefined>).SKILLPROOF_WORKER_MODE;
+    } else {
+      (process.env as Record<string, string | undefined>).SKILLPROOF_WORKER_MODE = originalWorkerMode;
+    }
   });
 
   it("returns 401 to anonymous callers without loading the full run", async () => {
@@ -163,6 +174,43 @@ describe("/api/runs/[id]", () => {
     expect(data.progress).toEqual({ completed: 1, total: 1 });
     expect(data.processing_mode).toBe("in_process");
     expect(data.terminal_summary.total).toBe(0);
+  });
+
+  it("surfaces an unclaimed worker-mode run instead of leaving candidates on endless loading", async () => {
+    (process.env as Record<string, string | undefined>).SKILLPROOF_WORKER_MODE = "1";
+    mocks.getCurrentUser.mockResolvedValue({ id: "owner-1", role: "candidate", tenantIds: [] });
+    mocks.prisma.analysisRun.findUnique.mockImplementation(async (args: any) => {
+      if (args.select) return accessRow;
+      return {
+        ...fullRun,
+        status: "pending",
+        statusMessage: "Queued for out-of-process worker.",
+        workerId: null,
+        heartbeatAt: null,
+        attemptCount: 0,
+        maxAttempts: 3,
+        events: fullRun.events.map((event) => ({
+          ...event,
+          status: "pending",
+          startedAt: null,
+          completedAt: null,
+        })),
+      };
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(req(), { params: { id: "r1" } });
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.processing_mode).toBe("worker");
+    expect(data.worker_status).toMatchObject({
+      state: "unclaimed",
+      worker_id: null,
+      attempt_count: 0,
+      max_attempts: 3,
+    });
+    expect(data.worker_status.detail).toContain("npm run worker");
   });
 
   it("returns the full admin payload only to admins", async () => {

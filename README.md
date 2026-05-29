@@ -10,7 +10,7 @@ The product policy is strict: real providers only, no silent fallback, no fabric
 - Candidate: starts verification runs, completes own-code interviews and AI-collaboration challenges, saves terminal proof, publishes profiles, manages visibility.
 - Employer: searches public/shared profiles, compares candidates, builds interview kits, ranks role fit, downloads public-safe reports.
 - College: manages tenant-scoped students, cohorts, readiness, skill gaps, reports, and expiring employer-share links.
-- Admin: manages users, tenants, runs, evidence, providers, agents, prompts, rubrics, security policy, audit logs, billing rows, and platform settings.
+- Admin: manages users, tenants, runs, evidence, providers, agents, prompts, rubrics, security policy, audit logs, billing rows, platform settings, and the Admin Intelligence Copilot for real platform data questions.
 
 ## Setup
 
@@ -121,6 +121,26 @@ Open `/admin/providers/health` after seeding the registry.
 Every provider health row shows enabled state, installation/auth state, version, configured model, available models where known, JSON contract result, non-interactive support, model/reasoning support, last test time, latency, raw output preview, last error, fix instructions, and a Run test action.
 
 Mission start checks required providers before creating a run. A blocked start returns `provider_not_ready` with exact blockers and setup instructions.
+
+## Admin Intelligence Copilot
+
+Open `/admin/copilot` as an admin or super_admin. The copilot uses typed, audited, server-side tools over the real Prisma data model, so it can answer questions such as:
+
+- "Show students whose profiles have been created"
+- "List all public profiles with candidate details"
+- "Search candidates with completed runs"
+- "Give platform overview"
+- "Explain where student/profile data is stored"
+- "Explain SkillProof dataflow from verification run to public profile"
+
+Read-only admin data tools execute immediately and return redacted structured data plus a readable summary. Write/sensitive/destructive actions still require the existing approval gates; forbidden requests such as `.env`, arbitrary SQL, arbitrary shell, secret reveal, fabricated evidence, or publish-gate bypass are refused.
+
+Demo step:
+
+1. Login as `admin@skillproof.dev`.
+2. Go to `/admin/copilot`.
+3. Ask: `Show students whose profiles have been created`.
+4. The copilot returns real profile-linked student/candidate data with profile slug, visibility, repository, score, run status, role, created date, and routes.
 
 ## CLI Setup
 

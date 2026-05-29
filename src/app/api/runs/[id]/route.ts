@@ -9,6 +9,8 @@ import { isAdminRole } from "@/lib/auth/roles";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const DEFAULT_WORKER_STUCK_AFTER_MS = 5 * 60_000;
+
 /** Best-effort extraction of caller IP from a Next.js Request. */
 function getRequestIp(req: Request): string | null {
   const fwd = req.headers.get("x-forwarded-for");
@@ -205,6 +207,8 @@ function buildAdminRunPayload(run: any) {
     execution_mode: run.executionMode,
     terminal_evidence: safeJsonParse(run.terminalEvidence, []),
     provider_matrix: safeJsonParse(run.providerMatrix, null),
+    processing_mode: currentProcessingMode(),
+    worker_status: buildWorkerStatus(run),
     ownership_status: safeJsonParse(run.ownershipStatus, null),
     mock_mode: run.executionMode === "mock" || run.scores.some((s: any) => ["mock", "heuristic"].includes(s.scoreSource)),
     created_at: run.createdAt,
@@ -332,10 +336,8 @@ function buildLimitedRunPayload(
     profile_summary: safeJsonParse(run.profileSummary, null),
     execution_mode: run.executionMode,
     provider_matrix: providerMatrix,
-    processing_mode:
-      process.env.SKILLPROOF_WORKER_MODE === "1" || process.env.NODE_ENV === "production"
-        ? "worker"
-        : "in_process",
+    processing_mode: currentProcessingMode(),
+    worker_status: buildWorkerStatus(run),
     terminal_summary: summarizeTerminalEvidence(terminalEvidence),
     terminal_evidence: isCandidateView ? terminalEvidence.map(sanitizeTerminalEvidence) : [],
     ownership_status: ownershipStatus,
@@ -352,6 +354,88 @@ function buildLimitedRunPayload(
     mock_mode: run.executionMode === "mock" || run.scores.some((s: any) => ["mock", "heuristic"].includes(s.scoreSource)),
     created_at: run.createdAt,
     completed_at: run.completedAt,
+  };
+}
+
+function currentProcessingMode(): "worker" | "in_process" {
+  return process.env.SKILLPROOF_WORKER_MODE === "1" || process.env.NODE_ENV === "production"
+    ? "worker"
+    : "in_process";
+}
+
+function buildWorkerStatus(run: any) {
+  if (currentProcessingMode() !== "worker") return null;
+
+  const attemptCount = Number(run.attemptCount ?? 0);
+  const maxAttempts = Number(run.maxAttempts ?? 3);
+  const heartbeatAt = run.heartbeatAt ?? null;
+  const workerId = run.workerId ?? null;
+  const staleAfterMs = Number(process.env.SKILLPROOF_WORKER_STUCK_AFTER_MS ?? DEFAULT_WORKER_STUCK_AFTER_MS);
+  const heartbeatMs = heartbeatAt ? new Date(heartbeatAt).getTime() : null;
+  const heartbeatAgeMs = heartbeatMs ? Date.now() - heartbeatMs : null;
+
+  if (run.status === "completed") {
+    return {
+      state: "completed",
+      worker_id: workerId,
+      heartbeat_at: heartbeatAt,
+      heartbeat_age_ms: heartbeatAgeMs,
+      attempt_count: attemptCount,
+      max_attempts: maxAttempts,
+      detail: "The worker completed this mission.",
+    };
+  }
+
+  if (run.status === "failed") {
+    return {
+      state: "failed",
+      worker_id: workerId,
+      heartbeat_at: heartbeatAt,
+      heartbeat_age_ms: heartbeatAgeMs,
+      attempt_count: attemptCount,
+      max_attempts: maxAttempts,
+      detail: run.statusMessage || run.lastFailureReason || "The worker marked this mission failed.",
+    };
+  }
+
+  if (run.status === "pending") {
+    const retrying = !!workerId || attemptCount > 0;
+    return {
+      state: retrying ? "queued_retry" : "unclaimed",
+      worker_id: workerId,
+      heartbeat_at: heartbeatAt,
+      heartbeat_age_ms: heartbeatAgeMs,
+      attempt_count: attemptCount,
+      max_attempts: maxAttempts,
+      detail: retrying
+        ? "The previous worker attempt did not finish. Keep `npm run worker` running; it will retry this queued mission."
+        : "No worker has claimed this run yet. Start `npm run worker` in a second terminal with SKILLPROOF_WORKER_MODE=1.",
+    };
+  }
+
+  if (run.status === "running" || run.status === "in_progress") {
+    const stale = !heartbeatAt || (heartbeatAgeMs != null && heartbeatAgeMs > staleAfterMs);
+    return {
+      state: stale ? "stale" : "active",
+      worker_id: workerId,
+      heartbeat_at: heartbeatAt,
+      heartbeat_age_ms: heartbeatAgeMs,
+      attempt_count: attemptCount,
+      max_attempts: maxAttempts,
+      detail: stale
+        ? "The worker claim heartbeat is stale. Restart `npm run worker`; stale claims are recovered back to pending for retry."
+        : "A worker has claimed this mission and is sending heartbeats.",
+    };
+  }
+
+  return {
+    state: "unknown",
+    worker_id: workerId,
+    heartbeat_at: heartbeatAt,
+    heartbeat_age_ms: heartbeatAgeMs,
+    attempt_count: attemptCount,
+    max_attempts: maxAttempts,
+    detail: run.statusMessage || "Worker state is unknown.",
   };
 }
 

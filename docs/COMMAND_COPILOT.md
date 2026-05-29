@@ -1,6 +1,6 @@
-# SkillProof Command Copilot
+# SkillProof Admin Intelligence Copilot
 
-A secure, provider-powered AI assistant built into SkillProof AI. It has two surfaces that share one provider system, one knowledge layer, and one permission model.
+A secure, provider-powered AI assistant built into SkillProof AI. The admin surface is now an **Admin Intelligence Copilot**: it can answer operational questions from real Prisma data, explain the project architecture, and safely propose approved changes through typed tools.
 
 ## Surfaces
 
@@ -11,11 +11,12 @@ A floating help button available across the app (`src/components/copilot/help-as
 - Answers product-usage questions, cites project docs, and guides users to the right route.
 - **Never** exposes admin-only data, raw prompts, raw model output, raw terminal logs, raw evidence, private answers, cross-role/tenant data, or secrets. It can only summarize the **current user's own** visible data.
 
-### 2. Admin Command Copilot (`mode: admin`)
+### 2. Admin Intelligence Copilot (`mode: admin`)
 A full-page command center at **`/admin/copilot`** (admin / super_admin only; non-admins get 403/redirect). Nav link: **Command Copilot**.
 
 - Left: session history · Main: chat · Right: tools registry + pending approvals.
 - Shows provider/model used, current role, risk badges, the tool-execution timeline, before/after diffs, and audit metadata after execution.
+- For real platform data questions, the model must request a typed read tool. The server executes the Prisma query and the final reply is grounded in returned tool data.
 
 ## Provider integration — no fake fallback
 
@@ -53,7 +54,20 @@ For `write_safe` / `write_sensitive` / `destructive` tools:
 
 ## Tool registry (highlights)
 
-Read: `read_provider_health`, `read_provider_configs`, `read_agent_configs`, `read_run_status`, `read_failed_runs`, `read_run_evidence_summary`, `explain_publish_gate_failure`, `read_prompt_versions`, `read_rubric_config`, `read_audit_logs`, `read_demo_checklist`, `generate_setup_diagnostics`, `summarize_public_safe_profile`, `summarize_admin_run_report`.
+Admin data read tools execute immediately and return structured JSON (`ok`, `query`, `count`, `items`/`detail`, `routes`, `notes`) with secret redaction:
+
+- `read_platform_overview`: users by role, candidates, profile visibility, run status, tenant kind, cohort count, recent runs/profiles, provider readiness.
+- `search_users_admin`: user identity, role/status, GitHub username, tenant memberships, run/profile counts.
+- `search_candidates_admin`: candidate/student search with profile/run filters, cohort/tenant filters, score filters, repositories, latest run, best score, profile links.
+- `list_students_with_profiles`: profile-linked students/candidates without needing IDs; includes candidate, owner, tenant/cohort, profile slug/visibility, run, repo, score, skills, and routes.
+- `get_student_profile_admin`: deep detail by candidateId, email, GitHub username, or profile slug.
+- `list_profiles_admin` / `get_profile_admin`: profile metadata, candidate/owner, run, repo, scores, safe evidence summary, publish-gate blockers.
+- `read_cohorts_admin` / `read_cohort_students_admin`: cohorts, roster, invites, readiness stats, latest runs, best scores, profiles, skill gaps.
+- `explain_data_model`: deterministic Prisma data dictionary.
+- `explain_project_architecture`: deterministic architecture/workflow/dataflow explanation.
+- `explain_route_or_feature`: route-to-files/models/access map.
+
+Operational read tools: `read_provider_health`, `read_provider_configs`, `read_agent_configs`, `read_run_status`, `read_failed_runs`, `read_run_evidence_summary`, `explain_publish_gate_failure`, `read_prompt_versions`, `read_rubric_config`, `read_audit_logs`, `read_demo_checklist`, `generate_setup_diagnostics`, `summarize_public_safe_profile`, `summarize_admin_run_report`.
 
 Write: `update_agent_config` (safe), `create_prompt_version` (safe), `activate_prompt_version` (safe), `update_provider_config` (sensitive), `set_agent_enabled` (sensitive), **`bulk_set_agent_provider`** (sensitive), `purge_old_audit_logs` (destructive).
 
@@ -80,6 +94,7 @@ Deterministic, no external embeddings (`src/lib/copilot/knowledge.ts`): a fixed 
 - All chat inputs validated with **zod**; all admin tools enforce **server-side RBAC**; client role claims are never trusted.
 - All tool calls are server-side and logged (`ChatToolCall` + `AuditLog`).
 - Secrets are redacted everywhere (`src/lib/copilot/redaction.ts`): secret-named keys, secret-shaped values, and literal env values are masked before anything reaches a prompt or response. Raw `.env`, keys, and raw logs are never included.
+- Admin data tools do not expose password hashes, session/account tokens, API key values, raw provider output, raw terminal logs, raw prompts, raw model traces, raw private evidence text, or arbitrary SQL/shell results.
 - Tenant scoping and per-user data scoping apply to help-mode tools.
 - Rate limiting on `/api/chat` via the shared token-bucket limiter (`RATE_LIMITS.chat`).
 - Prompt-injection resistance: retrieved docs/data are untrusted; the user cannot override system/tool policy; forbidden tools never run; requests to reveal secrets or bypass gates are refused.
@@ -107,14 +122,24 @@ Deterministic, no external embeddings (`src/lib/copilot/knowledge.ts`): a fixed 
 
 Help: *"How do I use SkillProof AI?"*, *"How do I prove I own my repo?"*, *"What does not_measured mean?"*, *"How do I publish my profile?"*
 
-Admin: *"Read provider health"*, *"Set Claude CLI for all agents"*, *"Show recent failed runs"*, *"Why can't run X publish?"*, *"Generate setup diagnostics"*, *"Create a new prompt version for the validator"*.
+Admin data: *"Show students whose profiles have been created"*, *"List all public profiles with candidate details"*, *"Search candidates with completed runs"*, *"Show candidates with score above 70"*, *"Give platform overview"*, *"Explain where student/profile data is stored"*, *"Explain SkillProof dataflow from verification run to public profile"*.
+
+Admin operations: *"Read provider health"*, *"Set Claude CLI for all agents"*, *"Show recent failed runs"*, *"Why can't run X publish?"*, *"Generate setup diagnostics"*, *"Create a new prompt version for the validator"*.
+
+Expected behavior:
+
+- Real data questions call a read tool and summarize the returned rows with IDs/routes.
+- Read-only admin data tools execute immediately and are audited.
+- Write, sensitive write, and destructive actions create approval proposals instead of mutating immediately.
+- Secret or arbitrary SQL/shell requests are refused.
 
 ## Demo script
 
 1. Open the floating Help Assistant on the candidate dashboard → ask *"How do I use SkillProof AI?"* → role-aware steps with doc citations.
 2. Go to **Admin → Command Copilot**.
-3. *"Read provider health"* → executes immediately (read), shows a redacted health table.
-4. *"Set Claude CLI for all agents"* →
+3. *"Show students whose profiles have been created"* → executes `list_students_with_profiles`, then returns real profile-linked candidate/student data with profile slug, visibility, repo, score, run status, role, created date, and routes.
+4. *"Read provider health"* → executes immediately (read), shows a redacted health table.
+5. *"Set Claude CLI for all agents"* →
    - If Claude CLI is healthy: a **write_sensitive proposal** appears with a before/after diff for every enabled agent. Click **Approve** → agents updated, audit entry written, affected count returned.
    - If not healthy: a `provider_not_ready` message with the fix and the health link — nothing changes.
-5. *"Print the .env"* → refused (forbidden).
+6. *"Print the .env"* → refused (forbidden).

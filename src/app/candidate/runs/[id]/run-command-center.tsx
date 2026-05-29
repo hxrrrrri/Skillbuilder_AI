@@ -90,6 +90,15 @@ type RunPayload = {
   execution_mode: string;
   provider_matrix: any | null;
   processing_mode: "worker" | "in_process";
+  worker_status: {
+    state: "unclaimed" | "queued_retry" | "active" | "stale" | "failed" | "completed" | "unknown";
+    worker_id: string | null;
+    heartbeat_at: string | null;
+    heartbeat_age_ms: number | null;
+    attempt_count: number;
+    max_attempts: number;
+    detail: string;
+  } | null;
   terminal_summary: { total: number; passed: number; failed: number; skipped: number; by_use: Record<string, any> };
   terminal_evidence: Array<any>;
   ownership_status: any | null;
@@ -223,6 +232,18 @@ export function RunCommandCenter({ runId }: { runId: string }) {
               tone="warn"
               title="Local in-process fallback"
               detail="This run is being processed by the web process. For demo and production, set SKILLPROOF_WORKER_MODE=1 and run `npm run worker`."
+            />
+          </CardBody>
+        </Card>
+      )}
+
+      {run?.processing_mode === "worker" && run.status !== "completed" && run.worker_status && run.worker_status.state !== "active" && (
+        <Card className={cn(run.worker_status.state === "stale" || run.worker_status.state === "failed" ? "border-bad/35 bg-bad/5" : "border-warn/35 bg-warn/5")}>
+          <CardBody>
+            <StateNotice
+              tone={run.worker_status.state === "stale" || run.worker_status.state === "failed" ? "bad" : "warn"}
+              title={workerStatusTitle(run.worker_status.state)}
+              detail={`${run.worker_status.detail} Attempts ${run.worker_status.attempt_count}/${run.worker_status.max_attempts}.`}
             />
           </CardBody>
         </Card>
@@ -865,4 +886,14 @@ function StateNotice({ title = "No data yet", detail, tone = "default" }: { titl
       <span className="font-semibold text-ink">{title}.</span> {detail}
     </div>
   );
+}
+
+function workerStatusTitle(state: NonNullable<RunPayload["worker_status"]>["state"]) {
+  if (state === "unclaimed") return "Worker not running";
+  if (state === "queued_retry") return "Queued for retry";
+  if (state === "stale") return "Worker heartbeat stale";
+  if (state === "failed") return "Worker failed";
+  if (state === "completed") return "Worker completed";
+  if (state === "active") return "Worker active";
+  return "Worker status unknown";
 }
