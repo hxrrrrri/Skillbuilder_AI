@@ -28,14 +28,59 @@ export async function GET(req: Request) {
     resolvedRunId = row.runId;
   }
 
+  // Select only what buildMarkdownReport (RunBundle) + the access checks below
+  // read — AnalysisRun carries large JSON columns (contextPack, etc.) the report
+  // never uses.
   const run = await prisma.analysisRun.findUnique({
     where: { id: resolvedRunId! },
-    include: {
-      candidate: true,
-      repository: true,
-      scores: true,
-      questions: true,
-      profiles: { where: { visibility: { in: ["public", "unlisted"] } }, take: 1 },
+    select: {
+      id: true,
+      status: true,
+      overallScore: true,
+      roleFit: true,
+      verificationLevel: true,
+      targetRole: true,
+      candidateLevel: true,
+      validationContract: true,
+      validationCoverage: true,
+      validationSummary: true,
+      repoIntelligence: true,
+      authenticitySignals: true,
+      improvementPlan: true,
+      employerVerifier: true,
+      profileSummary: true,
+      aiCollaboration: true,
+      executionMode: true,
+      terminalEvidence: true,
+      providerMatrix: true,
+      ownershipStatus: true,
+      createdAt: true,
+      completedAt: true,
+      createdByUserId: true,
+      candidateId: true,
+      tenantId: true,
+      candidate: { select: { name: true, githubUsername: true, userId: true } },
+      repository: { select: { owner: true, repoName: true, repoUrl: true } },
+      scores: {
+        select: { skillName: true, score: true, confidence: true, scoreSource: true, evidence: true, validatorNotes: true },
+      },
+      questions: {
+        select: {
+          question: true,
+          sourceFile: true,
+          lineStart: true,
+          lineEnd: true,
+          answer: true,
+          answerScore: true,
+          feedback: true,
+          dimensionScores: true,
+        },
+      },
+      profiles: {
+        where: { visibility: { in: ["public", "unlisted"] } },
+        take: 1,
+        select: { id: true, visibility: true, ownerUserId: true, includeTerminalProof: true },
+      },
     },
   });
   if (!run) return NextResponse.json({ error: "not_found" }, { status: 404 });

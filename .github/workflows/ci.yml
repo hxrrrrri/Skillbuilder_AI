@@ -2,10 +2,25 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
+# Cancel superseded runs on the same ref to keep CI fast.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Deterministic, secret-free env for build/test. SQLite keeps CI hermetic.
+  DATABASE_URL: "file:./prisma/dev.db"
+  NEXTAUTH_URL: "http://127.0.0.1:3100"
+  NEXTAUTH_SECRET: "ci-not-a-secret"
+  ANTHROPIC_API_KEY: "sk-ant-ci-dummy"
+
 jobs:
-  check:
+  # Mirrors the release-certification sequence in docs/DEPLOYMENT.md.
+  verify:
+    name: typecheck · lint · test · build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,8 +28,42 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - run: npm install
-      - run: npm run db:generate
-      - run: npm run typecheck
-      - run: npm run test
-      - run: npm run build
+      - name: Install
+        run: npm ci
+      - name: Prisma generate
+        run: npm run db:generate
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Lint
+        run: npm run lint
+      - name: Unit tests
+        run: npm run test
+      - name: Build
+        run: npm run build
+
+  # E2E smoke against `next dev` with the seeded demo SQLite DB. Cheap: one
+  # browser, one worker. globalSetup seeds via `npm run setup:e2e`.
+  e2e:
+    name: e2e smoke (playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Prisma generate
+        run: npm run db:generate
+      - name: Install Playwright browser
+        run: npm run e2e:install
+      - name: Run E2E smoke
+        run: npm run e2e
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

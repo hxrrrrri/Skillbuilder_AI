@@ -32,10 +32,10 @@ describe("registry defaults shape", () => {
     const orchestrator = AGENT_DEFAULTS.find((a) => a.agentName === "orchestrator");
     const validator = AGENT_DEFAULTS.find((a) => a.agentName === "validator");
     expect(orchestrator?.providerId).toBe("anthropic_api");
-    expect(orchestrator?.model).toBe("claude-opus-4-7");
+    expect(orchestrator?.model).toBe("claude-opus-4-8");
     expect(orchestrator?.reasoningBudget).toBe("high");
     expect(validator?.providerId).toBe("anthropic_api");
-    expect(validator?.model).toBe("claude-opus-4-7");
+    expect(validator?.model).toBe("claude-opus-4-8");
     expect(validator?.reasoningBudget).toBe("high");
   });
 

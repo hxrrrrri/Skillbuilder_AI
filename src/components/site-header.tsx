@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { NavUser } from "@/components/nav-user";
-import { SkillProofMark } from "@/components/brand/skillproof-mark";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
@@ -23,7 +23,7 @@ export function SiteHeader() {
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-bg/95 backdrop-blur-xl">
       <div className="mx-auto grid h-20 max-w-screen-2xl grid-cols-[auto_1fr_auto] items-center gap-4 px-6 sm:px-10 lg:px-16">
         <Link href="/" className="group flex items-center gap-3" onClick={() => setOpen(false)}>
-          <SkillProofMark className="h-8 w-8 transition group-hover:rotate-12" />
+          <Image src="/logo.png" alt="SkillProof" width={32} height={32} className="h-8 w-8 object-contain transition group-hover:scale-110" />
           <span className="font-display text-2xl font-semibold leading-none text-ink">SkillProof</span>
         </Link>
 

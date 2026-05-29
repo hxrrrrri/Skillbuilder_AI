@@ -11,6 +11,7 @@ import type { ProviderMatrix } from "@/lib/providers/types";
 import { getCurrentUser } from "@/lib/auth/session";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { RATE_LIMITS, rateLimitKey, rateLimitedResponseInit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +58,13 @@ export async function POST(req: Request) {
       userAgent: req.headers.get("user-agent") ?? null,
     }).catch(() => {});
     return decision.response;
+  }
+
+  // Throttle the per-answer LLM evaluation, keyed to the authenticated user.
+  const rl = RATE_LIMITS.interview.consume(rateLimitKey(req, user?.id));
+  if (!rl.allowed) {
+    const init = rateLimitedResponseInit(rl);
+    return NextResponse.json(init.body, { status: init.status, headers: init.headers });
   }
 
   const run = await prisma.analysisRun.findUnique({ where: { id: q.runId } });

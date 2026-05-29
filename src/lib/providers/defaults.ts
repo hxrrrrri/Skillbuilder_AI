@@ -2,12 +2,14 @@ import type { ProviderId } from "./types";
 
 export const PROVIDER_MODEL_CATALOG: Record<ProviderId, string[]> = {
   anthropic_api: [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-opus-4-6",
     "claude-sonnet-4-6",
     "claude-haiku-4-5",
   ],
   claude_cli: [
+    "claude-opus-4-8",
     "claude-opus-4-7",
     "claude-opus-4-6",
     "claude-sonnet-4-6",
@@ -31,9 +33,9 @@ export const PROVIDER_MODEL_DEFAULTS: Record<ProviderId, string | null> = {
 };
 
 export const ROLE_MODEL_DEFAULTS = {
-  orchestrator: "claude-opus-4-7",
+  orchestrator: "claude-opus-4-8",
   worker: "claude-sonnet-4-6",
-  validator: "claude-opus-4-7",
+  validator: "claude-opus-4-8",
 } as const;
 
 export const DETERMINISTIC_AGENT_NAMES = ["repo-scanner", "git-evidence", "skill-graph"] as const;

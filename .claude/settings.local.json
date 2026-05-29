@@ -78,11 +78,34 @@
       "Bash(curl -sf http://localhost:3000/ -o /dev/null -w \"%{http_code}\")",
       "Bash(curl -sf http://localhost:3001/ -o /dev/null -w \"%{http_code}\")",
       "Bash(timeout 40 bash -c 'until curl -sf http://localhost:3003 >/dev/null 2>&1 || curl -sf http://localhost:3002 >/dev/null 2>&1 || curl -sf http://localhost:3000 >/dev/null 2>&1; do sleep 1; done && echo \"READY\"')",
-      "Bash(npx next *)"
+      "Bash(npx next *)",
+      "Bash(node -e \"const t=require\\('./tsconfig.json'\\); console.log\\(JSON.stringify\\(t.exclude\\)\\)\")",
+      "Bash(echo \"===TYPECHECK_EXIT:$?===\")",
+      "Bash(echo \"===TEST_EXIT:$?===\")",
+      "Bash(echo \"===BUILD_EXIT:$?===\")",
+      "Bash(echo \"===LINT_EXIT:$?===\")",
+      "PowerShell($p = \".skillproof\"; if \\(Test-Path $p\\) { $files = Get-ChildItem $p -Recurse -File -ErrorAction SilentlyContinue; $mb = [math]::Round\\(\\($files | Measure-Object Length -Sum\\).Sum/1MB,1\\); \"skillproof_files=$\\($files.Count\\) size_MB=$mb\"; \"nm_dirs=\" + \\(Get-ChildItem $p -Recurse -Directory -Filter node_modules -ErrorAction SilentlyContinue\\).Count; \"run_dirs=\" + \\(Get-ChildItem \"$p\\\\runs\" -Directory -ErrorAction SilentlyContinue\\).Count } else { \"no .skillproof\" })",
+      "Bash(node scripts/prune-skillproof-runs.mjs --keep 3)",
+      "Bash(powershell -c \"'{0} MB' -f [math]::Round\\(\\(Get-ChildItem .skillproof -Recurse -File -EA SilentlyContinue | Measure-Object Length -Sum\\).Sum/1MB,1\\)\")",
+      "Bash(break)",
+      "Bash(git checkout *)",
+      "Bash(git --no-pager diff --no-index prisma/schema.prisma prisma/schema.postgres.prisma)",
+      "Bash(echo \"EXITDIFF=$?\")",
+      "Bash(DATABASE_URL=\"postgresql://user:pass@localhost:5432/skillproof\" npx prisma validate --schema=prisma/schema.postgres.prisma)",
+      "Bash(grep -vE \"^#|^$\" .env)",
+      "Bash(E2E_SKIP_SEED=1 npm run e2e)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(kill 1016)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Select-Object Id,StartTime | Format-Table\")",
+      "Bash(magick public/hero-cv.png -format \"%[pixel:u.p{5,5}]\" info:)",
+      "Bash(python -c \"from PIL import Image; img = Image.open\\('public/hero-cv.png'\\).convert\\('RGB'\\); print\\(img.getpixel\\(\\(5,5\\)\\)\\); print\\(img.getpixel\\(\\(10,10\\)\\)\\); print\\(img.getpixel\\(\\(2,2\\)\\)\\)\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\project_github\\\\Skillbuilder_AI\\\\src\\\\app\" -Directory)",
+      "Bash(mkdir -p \"c:/project_github/Skillbuilder_AI/src/app/api/admin/evaluator-skills/[id]\")"
     ],
     "additionalDirectories": [
       "C:\\project_github\\Skillbuilder_AI\\node_modules\\.prisma\\client",
-      "C:\\project_github\\Skillbuilder_AI\\src\\app\\api\\badge\\[slug].svg"
+      "C:\\project_github\\Skillbuilder_AI\\src\\app\\api\\badge\\[slug].svg",
+      "c:\\project_github\\Skillbuilder_AI\\src\\app\\api\\admin\\evaluator-skills"
     ]
   }
 }

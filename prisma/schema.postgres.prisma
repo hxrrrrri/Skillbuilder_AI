@@ -34,6 +34,7 @@ model User {
   promptVersions      PromptVersion[]
   employerShortlists  EmployerShortlist[]
   savedSearches       SavedSearch[]
+  ownershipChallenges OwnershipChallenge[]
   accounts            Account[]
   sessions            Session[]
 }
@@ -363,11 +364,31 @@ model AnalysisRun {
   evidenceFindings     EvidenceFinding[]
   harnessSnapshot      HarnessContextSnapshot?
   terminalCommandRuns  TerminalCommandRun[]
+  ownershipChallenges  OwnershipChallenge[]
 
   @@index([candidateId])
   @@index([createdByUserId])
   @@index([tenantId])
   @@index([status])
+}
+
+model OwnershipChallenge {
+  id         String       @id @default(cuid())
+  userId     String
+  runId      String?
+  repoOwner  String
+  repoName   String
+  tokenHash  String       @unique
+  expiresAt  DateTime
+  consumedAt DateTime?
+  status     String       @default("issued") // issued|linked|consumed|expired
+  createdAt  DateTime     @default(now())
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  run        AnalysisRun? @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([userId, repoOwner, repoName])
+  @@index([runId])
+  @@index([expiresAt])
 }
 
 model EvaluatorSkill {

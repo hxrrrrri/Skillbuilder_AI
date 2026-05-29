@@ -75,8 +75,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const run = await prisma.analysisRun.findUnique({
     where: { id: params.id },
     include: {
-      candidate: true,
-      repository: true,
+      // Only the candidate identity the payloads render — avoids loading email PII.
+      candidate: { select: { id: true, name: true, githubUsername: true } },
+      repository: { select: { repoUrl: true, repoName: true, owner: true } },
       events: { orderBy: { order: "asc" } },
       scores: true,
       questions: true,

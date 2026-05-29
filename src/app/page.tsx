@@ -1,10 +1,12 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
+import heroCv from "../../public/hero-cv.png";
 import { Button } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { SectionPictogram, VerificationChecklist } from "@/components/brand/skillproof-mark";
+import { SectionPictogram, VerificationChecklist, AuditMagnifying, VerifyBadge } from "@/components/brand/skillproof-mark";
 
 const SAMPLE_REPOS = [
   "https://github.com/vercel/next.js",
@@ -147,9 +149,11 @@ export default function Landing() {
           </div>
 
           <div className="float-gentle">
-            <img
-              src="/hero-cv.png"
+            <Image
+              src={heroCv}
               alt="CV to code"
+              priority
+              sizes="(max-width: 768px) 100vw, 520px"
               className="mb-8 h-auto w-full max-w-[520px] object-contain"
             />
           </div>
@@ -476,6 +480,10 @@ export default function Landing() {
                 <div className="relative flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-border bg-panel2 transition-colors group-hover:border-accent/30">
                   {icon === "contract" ? (
                     <VerificationChecklist className="text-muted transition-colors group-hover:text-accent" />
+                  ) : icon === "audit" ? (
+                    <AuditMagnifying className="text-muted transition-colors group-hover:text-accent" />
+                  ) : icon === "verify" ? (
+                    <VerifyBadge className="text-muted transition-colors group-hover:text-accent" />
                   ) : (
                     <SectionPictogram
                       type={icon}

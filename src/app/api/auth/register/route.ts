@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { hashPassword } from "@/lib/auth/password";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { slugify } from "@/lib/utils";
+import { RATE_LIMITS, rateLimitKey, rateLimitedResponseInit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,13 @@ export async function POST(req: Request) {
     body = Body.parse(await req.json());
   } catch (err: any) {
     return NextResponse.json({ error: "invalid_body", detail: err?.message }, { status: 400 });
+  }
+
+  // No session yet at registration; throttle account creation per client IP.
+  const rl = RATE_LIMITS.register.consume(rateLimitKey(req));
+  if (!rl.allowed) {
+    const init = rateLimitedResponseInit(rl);
+    return NextResponse.json(init.body, { status: init.status, headers: init.headers });
   }
 
   const existing = await prisma.user.findUnique({ where: { email: body.email } });

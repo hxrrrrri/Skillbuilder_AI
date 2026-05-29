@@ -3,20 +3,35 @@ import { cn } from "@/lib/utils";
 export function SkillProofMark({ className, label = "SkillProof" }: { className?: string; label?: string }) {
   return (
     <svg
-      viewBox="0 0 64 64"
+      viewBox="0 0 100 100"
       role="img"
       aria-label={label}
-      className={cn("h-8 w-8 text-accent", className)}
-      fill="none"
+      className={cn("h-8 w-8", className)}
+      fill="currentColor"
     >
-      <path
-        d="M32 7v50M7 32h50M14.3 14.3l35.4 35.4M49.7 14.3 14.3 49.7"
-        stroke="currentColor"
-        strokeWidth="3.8"
-        strokeLinecap="round"
-      />
-      <circle cx="32" cy="32" r="10.5" fill="currentColor" opacity=".9" />
-      <circle cx="32" cy="32" r="4.5" fill="#070a12" />
+      {/*
+        SP interlocked logo:
+        Union of top-bar + left-col + mid-bar + right-col + bottom-bar
+        Two rectangular notches cut out: top-right (P opening) and bottom-left (S opening)
+        Vertices: (13,13),(87,13),(87,28),(28,28),(28,43),(87,43),(87,88),(13,88),(13,73),(72,73),(72,58),(13,58)
+        r=5 rounded corners
+      */}
+      <path d="
+        M 18,13
+        L 82,13  Q 87,13 87,18
+        L 87,23  Q 87,28 82,28
+        L 33,28  Q 28,28 28,33
+        L 28,38  Q 28,43 33,43
+        L 82,43  Q 87,43 87,48
+        L 87,83  Q 87,88 82,88
+        L 18,88  Q 13,88 13,83
+        L 13,78  Q 13,73 18,73
+        L 67,73  Q 72,73 72,68
+        L 72,63  Q 72,58 67,58
+        L 18,58  Q 13,58 13,53
+        L 13,18  Q 13,13 18,13
+        Z
+      " />
     </svg>
   );
 }
@@ -64,6 +79,54 @@ export function VerificationChecklist({ className }: { className?: string }) {
       <line x1="148" y1="294" x2="364" y2="294" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
       <line x1="148" y1="370" x2="364" y2="370" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
       <line x1="148" y1="446" x2="324" y2="446" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function AuditMagnifying({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+      className={cn("h-8 w-8", className)}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Magnifying glass lens circle */}
+      <circle cx="180" cy="180" r="140" stroke="currentColor" strokeWidth="36" />
+      {/* Magnifying glass handle */}
+      <line x1="280" y1="280" x2="420" y2="420" stroke="currentColor" strokeWidth="36" strokeLinecap="round" />
+      {/* Box inside lens */}
+      <rect x="100" y="120" width="160" height="120" rx="16" stroke="currentColor" strokeWidth="18" />
+    </svg>
+  );
+}
+
+export function VerifyBadge({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+      className={cn("h-8 w-8", className)}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      {/* Badge/seal shape with scalloped edges */}
+      <path
+        d="M256 40 L312 72 L350 36 L365 98 L428 80 L395 138 L450 165 L382 190 L410 255 L350 235 L370 300 L305 265 L256 320 L207 265 L142 300 L162 235 L102 255 L130 190 L62 165 L127 138 L94 80 L157 98 L172 36 L210 72 Z"
+        stroke="currentColor"
+        strokeWidth="32"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Checkmark */}
+      <path
+        d="M 180 260 L 240 310 L 360 160"
+        stroke="currentColor"
+        strokeWidth="40"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }

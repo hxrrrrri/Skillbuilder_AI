@@ -515,8 +515,8 @@ export function buildDemoRunArtifacts() {
         {
           provider: "anthropic_api",
           actualProvider: "anthropic_api",
-          model: agentName === "orchestrator" || agentName === "validator" ? "claude-opus-4-7" : "claude-sonnet-4-6",
-          actualModel: agentName === "orchestrator" || agentName === "validator" ? "claude-opus-4-7" : "claude-sonnet-4-6",
+          model: agentName === "orchestrator" || agentName === "validator" ? "claude-opus-4-8" : "claude-sonnet-4-6",
+          actualModel: agentName === "orchestrator" || agentName === "validator" ? "claude-opus-4-8" : "claude-sonnet-4-6",
           status: "completed",
           reasoningBudget: agentName === "orchestrator" || agentName === "validator" ? "high" : "medium",
         },

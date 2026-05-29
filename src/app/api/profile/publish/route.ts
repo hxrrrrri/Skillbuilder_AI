@@ -6,6 +6,7 @@ import { getCurrentUser } from "@/lib/auth/session";
 import { writeAuditLog } from "@/lib/auth/audit";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { getPublicProfilePublishBlockers } from "@/lib/profile-publish-gates";
+import { revalidatePublicProfile } from "@/lib/profile-cache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -96,6 +97,9 @@ export async function POST(req: Request) {
       includeTerminalProof: body.include_terminal_proof,
     },
   });
+
+  // Cover slug reuse: if this slug was cached from a prior profile, drop it.
+  revalidatePublicProfile(profile.slug);
 
   await writeAuditLog({
     action: "profile.publish",

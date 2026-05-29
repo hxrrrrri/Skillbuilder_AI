@@ -311,6 +311,53 @@ export function comparePayload(summaries: EmployerProfileSummary[]) {
   }));
 }
 
+// Select exactly the run fields EmployerProfileBundle exposes. AnalysisRun also
+// holds several large JSON columns (validationContract, contextPack,
+// repoIntelligence, profileSummary, …) the employer summary never reads — an
+// `include` would pull all of them on every row (up to `take`). Explicit select
+// keeps the read narrow. Keep this in lockstep with EmployerProfileBundle["run"].
+const EMPLOYER_RUN_SELECT = {
+  id: true,
+  targetRole: true,
+  candidateLevel: true,
+  overallScore: true,
+  roleFit: true,
+  verificationLevel: true,
+  tenantId: true,
+  employerVerifier: true,
+  authenticitySignals: true,
+  aiCollaboration: true,
+  ownershipStatus: true,
+  terminalEvidence: true,
+  providerMatrix: true,
+  executionMode: true,
+  repository: { select: { repoUrl: true, owner: true, repoName: true } },
+  harnessSnapshot: {
+    select: {
+      commitSha: true,
+      evaluatorRuntimeVersion: true,
+      validatorVersion: true,
+      executionMode: true,
+      createdAt: true,
+    },
+  },
+  evidenceFindings: {
+    where: { employerSafe: true, adminOnly: false },
+    select: { id: true, employerSafe: true, publicSafe: true, evidenceType: true, category: true },
+  },
+  scores: { select: { skillName: true, score: true, scoreSource: true, confidence: true, evidence: true } },
+  questions: { select: { answer: true, answerScore: true } },
+} as const;
+
+const EMPLOYER_BUNDLE_SELECT = {
+  id: true,
+  slug: true,
+  visibility: true,
+  interviewKit: true,
+  candidate: { select: { name: true, githubUsername: true } },
+  run: { select: EMPLOYER_RUN_SELECT },
+} as const;
+
 export async function fetchPublicProfileBundles(where: Record<string, any> = {}, take = 50) {
   return prisma.publicProfile.findMany({
     where: {
@@ -323,21 +370,7 @@ export async function fetchPublicProfileBundles(where: Record<string, any> = {},
     },
     orderBy: { createdAt: "desc" },
     take,
-    include: {
-      candidate: { select: { name: true, githubUsername: true } },
-      run: {
-        include: {
-          repository: true,
-          harnessSnapshot: true,
-          evidenceFindings: {
-            where: { employerSafe: true, adminOnly: false },
-            select: { id: true, employerSafe: true, publicSafe: true, evidenceType: true, category: true },
-          },
-          scores: true,
-          questions: { select: { answer: true, answerScore: true } },
-        },
-      },
-    },
+    select: EMPLOYER_BUNDLE_SELECT,
   }) as unknown as Promise<EmployerProfileBundle[]>;
 }
 
@@ -351,21 +384,7 @@ export async function getEmployerProfileBundle(profileId: string) {
         scores: { none: { scoreSource: { in: ["mock", "heuristic"] } } },
       },
     },
-    include: {
-      candidate: { select: { name: true, githubUsername: true } },
-      run: {
-        include: {
-          repository: true,
-          harnessSnapshot: true,
-          evidenceFindings: {
-            where: { employerSafe: true, adminOnly: false },
-            select: { id: true, employerSafe: true, publicSafe: true, evidenceType: true, category: true },
-          },
-          scores: true,
-          questions: { select: { answer: true, answerScore: true } },
-        },
-      },
-    },
+    select: EMPLOYER_BUNDLE_SELECT,
   }) as unknown as Promise<EmployerProfileBundle | null>;
 }
 

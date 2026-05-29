@@ -3,6 +3,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { ClientDateTime } from "@/components/ui/client-datetime";
+import { cn } from "@/lib/utils";
 
 type Row = {
   id: string;
@@ -33,7 +34,7 @@ type Row = {
 
 export function ProviderTable({ rows }: { rows: Row[] }) {
   return (
-    <div className="space-y-3">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {rows.map((r) => (
         <ProviderRow key={r.id} row={r} />
       ))}
@@ -43,7 +44,7 @@ export function ProviderTable({ rows }: { rows: Row[] }) {
 
 function ProviderRow({ row }: { row: Row }) {
   const router = useRouter();
-  const [edit, setEdit] = useState(false);
+  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [enabled, setEnabled] = useState(row.enabled);
   const [defaultModel, setDefaultModel] = useState(row.defaultModel ?? "");
@@ -53,10 +54,22 @@ function ProviderRow({ row }: { row: Row }) {
   const [notes, setNotes] = useState(row.notes ?? "");
   const [testBusy, setTestBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
   const modelOptions = row.capabilities?.models ?? [];
-  const defaultModelOptions = defaultModel && !modelOptions.includes(defaultModel)
-    ? [defaultModel, ...modelOptions]
-    : modelOptions;
+  const defaultModelOptions =
+    defaultModel && !modelOptions.includes(defaultModel)
+      ? [defaultModel, ...modelOptions]
+      : modelOptions;
+
+  const caps = row.capabilities
+    ? [
+        row.capabilities.reasoning ? "reasoning" : null,
+        row.capabilities.jsonMode ? "json-mode" : null,
+        row.capabilities.streaming ? "stream" : null,
+      ]
+        .filter(Boolean)
+        .join(", ") || "—"
+    : "—";
 
   async function save() {
     setError(null);
@@ -78,7 +91,7 @@ function ProviderRow({ row }: { row: Row }) {
       setError(data?.error ?? `HTTP ${resp.status}`);
       return;
     }
-    setEdit(false);
+    setOpen(false);
     startTransition(() => router.refresh());
   }
 
@@ -117,204 +130,250 @@ function ProviderRow({ row }: { row: Row }) {
     }
   }
 
+  const testTone =
+    row.lastTestStatus === "ok"
+      ? "good"
+      : row.lastTestStatus === "unavailable"
+      ? "warn"
+      : row.lastTestStatus
+      ? "bad"
+      : "default";
+
   return (
-    <div className="rounded-md border border-border bg-panel2/40">
-      <div className="flex flex-wrap items-center justify-between gap-3 px-3 py-2">
-        <div className="flex items-center gap-3">
-          <span className={`dot ${enabled ? "dot-completed" : "dot-pending"}`} />
-          <div>
-            <div className="text-sm text-ink">{row.label}</div>
-            <code className="text-[11px] text-muted">{row.providerId}</code>
+    <>
+      <div
+        className={cn(
+          "group relative flex flex-col overflow-hidden rounded-2xl border bg-panel/60 backdrop-blur-sm transition-all duration-300",
+          enabled
+            ? "border-border hover:border-good/30 hover:bg-panel/80"
+            : "border-border/50 opacity-75 hover:opacity-100"
+        )}
+      >
+        {/* ── Card header ── */}
+        <div className="flex items-start justify-between gap-3 p-5 pb-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span
+              className={cn(
+                "dot flex-shrink-0",
+                enabled ? "dot-alive" : "dot-disabled"
+              )}
+            />
+            <div className="min-w-0">
+              <div className="truncate text-sm font-semibold text-ink">{row.label}</div>
+              <code className="font-mono text-[11px] text-muted">{row.providerId}</code>
+            </div>
           </div>
+          <div className="flex flex-shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={quickToggle}
+              disabled={pending}
+              className={cn(
+                "rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition-all duration-200",
+                enabled
+                  ? "border-good/35 bg-good/10 text-good hover:bg-good/15"
+                  : "border-border bg-panel2 text-muted hover:text-ink"
+              )}
+            >
+              {enabled ? "Enabled" : "Disabled"}
+            </button>
+            <button
+              type="button"
+              onClick={runTest}
+              disabled={testBusy}
+              className="rounded-lg border border-border bg-panel2 px-2.5 py-1 text-[11px] text-ink transition-all hover:border-accent/60 hover:text-accent disabled:opacity-40"
+            >
+              {testBusy ? "Testing…" : "Test"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              className="rounded-lg border border-border bg-panel2 px-2.5 py-1 text-[11px] text-ink transition-all hover:border-accent/60 hover:text-accent"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+
+        {/* ── Badge strip ── */}
+        <div className="flex flex-wrap gap-1.5 px-5 pb-4">
           <Badge tone="default">{row.kind}</Badge>
           <Badge tone={row.liveAvailable ? "good" : "warn"}>
-            {row.liveAvailable ? "live: available" : "live: unavailable"}
+            {row.liveAvailable ? "live: ok" : "live: unavailable"}
           </Badge>
           {row.lastTestStatus && (
-            <Badge
-              tone={
-                row.lastTestStatus === "ok"
-                  ? "good"
-                  : row.lastTestStatus === "unavailable"
-                  ? "warn"
-                  : "bad"
-              }
-            >
-              last test: {row.lastTestStatus}
-            </Badge>
+            <Badge tone={testTone}>test: {row.lastTestStatus}</Badge>
           )}
+          {caps !== "—" && <Badge tone="default">{caps}</Badge>}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={quickToggle}
-            disabled={pending}
-            className={`rounded-md border px-2 py-1 text-xs transition ${
-              enabled
-                ? "border-good/40 bg-good/10 text-good"
-                : "border-border bg-panel2 text-muted"
-            }`}
-          >
-            {enabled ? "Enabled" : "Disabled"}
-          </button>
-          <button
-            type="button"
-            onClick={runTest}
-            disabled={testBusy}
-            className="rounded-md border border-border bg-panel2 px-2 py-1 text-xs text-ink hover:border-accent/60 hover:text-accent disabled:opacity-40"
-          >
-            {testBusy ? "Testing…" : "Run test"}
-          </button>
-          <button
-            type="button"
-            onClick={() => setEdit((v) => !v)}
-            className="rounded-md border border-border bg-panel2 px-2 py-1 text-xs text-ink hover:border-accent/60 hover:text-accent"
-          >
-            {edit ? "Cancel" : "Edit"}
-          </button>
+
+        {/* ── Metrics grid ── */}
+        <div className="mt-auto grid grid-cols-2 divide-x divide-border border-t border-border sm:grid-cols-4">
+          {[
+            { k: "MODEL", v: defaultModel || "default" },
+            { k: "LATENCY", v: row.lastTestLatencyMs != null ? `${row.lastTestLatencyMs}ms` : "—" },
+            { k: "JSON", v: row.lastTestJsonOk == null ? "—" : row.lastTestJsonOk ? "ok" : "fail" },
+            { k: "MODELS", v: String(row.capabilities?.models?.length ?? 0) },
+          ].map(({ k, v }) => (
+            <div key={k} className="bg-panel2/20 px-3 py-3 text-center">
+              <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/60">{k}</div>
+              <div className="mt-1 truncate font-mono text-xs font-medium text-ink">{v}</div>
+            </div>
+          ))}
         </div>
+
+        {/* ── Footer strip ── */}
+        <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+          <div className="px-4 py-2.5">
+            <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">API Key Env</div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
+              {row.apiKeyEnv || "—"}
+            </div>
+          </div>
+          <div className="px-4 py-2.5">
+            <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">
+              {row.baseUrl ? "Base URL" : "Command"}
+            </div>
+            <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
+              {row.baseUrl || row.command || "—"}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Last tested row ── */}
+        <div className="border-t border-border px-4 py-2">
+          <span className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">Tested </span>
+          <span className="font-mono text-[11px] text-muted">
+            <ClientDateTime value={row.lastTestedAt} empty="never" />
+          </span>
+        </div>
+
+        {error && (
+          <p className="border-t border-border px-4 py-2 text-xs text-bad">{error}</p>
+        )}
       </div>
 
-      {!edit && (
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border px-3 py-2 text-[11px] sm:grid-cols-4">
-          <KV k="Default model" v={row.defaultModel ?? "—"} />
-          <KV k="API key env" v={row.apiKeyEnv ?? "—"} />
-          <KV k="Command" v={row.command ?? "—"} />
-          <KV k="Base URL" v={row.baseUrl ?? "—"} />
-          <KV
-            k="Capabilities"
-            v={
-              row.capabilities
-                ? [
-                    row.capabilities.reasoning ? "reasoning" : null,
-                    row.capabilities.jsonMode ? "json-mode" : null,
-                    row.capabilities.streaming ? "stream" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "—"
-                : "—"
-            }
-          />
-          <KV
-            k="Registry models"
-            v={row.capabilities?.models?.length ? row.capabilities.models.join(", ") : "—"}
-          />
-          <KV k="Last tested" v={<ClientDateTime value={row.lastTestedAt} empty="never" />} />
-          <KV k="Last test model" v={row.lastTestModel ?? "—"} />
-          <KV k="JSON parse" v={row.lastTestJsonOk == null ? "—" : row.lastTestJsonOk ? "ok" : "failed"} />
-          <KV k="Latency" v={row.lastTestLatencyMs == null ? "—" : `${row.lastTestLatencyMs}ms`} />
-          {row.lastTestError && (
-            <div className="col-span-full mt-1 text-bad">
-              <span className="font-semibold uppercase tracking-wide text-[10px]">last error</span>:{" "}
-              {row.lastTestError}
-            </div>
-          )}
-          {row.notes && (
-            <div className="col-span-full text-muted">
-              <span className="font-semibold uppercase tracking-wide text-[10px]">notes</span>: {row.notes}
-            </div>
-          )}
-          {row.lastTestRaw && (
-            <details className="col-span-full rounded border border-border bg-bg/40 p-2">
-              <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wide text-muted">
-                last raw output
-              </summary>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] text-muted">
-                {row.lastTestRaw}
-              </pre>
-            </details>
-          )}
-        </div>
-      )}
-
-      {edit && (
-        <div className="border-t border-border px-3 py-3">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="Default model">
-              <select
-                value={defaultModel}
-                onChange={(e) => setDefaultModel(e.target.value)}
-                className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 text-xs text-ink"
+      {/* ── Edit modal ── */}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+          onClick={() => setOpen(false)}
+        >
+          <div
+            className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-bg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold text-ink">{row.label}</p>
+                <code className="mt-0.5 font-mono text-[11px] text-muted">{row.providerId}</code>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="text-lg leading-none text-muted hover:text-ink"
               >
-                <option value="">Provider default</option>
-                {defaultModelOptions.map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="API key env var">
-              <input
-                value={apiKeyEnv}
-                onChange={(e) => setApiKeyEnv(e.target.value)}
-                placeholder="ANTHROPIC_API_KEY"
-                className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 font-mono text-xs text-ink"
-              />
-            </Field>
-            <Field label="Command (CLI providers)">
-              <input
-                value={command}
-                onChange={(e) => setCommand(e.target.value)}
-                className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 text-xs text-ink"
-              />
-            </Field>
-            <Field label="Base URL (local providers)">
-              <input
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-                placeholder="http://localhost:11434"
-                className="mt-1 h-8 w-full rounded-md border border-border bg-bg/65 px-2 text-xs text-ink"
-              />
-            </Field>
-            <Field label="Notes" className="sm:col-span-2">
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={2}
-                className="mt-1 w-full rounded-md border border-border bg-bg/65 p-2 text-xs text-ink"
-              />
-            </Field>
-          </div>
-          <div className="mt-3 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={save}
-              disabled={pending}
-              className="rounded-md border border-accent/70 bg-accent px-3 py-1 text-xs font-semibold text-cream shadow-glow disabled:opacity-50"
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              onClick={() => setEdit(false)}
-              className="rounded-md border border-border bg-panel2 px-3 py-1 text-xs text-muted"
-            >
-              Cancel
-            </button>
-            {error && <span className="text-xs text-bad">{error}</span>}
+                ✕
+              </button>
+            </div>
+            <div className="p-5 text-xs">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label="Default model">
+                  <select
+                    value={defaultModel}
+                    onChange={(e) => setDefaultModel(e.target.value)}
+                    className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 text-xs text-ink"
+                  >
+                    <option value="">Provider default</option>
+                    {defaultModelOptions.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="API key env var">
+                  <input
+                    value={apiKeyEnv}
+                    onChange={(e) => setApiKeyEnv(e.target.value)}
+                    placeholder="ANTHROPIC_API_KEY"
+                    className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 font-mono text-xs text-ink"
+                  />
+                </Field>
+                <Field label="Command (CLI providers)">
+                  <input
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                    className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 text-xs text-ink"
+                  />
+                </Field>
+                <Field label="Base URL (local providers)">
+                  <input
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="http://localhost:11434"
+                    className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 text-xs text-ink"
+                  />
+                </Field>
+                <Field label="Notes" className="sm:col-span-2">
+                  <textarea
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    rows={2}
+                    className="mt-1 w-full rounded-xl border border-border bg-bg/65 p-2 text-xs text-ink"
+                  />
+                </Field>
+              </div>
+              <div className="mt-4 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={save}
+                  disabled={pending}
+                  className="rounded-xl border border-accent/70 bg-accent px-4 py-1.5 text-xs font-semibold text-cream shadow-glow disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="rounded-xl border border-border bg-panel2 px-4 py-1.5 text-xs text-muted hover:text-ink"
+                >
+                  Cancel
+                </button>
+                {error && <span className="text-xs text-bad">{error}</span>}
+              </div>
+            </div>
+
+            {row.lastTestRaw && (
+              <div className="border-t border-border px-5 pb-5">
+                <details className="mt-3 rounded-xl border border-border bg-bg/40 p-3">
+                  <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-widest text-muted">
+                    Last raw output
+                  </summary>
+                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[11px] text-muted">
+                    {row.lastTestRaw}
+                  </pre>
+                </details>
+              </div>
+            )}
           </div>
         </div>
       )}
-      {!edit && error && <p className="border-t border-border px-3 py-1 text-xs text-bad">{error}</p>}
-    </div>
+    </>
   );
 }
 
-function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+function Field({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
     <div className={className}>
-      <label className="text-[11px] font-semibold uppercase tracking-wide text-muted">{label}</label>
+      <label className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</label>
       {children}
-    </div>
-  );
-}
-
-function KV({ k, v }: { k: string; v: React.ReactNode }) {
-  return (
-    <div>
-      <span className="font-semibold uppercase tracking-wide text-[10px] text-muted">{k}</span>
-      <div className="font-mono text-[11px] text-ink truncate">{v}</div>
     </div>
   );
 }
