@@ -50,19 +50,14 @@ export function AgentCard({
       )}
       <div className="relative flex items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <span className={cn("dot flex-shrink-0",
-          status === "completed" ? "dot-completed" :
-          status === "running" ? "dot-running" :
-          status === "failed" ? "dot-failed" :
-          status === "skipped" ? "dot-skipped" :
-          "dot-pending"
-        )} />
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-ink">{meta.title}</div>
             <div className="truncate text-xs text-muted">{meta.subtitle}</div>
           </div>
         </div>
-        <span className="flex-shrink-0 font-mono text-[10px] uppercase tracking-widest text-muted">{status}</span>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-muted">{status}</span>
+        </div>
       </div>
       {notes && (
         <p className="relative mt-3 line-clamp-2 text-xs leading-5 text-muted">{notes}</p>

@@ -2,7 +2,7 @@ import type { ProviderTemplate } from "./config";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { combinedOutput, hasFlag, probe, runCliJson } from "./cli-utils";
+import { combinedOutput, discoverCliModels, hasFlag, probe, runCliJson } from "./cli-utils";
 import { ProviderExecutionError, ProviderInvalidJsonError } from "./errors";
 import { modelsForProvider } from "./model-catalog";
 import type { LLMProvider, ProviderHealth, ProviderPrompt, ProviderResult } from "./types";
@@ -130,6 +130,7 @@ export async function detectCodexCli(template?: ProviderTemplate): Promise<Provi
   const supportsJson = hasFlag(helpText, "--json", "--output", "--output-last-message");
   const supportsModel = hasFlag(helpText, "--model", "-m, --model");
   const status = !authenticated ? "installed_not_authenticated" : supportsExec ? "ready" : "invalid_command";
+  const availableModels = await discoverCliModels(command, modelsForProvider("codex_cli"));
 
   return {
     providerId: "codex_cli",
@@ -143,7 +144,7 @@ export async function detectCodexCli(template?: ProviderTemplate): Promise<Provi
     supportsNonInteractive: supportsExec,
     supportsModelSelection: supportsModel,
     supportsReasoningBudget: false,
-    availableModels: modelsForProvider("codex_cli"),
+    availableModels,
     configuredModel: template?.model ?? null,
     lastError:
       status === "ready"

@@ -2,6 +2,7 @@ import type { NavLink } from "@/components/role-shell";
 
 export const ADMIN_NAV: NavLink[] = [
   { href: "/admin/dashboard", label: "Overview" },
+  { href: "/admin/copilot", label: "Command Copilot", badge: "AI" },
   { href: "/admin/runs", label: "Runs" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/tenants", label: "Tenants" },

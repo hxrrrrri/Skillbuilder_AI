@@ -133,6 +133,7 @@ type LimiterMap = {
   register: TokenBucketRateLimiter;
   interview: TokenBucketRateLimiter;
   challenge: TokenBucketRateLimiter;
+  chat: TokenBucketRateLimiter;
 };
 
 const g = globalThis as unknown as { __skillproofRateLimiters?: LimiterMap };
@@ -148,6 +149,8 @@ export const RATE_LIMITS: LimiterMap =
     interview: configuredLimiter("INTERVIEW", { max: 30, windowMs: 5 * 60_000 }),
     // LLM evaluation + workspace diff application.
     challenge: configuredLimiter("CHALLENGE", { max: 15, windowMs: 5 * 60_000 }),
+    // Copilot chat turns — one provider call each; keep generous but abuse-resistant.
+    chat: configuredLimiter("CHAT", { max: 30, windowMs: 5 * 60_000 }),
   });
 
 /** First hop of x-forwarded-for, then x-real-ip, else "unknown". */

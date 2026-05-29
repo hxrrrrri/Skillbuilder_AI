@@ -19,16 +19,16 @@ export const PROVIDER_MODEL_CATALOG: Record<ProviderId, string[]> = {
   ],
   codex_cli: ["gpt-5.5"],
   copilot_cli: ["claude-haiku-4.5"],
-  ollama: ["llama3.2:latest", "llama3:latest", "gemma4:31b-cloud", "gemma3:4b", "gemma4:e2b"],
+  ollama: ["gemma4:31b-cloud", "gemma4:e2b", "llama3.2:latest", "llama3:latest", "gemma3:4b"],
   deterministic: ["repo-scanner", "git-evidence", "skill-graph", "evidence-derived"],
 };
 
 export const PROVIDER_MODEL_DEFAULTS: Record<ProviderId, string | null> = {
   anthropic_api: "claude-sonnet-4-6",
   claude_cli: null,
-  codex_cli: null,
+  codex_cli: "gpt-5.5",
   copilot_cli: null,
-  ollama: "llama3.2:latest",
+  ollama: "gemma4:31b-cloud",
   deterministic: "evidence-derived",
 };
 

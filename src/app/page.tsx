@@ -159,8 +159,7 @@ export default function Landing() {
           </div>
 
           <h1 className="reveal max-w-4xl font-display text-5xl font-medium leading-[1.05] text-ink md:text-6xl lg:text-7xl">
-            Turn real GitHub work into{" "}
-            <span className="text-gradient">verified hiring evidence.</span>
+            Turn real GitHub work into <span className="text-accent">verified hiring evidence.</span>
           </h1>
 
           <p className="reveal stagger-1 mt-7 max-w-2xl text-lg leading-9 text-body md:text-xl">
@@ -202,12 +201,6 @@ export default function Landing() {
                     : undefined,
               }}
             >
-              <div
-                className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                style={{
-                  background: "radial-gradient(circle at 30% 50%, rgba(217,119,87,0.07) 0%, transparent 70%)",
-                }}
-              />
               <div className="tabular relative font-display text-5xl font-medium text-ink">
                 {statsVisible ? value : 0}
                 {suffix}
@@ -222,7 +215,7 @@ export default function Landing() {
       <section id="start-verification" className="grid gap-14 lg:grid-cols-12 lg:items-start">
         {/* Left: explanation */}
         <div className="reveal-left lg:col-span-5">
-          <VerificationChecklist className="mb-7 h-16 w-16 text-accent" />
+          <VerificationChecklist className="mb-7 h-16 w-auto text-accent" />
           <h2 className="max-w-xl font-display text-4xl font-medium leading-tight text-ink md:text-5xl">
             Start a verification mission
           </h2>
@@ -521,18 +514,10 @@ export default function Landing() {
       <section className="grid gap-5 lg:grid-cols-2">
         <div
           className="reveal-left card-lift relative overflow-hidden rounded-2xl border border-accent/40 p-10 text-bg"
-          style={{ background: "linear-gradient(135deg, #d97757 0%, #c96442 100%)" }}
+          style={{ background: "rgb(216 119 88)" }}
         >
-          <div
-            className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full blur-3xl"
-            style={{ background: "rgba(255,255,255,0.1)" }}
-          />
-          <div
-            className="pointer-events-none absolute bottom-0 left-0 h-40 w-full"
-            style={{ background: "linear-gradient(to top, rgba(201,100,66,0.3), transparent)" }}
-          />
           <div className="relative">
-            <SectionPictogram type="account" className="mb-8 h-10 w-10 text-bg/70" />
+            <Image src="/candidate.png" alt="" width={80} height={80} className="mb-8 h-20 w-20 object-contain" />
             <div className="text-sm font-semibold uppercase tracking-widest text-bg/75">For candidates</div>
             <h2 className="mt-4 font-display text-4xl font-medium leading-tight text-bg md:text-5xl">
               Show the work behind the resume.
@@ -545,12 +530,8 @@ export default function Landing() {
         </div>
 
         <div className="reveal-right card-lift relative overflow-hidden rounded-2xl border border-border bg-panel/70 p-10 backdrop-blur-sm">
-          <div
-            className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full blur-3xl"
-            style={{ background: "rgba(217,119,87,0.06)" }}
-          />
           <div className="relative">
-            <SectionPictogram type="audit" className="mb-8 h-10 w-10 text-accent" />
+            <Image src="/handshake.png" alt="" width={80} height={80} className="mb-8 h-20 w-20 object-contain" />
             <div className="text-sm font-semibold uppercase tracking-widest text-accent">For employers</div>
             <h2 className="mt-4 font-display text-4xl font-medium leading-tight text-ink md:text-5xl">
               Inspect strengths, risks, and follow-ups.

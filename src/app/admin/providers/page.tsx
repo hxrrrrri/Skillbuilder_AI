@@ -1,6 +1,5 @@
 import { requireAdminPage } from "@/lib/auth/guards";
 import { listProviderConfigs } from "@/lib/providers/registry";
-import { listProviderAvailability } from "@/lib/providers/provider-router";
 import { RoleShell, ScaffoldNotice } from "@/components/role-shell";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -13,11 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminProvidersPage() {
   await requireAdminPage("/admin/providers");
 
-  const [providers, availability] = await Promise.all([
-    listProviderConfigs(),
-    listProviderAvailability(),
-  ]);
-  const liveAvailability = Object.fromEntries(availability.map((a) => [a.id, a.available]));
+  const providers = await listProviderConfigs();
 
   const rows = providers.filter((p) => p.providerId !== "mock").map((p) => {
     const capabilities = parseJson(p.capabilities) as {
@@ -48,7 +43,7 @@ export default async function AdminProvidersPage() {
       lastTestJsonOk: p.lastTestJsonOk,
       lastTestLatencyMs: p.lastTestLatencyMs,
       lastTestError: p.lastTestError,
-      liveAvailable: !!liveAvailability[p.providerId],
+      liveAvailable: p.lastTestStatus === "ok" && p.lastTestJsonOk === true,
     };
   });
 
@@ -70,8 +65,8 @@ export default async function AdminProvidersPage() {
         </a>
       </div>
 
-      <Card>
-        <CardHeader>
+      <Card showTrafficLights className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
+        <CardHeader className="border-bg pl-20">
           <CardTitle>Provider registry ({rows.length})</CardTitle>
         </CardHeader>
         <CardBody>

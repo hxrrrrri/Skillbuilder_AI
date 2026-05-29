@@ -28,32 +28,42 @@ describe("registry defaults shape", () => {
     expect(defaultNames).toEqual(expected);
   });
 
-  it("orchestrator + validator default to high reasoning Opus", () => {
+  it("LLM agents default to Codex CLI with Claude CLI retry fallback", () => {
+    for (const agentName of LLM_AGENT_NAMES) {
+      const agent = AGENT_DEFAULTS.find((item) => item.agentName === agentName);
+      expect(agent?.providerId).toBe("codex_cli");
+      expect(agent?.model).toBe("gpt-5.5");
+      expect(agent?.fallbackProvider).toBe("claude_cli");
+      expect(agent?.fallbackStrategy).toBe("retry");
+    }
+  });
+
+  it("orchestrator + validator keep high reasoning on Codex defaults", () => {
     const orchestrator = AGENT_DEFAULTS.find((a) => a.agentName === "orchestrator");
     const validator = AGENT_DEFAULTS.find((a) => a.agentName === "validator");
-    expect(orchestrator?.providerId).toBe("anthropic_api");
-    expect(orchestrator?.model).toBe("claude-opus-4-8");
+    expect(orchestrator?.providerId).toBe("codex_cli");
+    expect(orchestrator?.model).toBe("gpt-5.5");
     expect(orchestrator?.reasoningBudget).toBe("high");
-    expect(validator?.providerId).toBe("anthropic_api");
-    expect(validator?.model).toBe("claude-opus-4-8");
+    expect(validator?.providerId).toBe("codex_cli");
+    expect(validator?.model).toBe("gpt-5.5");
     expect(validator?.reasoningBudget).toBe("high");
   });
 
-  it("deterministic stages (repo-scanner, git-evidence, skill-graph) default to deterministic with reasoning=none", () => {
+  it("evidence-derived stages also default to Codex CLI in the admin registry", () => {
     for (const name of ["repo-scanner", "git-evidence", "skill-graph"] as const) {
       const a = AGENT_DEFAULTS.find((x) => x.agentName === name);
-      expect(a?.providerId).toBe("deterministic");
+      expect(a?.providerId).toBe("codex_cli");
+      expect(a?.model).toBe("gpt-5.5");
       expect(a?.reasoningBudget).toBe("none");
+      expect(a?.fallbackProvider).toBe("claude_cli");
+      expect(a?.fallbackStrategy).toBe("retry");
     }
   });
 
   it("agent defaults declare a fallback (or explicit null for deterministic stages)", () => {
     for (const a of AGENT_DEFAULTS) {
-      if (["repo-scanner", "git-evidence", "skill-graph"].includes(a.agentName)) {
-        expect(a.fallbackProvider).toBeNull();
-      }
       expect(a.fallbackProvider).not.toBe("mock");
-      expect(a.fallbackStrategy).toBe("fail");
+      expect(a.fallbackStrategy).toBe("retry");
     }
   });
 
@@ -74,6 +84,11 @@ describe("registry defaults shape", () => {
       expect(PROVIDER_MODEL_DEFAULTS[provider.providerId]).toBe(configuredDefault);
       expect(PROVIDER_MODEL_CATALOG[provider.providerId]).toContain(configuredDefault);
     }
+  });
+
+  it("Ollama defaults to the gemma4 31b cloud model", () => {
+    expect(PROVIDER_MODEL_DEFAULTS.ollama).toBe("gemma4:31b-cloud");
+    expect(PROVIDER_MODEL_CATALOG.ollama).toContain("gemma4:31b-cloud");
   });
 
   it("never assigns deterministic provider to LLM scoring agents", () => {

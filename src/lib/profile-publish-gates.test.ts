@@ -82,4 +82,12 @@ describe("getPublicProfilePublishBlockers", () => {
       "ownership_status_missing",
     ]));
   });
+
+  it("blocks self-declared ownership when public payload implies verified ownership", () => {
+    const blockers = getPublicProfilePublishBlockers(baseRun({
+      ownershipStatus: JSON.stringify({ confidence: "self_declared", verification_method: "self_declared" }),
+      profileSummary: JSON.stringify({ developer_summary: "Verified ownership badge for this repository." }),
+    }));
+    expect(blockers.map((b) => b.code)).toContain("ownership_badge_unsupported");
+  });
 });

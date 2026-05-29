@@ -1,5 +1,5 @@
 import type { ProviderTemplate } from "./config";
-import { combinedOutput, hasFlag, probe, runCliJson } from "./cli-utils";
+import { combinedOutput, discoverCliModels, hasFlag, probe, runCliJson } from "./cli-utils";
 import { modelsForProvider } from "./model-catalog";
 import type { LLMProvider, ProviderHealth, ProviderPrompt, ProviderResult } from "./types";
 
@@ -74,6 +74,7 @@ export async function detectClaudeCli(template?: ProviderTemplate): Promise<Prov
   const supportsPrint = hasFlag(helpText, "--print", "-p, --print");
   const supportsJson = hasFlag(helpText, "--json", "--output-format", "--output-format text");
   const status = !authenticated ? "installed_not_authenticated" : supportsPrint ? "ready" : "invalid_command";
+  const availableModels = await discoverCliModels(command, modelsForProvider("claude_cli"), CLAUDE_CLI_ENV);
 
   return {
     providerId: "claude_cli",
@@ -87,7 +88,7 @@ export async function detectClaudeCli(template?: ProviderTemplate): Promise<Prov
     supportsNonInteractive: supportsPrint,
     supportsModelSelection: hasFlag(helpText, "--model"),
     supportsReasoningBudget: hasFlag(helpText, "--effort"),
-    availableModels: modelsForProvider("claude_cli"),
+    availableModels,
     configuredModel: template?.model ?? null,
     lastError:
       status === "ready"
