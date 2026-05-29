@@ -61,6 +61,10 @@ const DESTRUCTIVE_PATTERNS: Array<{ re: RegExp; reason: string }> = [
   { re: /\bprocess\.env\b/i, reason: "node code reading process.env may expose secrets" },
   { re: /\bos\.environ\b/i, reason: "python code reading os.environ may expose secrets" },
   { re: /\.ssh\b/i, reason: "ssh dir access" },
+  { re: /\b(id_rsa|id_dsa|id_ecdsa|id_ed25519|known_hosts|authorized_keys)\b/i, reason: "private key or SSH credential access" },
+  { re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/i, reason: "private key material access" },
+  { re: /\bcurl\b.*\|\s*(bash|sh|zsh|pwsh|powershell)\b/i, reason: "curl|sh download-execute" },
+  { re: /\bwget\b.*\|\s*(bash|sh|zsh|pwsh|powershell)\b/i, reason: "wget|sh download-execute" },
 ];
 
 // Approval-required patterns. Allowed if `approved: true`.
@@ -77,8 +81,6 @@ const APPROVAL_PATTERNS: Array<{ re: RegExp; reason: string }> = [
   { re: /\bnpm\b\s+i\s+-g\b/i, reason: "global npm install" },
   { re: /\bpnpm\b\s+add\s+-g\b/i, reason: "global pnpm install" },
   { re: /\byarn\b\s+global\s+add\b/i, reason: "global yarn add" },
-  { re: /\bcurl\b.*\|\s*(bash|sh|zsh|pwsh|powershell)/i, reason: "curl|sh download-execute" },
-  { re: /\bwget\b.*\|\s*(bash|sh)/i, reason: "wget|sh download-execute" },
 ];
 
 export type PolicyInput = {

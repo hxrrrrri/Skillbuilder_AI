@@ -1,7 +1,9 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { TrafficLights } from "@/components/ui/card";
 import { ClientDateTime } from "@/components/ui/client-datetime";
 import { cn } from "@/lib/utils";
 
@@ -51,13 +53,49 @@ export function AgentTable({
   costTiers: string[];
   qualityTiers: string[];
 }) {
+  const [providerOptions, setProviderOptions] = useState(providers);
+
+  useEffect(() => {
+    setProviderOptions(providers);
+  }, [providers]);
+
+  const refreshProviderModels = useCallback(async () => {
+    const resp = await fetch("/api/admin/providers?live=1", { cache: "no-store" });
+    if (!resp.ok) return;
+    const data = await resp.json().catch(() => null);
+    if (!Array.isArray(data?.providers)) return;
+    setProviderOptions((current) => {
+      const byId = new Map(current.map((p) => [p.id, p]));
+      for (const p of data.providers) {
+        if (!p?.providerId) continue;
+        const existing = byId.get(p.providerId);
+        byId.set(p.providerId, {
+          id: p.providerId,
+          label: p.label ?? existing?.label ?? p.providerId,
+          enabled: p.enabled ?? existing?.enabled ?? false,
+          defaultModel: p.defaultModel ?? existing?.defaultModel ?? null,
+          capabilities: {
+            ...(existing?.capabilities ?? {}),
+            ...(p.capabilities ?? {}),
+            models: Array.isArray(p.capabilities?.models)
+              ? p.capabilities.models.filter((m: unknown): m is string => typeof m === "string")
+              : existing?.capabilities?.models ?? [],
+          },
+          reasoningSupported: existing?.reasoningSupported ?? !!p.capabilities?.reasoning,
+        });
+      }
+      return Array.from(byId.values());
+    });
+  }, []);
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {rows.map((r) => (
         <AgentRow
           key={r.id}
           row={r}
-          providers={providers}
+          providers={providerOptions}
+          refreshProviderModels={refreshProviderModels}
           reasoningBudgets={reasoningBudgets}
           fallbackStrategies={fallbackStrategies}
           costTiers={costTiers}
@@ -71,6 +109,7 @@ export function AgentTable({
 function AgentRow({
   row,
   providers,
+  refreshProviderModels,
   reasoningBudgets,
   fallbackStrategies,
   costTiers,
@@ -78,6 +117,7 @@ function AgentRow({
 }: {
   row: Row;
   providers: ProviderOption[];
+  refreshProviderModels: () => Promise<void>;
   reasoningBudgets: string[];
   fallbackStrategies: string[];
   costTiers: string[];
@@ -102,6 +142,23 @@ function AgentRow({
   const [costTier, setCostTier] = useState(row.costTier);
   const [qualityTier, setQualityTier] = useState(row.qualityTier);
   const [error, setError] = useState<string | null>(null);
+  const [modelsRefreshing, setModelsRefreshing] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setModelsRefreshing(true);
+    refreshProviderModels()
+      .catch((err: any) => {
+        if (!cancelled) setError(err?.message ?? "Could not refresh live provider models");
+      })
+      .finally(() => {
+        if (!cancelled) setModelsRefreshing(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, refreshProviderModels]);
 
   const currentProvider = useMemo(
     () => providers.find((p) => p.id === providerId),
@@ -199,10 +256,10 @@ function AgentRow({
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span className={cn("dot flex-shrink-0", enabled ? "dot-alive" : "dot-disabled")} />
+            <TrafficLights className="flex-shrink-0" />
             <code className="truncate text-sm font-semibold text-ink">{row.agentName}</code>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-1.5">
+          <div className="flex flex-shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={quickEnabledToggle}
@@ -239,14 +296,14 @@ function AgentRow({
         </div>
 
         {/* ── Metrics grid ── */}
-        <div className="mt-auto grid grid-cols-4 divide-x divide-border border-t border-border">
+        <div className="mt-auto grid grid-cols-4 border-t border-border">
           {[
             { k: "TEMP", v: String(temperature) },
             { k: "TOKENS", v: String(maxTokens) },
             { k: "TIMEOUT", v: `${timeoutMs / 1000}s` },
             { k: "RETRIES", v: String(retryCount) },
           ].map(({ k, v }) => (
-            <div key={k} className="bg-panel2/20 px-3 py-3 text-center">
+            <div key={k} className="px-3 py-3 text-center">
               <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/60">{k}</div>
               <div className="mt-1 font-mono text-sm font-medium text-ink">{v}</div>
             </div>
@@ -254,7 +311,7 @@ function AgentRow({
         </div>
 
         {/* ── Footer strip ── */}
-        <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+        <div className="grid grid-cols-2 border-t border-border">
           <div className="px-4 py-2.5">
             <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">Fallback</div>
             <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
@@ -283,7 +340,7 @@ function AgentRow({
       </div>
 
       {/* ── Edit modal ── */}
-      {open && (
+      {open && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setOpen(false)}
@@ -315,6 +372,8 @@ function AgentRow({
                       const np = providers.find((p) => p.id === e.target.value);
                       setModel(np?.defaultModel || np?.capabilities?.models?.[0] || "");
                       if (np && !np.reasoningSupported) setReasoningBudget("none");
+                      setModelsRefreshing(true);
+                      refreshProviderModels().finally(() => setModelsRefreshing(false));
                     }}
                     className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 text-xs text-ink"
                   >
@@ -331,10 +390,14 @@ function AgentRow({
                     onChange={(e) => setModel(e.target.value)}
                     className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 font-mono text-xs text-ink"
                   >
+                    {models.length === 0 && <option value="">No live models found</option>}
                     {models.map((m) => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
+                  <p className="mt-1 text-[10px] text-muted">
+                    {modelsRefreshing ? "Refreshing live model list…" : `${models.length} live/catalog model${models.length === 1 ? "" : "s"}`}
+                  </p>
                 </Field>
                 <Field label="Reasoning budget">
                   <select
@@ -473,7 +536,8 @@ function AgentRow({
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

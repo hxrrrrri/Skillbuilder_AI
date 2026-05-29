@@ -57,6 +57,74 @@ export function hasFlag(help: string, ...flags: string[]): boolean {
   return flags.some((flag) => help.includes(flag));
 }
 
+function parseModelList(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) return [];
+
+  const fromJson = modelNamesFromJson(trimmed);
+  if (fromJson.length) return fromJson;
+
+  const ignored = /^(usage|options|commands|available models?|models?:|\[|\]|\{|\}|error|not found|unknown command)/i;
+  const found: string[] = [];
+  for (const line of trimmed.split(/\r?\n/)) {
+    const clean = line
+      .replace(/^[\s*•\-]+/, "")
+      .replace(/\s+\(.*?\)\s*$/, "")
+      .trim();
+    if (!clean || ignored.test(clean)) continue;
+    const token = clean.match(/[A-Za-z0-9][A-Za-z0-9._:/-]{1,}/)?.[0];
+    if (!token || ignored.test(token)) continue;
+    found.push(token);
+  }
+  return Array.from(new Set(found));
+}
+
+function modelNamesFromJson(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw);
+    const values: unknown[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed?.models)
+        ? parsed.models
+        : Array.isArray(parsed?.data)
+          ? parsed.data
+          : [];
+    return Array.from(
+      new Set(
+        values
+          .map((item) =>
+            typeof item === "string"
+              ? item
+              : typeof item === "object" && item
+                ? String((item as any).id ?? (item as any).name ?? (item as any).model ?? "")
+                : "",
+          )
+          .filter(Boolean),
+      ),
+    );
+  } catch {
+    return [];
+  }
+}
+
+export async function discoverCliModels(
+  command: string,
+  fallbackModels: string[],
+  env?: Record<string, string | undefined>,
+): Promise<string[]> {
+  const attempts = [
+    ["models"],
+    ["model", "list"],
+  ];
+  for (const args of attempts) {
+    const run = await probe(command, args, 2000, env);
+    if (run.exitCode !== 0) continue;
+    const models = parseModelList(combinedOutput(run));
+    if (models.length) return models;
+  }
+  return fallbackModels;
+}
+
 function authError(run: CommandRun): boolean {
   return /not authenticated|not logged in|login required|sign in|unauthorized|authentication|api key|openai_api_key|anthropic_api_key|missing credentials|no credentials/i.test(
     `${run.stdout}\n${run.stderr}`,

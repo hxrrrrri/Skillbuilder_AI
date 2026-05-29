@@ -26,6 +26,10 @@ export const metadata: Metadata = {
   title: "SkillProof AI — Verify developer skill from real work",
   description:
     "Proof-of-work hiring for AI-native developers. Paste a GitHub repo and get a verified skill profile employers trust.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

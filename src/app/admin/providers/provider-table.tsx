@@ -1,7 +1,9 @@
 "use client";
-import { useState, useTransition } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { TrafficLights } from "@/components/ui/card";
 import { ClientDateTime } from "@/components/ui/client-datetime";
 import { cn } from "@/lib/utils";
 
@@ -33,16 +35,64 @@ type Row = {
 };
 
 export function ProviderTable({ rows }: { rows: Row[] }) {
+  const [liveRows, setLiveRows] = useState(rows);
+
+  useEffect(() => {
+    setLiveRows(rows);
+  }, [rows]);
+
+  const patchRow = useCallback((providerId: string, patch: Partial<Row>) => {
+    setLiveRows((current) => current.map((row) => (row.providerId === providerId ? { ...row, ...patch } : row)));
+  }, []);
+
+  const refreshLiveRows = useCallback(async () => {
+    const resp = await fetch("/api/admin/providers?live=1", { cache: "no-store" });
+    if (!resp.ok) return;
+    const data = await resp.json().catch(() => null);
+    if (!Array.isArray(data?.providers)) return;
+    setLiveRows((current) =>
+      current.map((row) => {
+        const live = data.providers.find((p: any) => p?.providerId === row.providerId);
+        if (!live) return row;
+        return {
+          ...row,
+          label: live.label ?? row.label,
+          kind: live.kind ?? row.kind,
+          enabled: live.enabled ?? row.enabled,
+          defaultModel: live.defaultModel ?? row.defaultModel,
+          baseUrl: live.baseUrl ?? row.baseUrl,
+          command: live.command ?? row.command,
+          apiKeyEnv: live.apiKeyEnv ?? row.apiKeyEnv,
+          notes: live.notes ?? row.notes,
+          capabilities: live.capabilities ?? row.capabilities,
+          liveAvailable: live.liveAvailable ?? row.liveAvailable,
+        };
+      }),
+    );
+  }, []);
+
+  useEffect(() => {
+    refreshLiveRows().catch(() => {});
+  }, [refreshLiveRows]);
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {rows.map((r) => (
-        <ProviderRow key={r.id} row={r} />
+      {liveRows.map((r) => (
+        <ProviderRow key={r.id} row={r} patchRow={patchRow} refreshLiveRows={refreshLiveRows} />
       ))}
     </div>
   );
 }
 
-function ProviderRow({ row }: { row: Row }) {
+function ProviderRow({
+  row,
+  patchRow,
+  refreshLiveRows,
+}: {
+  row: Row;
+  patchRow: (providerId: string, patch: Partial<Row>) => void;
+  refreshLiveRows: () => Promise<void>;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -86,12 +136,14 @@ function ProviderRow({ row }: { row: Row }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    if (!resp.ok) {
+      if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       setError(data?.error ?? `HTTP ${resp.status}`);
       return;
-    }
+      }
+      patchRow(row.providerId, patch);
     setOpen(false);
+    await refreshLiveRows().catch(() => {});
     startTransition(() => router.refresh());
   }
 
@@ -110,6 +162,7 @@ function ProviderRow({ row }: { row: Row }) {
       setError(data?.error ?? `HTTP ${resp.status}`);
       return;
     }
+    patchRow(row.providerId, { enabled: next });
     startTransition(() => router.refresh());
   }
 
@@ -120,12 +173,23 @@ function ProviderRow({ row }: { row: Row }) {
       const resp = await fetch(`/api/admin/providers/${row.providerId}/test`, {
         method: "POST",
       });
-      if (!resp.ok && resp.status !== 200) {
-        const data = await resp.json().catch(() => ({}));
+      const data = await resp.json().catch(() => ({}));
+      patchRow(row.providerId, {
+        lastTestedAt: new Date().toISOString(),
+        lastTestStatus: data?.json_parse_success ? "ok" : data?.available === false ? "unavailable" : "fail",
+        lastTestModel: data?.model ?? row.lastTestModel,
+        lastTestRaw: typeof data?.raw === "string" ? data.raw : row.lastTestRaw,
+        lastTestJsonOk: typeof data?.json_parse_success === "boolean" ? data.json_parse_success : false,
+        lastTestLatencyMs: typeof data?.latency_ms === "number" ? data.latency_ms : row.lastTestLatencyMs,
+        lastTestError: data?.error ?? null,
+        liveAvailable: !!data?.available && data?.json_parse_success !== false,
+      });
+      if (!resp.ok || data?.error) {
         setError(data?.error ?? `HTTP ${resp.status}`);
       }
     } finally {
       setTestBusy(false);
+      await refreshLiveRows().catch(() => {});
       startTransition(() => router.refresh());
     }
   }
@@ -152,18 +216,13 @@ function ProviderRow({ row }: { row: Row }) {
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span
-              className={cn(
-                "dot flex-shrink-0",
-                enabled ? "dot-alive" : "dot-disabled"
-              )}
-            />
+            <TrafficLights className="flex-shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-ink">{row.label}</div>
               <code className="font-mono text-[11px] text-muted">{row.providerId}</code>
             </div>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-1.5">
+          <div className="flex flex-shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={quickToggle}
@@ -208,7 +267,7 @@ function ProviderRow({ row }: { row: Row }) {
         </div>
 
         {/* ── Metrics grid ── */}
-        <div className="mt-auto grid grid-cols-2 divide-x divide-border border-t border-border sm:grid-cols-4">
+        <div className="mt-auto grid grid-cols-2 border-t border-border sm:grid-cols-4">
           {[
             { k: "MODEL", v: defaultModel || "default" },
             { k: "LATENCY", v: row.lastTestLatencyMs != null ? `${row.lastTestLatencyMs}ms` : "—" },
@@ -223,7 +282,7 @@ function ProviderRow({ row }: { row: Row }) {
         </div>
 
         {/* ── Footer strip ── */}
-        <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+        <div className="grid grid-cols-2 border-t border-border">
           <div className="px-4 py-2.5">
             <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">API Key Env</div>
             <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
@@ -248,13 +307,20 @@ function ProviderRow({ row }: { row: Row }) {
           </span>
         </div>
 
+        <div className="border-t border-border px-4 py-2">
+          <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">Last LLM Output</div>
+          <pre className="mt-1 line-clamp-3 whitespace-pre-wrap break-words font-mono text-[10px] text-muted">
+            {row.lastTestRaw || "—"}
+          </pre>
+        </div>
+
         {error && (
           <p className="border-t border-border px-4 py-2 text-xs text-bad">{error}</p>
         )}
       </div>
 
       {/* ── Edit modal ── */}
-      {open && (
+      {open && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setOpen(false)}
@@ -355,7 +421,8 @@ function ProviderRow({ row }: { row: Row }) {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

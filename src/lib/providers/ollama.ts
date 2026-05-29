@@ -23,7 +23,7 @@ async function listModels(baseUrl: string): Promise<any[]> {
 export async function detectOllama(template?: ProviderTemplate): Promise<ProviderHealth> {
   const cfg = template ?? loadProviderConfig().providers.ollama;
   const baseUrl = cfg?.baseUrl ?? "http://localhost:11434";
-  const model = cfg?.model ?? PROVIDER_MODEL_DEFAULTS.ollama ?? "llama3.2:latest";
+  const model = cfg?.model ?? PROVIDER_MODEL_DEFAULTS.ollama ?? "gemma4:31b-cloud";
   if (cfg?.enabled === false) {
     return {
       providerId: "ollama",
@@ -104,7 +104,7 @@ export function makeOllamaProvider(template?: ProviderTemplate): LLMProvider {
     async runJson(prompt: ProviderPrompt, schemaHint: string): Promise<ProviderResult> {
       const cfg = template ?? loadProviderConfig().providers.ollama;
       const baseUrl = cfg?.baseUrl ?? "http://localhost:11434";
-      const model = prompt.model ?? cfg?.model ?? PROVIDER_MODEL_DEFAULTS.ollama ?? "llama3.2:latest";
+      const model = prompt.model ?? cfg?.model ?? PROVIDER_MODEL_DEFAULTS.ollama ?? "gemma4:31b-cloud";
       let models: any[];
       try {
         models = await listModels(baseUrl);

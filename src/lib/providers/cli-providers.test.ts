@@ -86,6 +86,21 @@ describe("Codex CLI provider", () => {
     });
   });
 
+  it("uses live model output when the CLI exposes models", async () => {
+    installScenario({
+      "codex --version": { stdout: "codex 1.0.0" },
+      "codex --help": { stdout: "codex --model exec" },
+      "codex exec --help": { stdout: "Usage: codex exec --model" },
+      "codex login status": { stdout: "logged in with ChatGPT" },
+      "codex models": { stdout: "gpt-5.5\ngpt-5.5-codex\n" },
+    });
+    const { detectCodexCli } = await import("./codex-cli");
+    await expect(detectCodexCli()).resolves.toMatchObject({
+      status: "ready",
+      availableModels: ["gpt-5.5", "gpt-5.5-codex"],
+    });
+  });
+
   it("reports missing exec support", async () => {
     installScenario({
       "codex --version": { stdout: "codex 1.0.0" },
@@ -156,6 +171,20 @@ describe("Claude CLI provider", () => {
     await expect(detectClaudeCli()).resolves.toMatchObject({
       status: "invalid_command",
       supportsNonInteractive: false,
+    });
+  });
+
+  it("uses live model output when Claude CLI exposes models", async () => {
+    installScenario({
+      "claude --version": { stdout: "claude 1.0.0" },
+      "claude --help": { stdout: "Usage: claude --print --output-format --model" },
+      "claude auth status": { stdout: "authenticated" },
+      "claude models": { stdout: "opus\nsonnet\nhaiku\n" },
+    });
+    const { detectClaudeCli } = await import("./claude-cli");
+    await expect(detectClaudeCli()).resolves.toMatchObject({
+      status: "ready",
+      availableModels: ["opus", "sonnet", "haiku"],
     });
   });
 
@@ -230,6 +259,21 @@ describe("GitHub Copilot CLI provider", () => {
     await expect(detectCopilotCli()).resolves.toMatchObject({
       status: "unsupported_for_scoring",
       supportsNonInteractive: false,
+    });
+  });
+
+  it("uses live model output when Copilot CLI exposes models", async () => {
+    installScenario({
+      "gh copilot --help": { exitCode: 1, stderr: "unknown extension" },
+      "copilot --version": { stdout: "copilot 1.0.0" },
+      "copilot --help": { stdout: "Usage: copilot --prompt --model" },
+      "copilot auth status": { stdout: "logged in" },
+      "copilot models": { stdout: "claude-haiku-4.5\ngpt-5.5-codex\n" },
+    });
+    const { detectCopilotCli } = await import("./copilot-cli");
+    await expect(detectCopilotCli()).resolves.toMatchObject({
+      status: "ready",
+      availableModels: ["claude-haiku-4.5", "gpt-5.5-codex"],
     });
   });
 

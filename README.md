@@ -44,6 +44,29 @@ Local seeded account password: `demo1234`.
 
 The seeded run is marked `DEMO DATA` in run/profile surfaces. It exists so judges can inspect a completed private flow immediately; it is not presented as a live verification and cannot satisfy public/unlisted publish gates.
 
+Before judging, verify the prototype with:
+
+```bash
+npm run typecheck
+npm run test
+npm run build
+npm run e2e
+```
+
+Worker mode for live runs:
+
+```bash
+SKILLPROOF_WORKER_MODE=1 npm run dev
+SKILLPROOF_WORKER_MODE=1 npm run worker
+```
+
+Windows PowerShell:
+
+```powershell
+$env:SKILLPROOF_WORKER_MODE="1"; npm run dev
+$env:SKILLPROOF_WORKER_MODE="1"; npm run worker
+```
+
 ## Judge Demo Mode
 
 Open `/demo` after seeding. It provides:

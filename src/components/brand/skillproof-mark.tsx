@@ -67,18 +67,19 @@ export function HeroProofGraphic({ className }: { className?: string }) {
 export function VerificationChecklist({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 512 512"
+      viewBox="0 0 444 580"
       aria-hidden="true"
       className={cn("h-8 w-8", className)}
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      <rect x="100" y="56" width="312" height="400" rx="32" stroke="currentColor" strokeWidth="28" />
-      <line x1="148" y1="142" x2="364" y2="142" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
-      <line x1="148" y1="218" x2="364" y2="218" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
-      <line x1="148" y1="294" x2="364" y2="294" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
-      <line x1="148" y1="370" x2="364" y2="370" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
-      <line x1="148" y1="446" x2="324" y2="446" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <rect x="19" y="13" width="405" height="552" rx="45" ry="45" fill="#141413" />
+      <rect x="19" y="13" width="405" height="552" rx="45" ry="45" stroke="currentColor" strokeWidth="18" />
+      <line x1="85" y1="154" x2="358" y2="154" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
+      <line x1="85" y1="222" x2="358" y2="222" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
+      <line x1="85" y1="291" x2="358" y2="291" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
+      <line x1="85" y1="355" x2="358" y2="355" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
+      <line x1="85" y1="430" x2="358" y2="430" stroke="currentColor" strokeWidth="9" strokeLinecap="round" />
     </svg>
   );
 }
@@ -92,12 +93,18 @@ export function AuditMagnifying({ className }: { className?: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {/* Magnifying glass lens circle */}
-      <circle cx="180" cy="180" r="140" stroke="currentColor" strokeWidth="36" />
-      {/* Magnifying glass handle */}
-      <line x1="280" y1="280" x2="420" y2="420" stroke="currentColor" strokeWidth="36" strokeLinecap="round" />
-      {/* Box inside lens */}
-      <rect x="100" y="120" width="160" height="120" rx="16" stroke="currentColor" strokeWidth="18" />
+      {/* Magnifying glass circle */}
+      <circle cx="196" cy="196" r="148" stroke="currentColor" strokeWidth="36" />
+      {/* Handle */}
+      <line x1="304" y1="304" x2="448" y2="448" stroke="currentColor" strokeWidth="36" strokeLinecap="round" />
+      {/* Checkmark inside lens */}
+      <path
+        d="M120 200 L172 252 L280 140"
+        stroke="currentColor"
+        strokeWidth="34"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -111,9 +118,9 @@ export function VerifyBadge({ className }: { className?: string }) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
-      {/* Badge/seal shape with scalloped edges */}
+      {/* Shield */}
       <path
-        d="M256 40 L312 72 L350 36 L365 98 L428 80 L395 138 L450 165 L382 190 L410 255 L350 235 L370 300 L305 265 L256 320 L207 265 L142 300 L162 235 L102 255 L130 190 L62 165 L127 138 L94 80 L157 98 L172 36 L210 72 Z"
+        d="M256 48 L432 120 V264 C432 368 352 432 256 472 C160 432 80 368 80 264 V120 Z"
         stroke="currentColor"
         strokeWidth="32"
         strokeLinecap="round"
@@ -121,9 +128,9 @@ export function VerifyBadge({ className }: { className?: string }) {
       />
       {/* Checkmark */}
       <path
-        d="M 180 260 L 240 310 L 360 160"
+        d="M172 264 L224 316 L340 196"
         stroke="currentColor"
-        strokeWidth="40"
+        strokeWidth="38"
         strokeLinecap="round"
         strokeLinejoin="round"
       />

@@ -2,7 +2,7 @@
   "providers": {
     "claude_cli": { "command": "claude", "args": ["--print", "--output-format", "text", "--no-session-persistence"], "enabled": true },
     "codex_cli":  { "command": "codex",  "args": ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-"], "enabled": true },
-    "ollama":     { "model": "llama3.1:8b", "baseUrl": "http://localhost:11434", "enabled": true },
+    "ollama":     { "model": "gemma4:e2b", "baseUrl": "http://localhost:11434", "enabled": true },
     "copilot_cli": { "command": "copilot", "args": ["-p", "{{prompt}}", "--silent", "--stream", "off", "--no-auto-update", "--no-ask-user"], "enabled": true }
   },
   "roles": {

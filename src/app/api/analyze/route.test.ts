@@ -130,6 +130,27 @@ describe("/api/analyze", () => {
     expect(mocks.prisma.analysisRun.create).not.toHaveBeenCalled();
   });
 
+  it("rejects ownership challenge payload mismatches before creating a run", async () => {
+    const issued = issueOwnershipChallengeToken({
+      challengeId: "challenge-mismatch",
+      userId: "u1",
+      owner: "octo",
+      repo: "different-repo",
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(makeReq({
+      ...baseBody,
+      ownership_token: issued.token,
+      ownership_challenge_id: "challenge-mismatch",
+    }));
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.reason).toBe("challenge_payload_mismatch");
+    expect(mocks.prisma.ownershipChallenge.findUnique).not.toHaveBeenCalled();
+    expect(mocks.prisma.analysisRun.create).not.toHaveBeenCalled();
+  });
+
   it("rejects consumed ownership challenges", async () => {
     const issued = issueOwnershipChallengeToken({
       challengeId: "challenge-2",

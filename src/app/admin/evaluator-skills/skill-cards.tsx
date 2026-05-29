@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { TrafficLights } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type SkillRow = {
@@ -105,13 +107,13 @@ function SkillCard({ skill }: { skill: SkillRow }) {
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span className={cn("dot flex-shrink-0", enabled ? "dot-alive" : "dot-disabled")} />
+            <TrafficLights className="flex-shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-ink">{skill.name}</div>
               <code className="font-mono text-[11px] text-muted">{skill.slug}</code>
             </div>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-1.5">
+          <div className="flex flex-shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={toggleEnabled}
@@ -143,13 +145,13 @@ function SkillCard({ skill }: { skill: SkillRow }) {
         </div>
 
         {/* ── Metrics grid ── */}
-        <div className="mt-auto grid grid-cols-3 divide-x divide-border border-t border-border">
+        <div className="mt-auto grid grid-cols-3 border-t border-border">
           {[
             { k: "RUNS", v: String(skill.runCount) },
             { k: "INPUTS", v: String(inputs.length) },
             { k: "TOOLS", v: String(Object.keys(tools).length) },
           ].map(({ k, v }) => (
-            <div key={k} className="bg-panel2/20 px-3 py-3 text-center">
+            <div key={k} className="px-3 py-3 text-center">
               <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/60">{k}</div>
               <div className="mt-1 font-mono text-sm font-medium text-ink">{v}</div>
             </div>
@@ -157,7 +159,7 @@ function SkillCard({ skill }: { skill: SkillRow }) {
         </div>
 
         {/* ── Footer strip ── */}
-        <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+        <div className="grid grid-cols-2 border-t border-border">
           <div className="px-4 py-2.5">
             <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">Outputs</div>
             <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
@@ -180,7 +182,7 @@ function SkillCard({ skill }: { skill: SkillRow }) {
       </div>
 
       {/* ── Edit modal ── */}
-      {open && (
+      {open && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setOpen(false)}
@@ -317,7 +319,8 @@ function SkillCard({ skill }: { skill: SkillRow }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

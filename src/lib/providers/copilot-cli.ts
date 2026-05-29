@@ -1,5 +1,5 @@
 import type { ProviderTemplate } from "./config";
-import { combinedOutput, hasFlag, probe, runCliJson } from "./cli-utils";
+import { combinedOutput, discoverCliModels, hasFlag, probe, runCliJson } from "./cli-utils";
 import { modelsForProvider } from "./model-catalog";
 import type { LLMProvider, ProviderHealth, ProviderPrompt, ProviderResult } from "./types";
 
@@ -71,6 +71,7 @@ export async function detectCopilotCli(template?: ProviderTemplate): Promise<Pro
     : supportsPrompt
       ? "ready"
       : "unsupported_for_scoring";
+  const availableModels = await discoverCliModels(command, modelsForProvider("copilot_cli"));
   return {
     providerId: "copilot_cli",
     label: "GitHub Copilot CLI",
@@ -83,7 +84,7 @@ export async function detectCopilotCli(template?: ProviderTemplate): Promise<Pro
     supportsNonInteractive: supportsPrompt,
     supportsModelSelection: hasFlag(helpText, "--model"),
     supportsReasoningBudget: hasFlag(helpText, "--effort", "--reasoning-effort"),
-    availableModels: modelsForProvider("copilot_cli"),
+    availableModels,
     configuredModel: template?.model ?? null,
     lastError:
       status === "ready"

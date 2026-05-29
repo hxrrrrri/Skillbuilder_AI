@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { TrafficLights } from "@/components/ui/card";
 import { ClientDateTime } from "@/components/ui/client-datetime";
 import { cn } from "@/lib/utils";
 
@@ -34,16 +36,26 @@ type Row = {
 };
 
 export function ProviderHealthTable({ rows }: { rows: Row[] }) {
+  const [liveRows, setLiveRows] = useState(rows);
+
+  useEffect(() => {
+    setLiveRows(rows);
+  }, [rows]);
+
+  function patchRow(providerId: string, patch: Partial<Row>) {
+    setLiveRows((current) => current.map((row) => (row.providerId === providerId ? { ...row, ...patch } : row)));
+  }
+
   return (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {rows.map((row) => (
-        <HealthRow key={row.providerId} row={row} />
+      {liveRows.map((row) => (
+        <HealthRow key={row.providerId} row={row} patchRow={patchRow} />
       ))}
     </div>
   );
 }
 
-function HealthRow({ row }: { row: Row }) {
+function HealthRow({ row, patchRow }: { row: Row; patchRow: (providerId: string, patch: Partial<Row>) => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -68,6 +80,15 @@ function HealthRow({ row }: { row: Row }) {
     try {
       const res = await fetch(`/api/admin/providers/${row.providerId}/test`, { method: "POST" });
       const data = await res.json().catch(() => ({}));
+      patchRow(row.providerId, {
+        status: data?.json_parse_success ? "ready" : data?.available === false ? "failed" : "invalid_json",
+        lastTestedAt: new Date().toISOString(),
+        lastLatencyMs: typeof data?.latency_ms === "number" ? data.latency_ms : row.lastLatencyMs,
+        lastRawOutputPreview: typeof data?.raw === "string" ? data.raw : row.lastRawOutputPreview,
+        lastError: data?.error ?? null,
+        lastTestJsonOk: typeof data?.json_parse_success === "boolean" ? data.json_parse_success : false,
+        configuredModel: data?.model ?? row.configuredModel,
+      });
       if (!res.ok || data?.error) setError(data?.message ?? data?.error ?? `HTTP ${res.status}`);
     } finally {
       setBusy(false);
@@ -114,18 +135,13 @@ function HealthRow({ row }: { row: Row }) {
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span
-              className={cn(
-                "dot flex-shrink-0",
-                row.status === "ready" ? "dot-alive" : "dot-disabled"
-              )}
-            />
+            <TrafficLights className="flex-shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-ink">{row.label}</div>
               <code className="font-mono text-[11px] text-muted">{row.providerId}</code>
             </div>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-1.5">
+          <div className="flex flex-shrink-0 items-center gap-2">
             {row.providerId !== "deterministic" && (
               <button
                 type="button"
@@ -158,14 +174,14 @@ function HealthRow({ row }: { row: Row }) {
         </div>
 
         {/* ── Metrics grid ── */}
-        <div className="mt-auto grid grid-cols-2 divide-x divide-border border-t border-border sm:grid-cols-4">
+        <div className="mt-auto grid grid-cols-2 border-t border-border sm:grid-cols-4">
           {[
             { k: "VERSION", v: row.version ?? "—" },
             { k: "LATENCY", v: row.lastLatencyMs != null ? `${row.lastLatencyMs}ms` : "—" },
             { k: "JSON", v: row.lastTestJsonOk == null ? "—" : row.lastTestJsonOk ? "pass" : "fail" },
             { k: "REASONING", v: row.supportsReasoningBudget ? "yes" : "no" },
           ].map(({ k, v }) => (
-            <div key={k} className="bg-panel2/20 px-3 py-3 text-center">
+            <div key={k} className="px-3 py-3 text-center">
               <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/60">{k}</div>
               <div className="mt-1 truncate font-mono text-xs font-medium text-ink">{v}</div>
             </div>
@@ -173,7 +189,7 @@ function HealthRow({ row }: { row: Row }) {
         </div>
 
         {/* ── Footer strip ── */}
-        <div className="grid grid-cols-2 divide-x divide-border border-t border-border">
+        <div className="grid grid-cols-2 border-t border-border">
           <div className="px-4 py-2.5">
             <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">Model</div>
             <div className="mt-0.5 truncate font-mono text-[11px] text-muted">
@@ -202,6 +218,13 @@ function HealthRow({ row }: { row: Row }) {
           </p>
         )}
 
+        <div className="border-t border-border px-4 py-2">
+          <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/50">Last LLM Output</div>
+          <pre className="mt-1 line-clamp-3 whitespace-pre-wrap break-words font-mono text-[10px] text-muted">
+            {row.lastRawOutputPreview || "—"}
+          </pre>
+        </div>
+
         {/* agents link */}
         <div className="border-t border-border px-4 py-2">
           <a
@@ -214,7 +237,7 @@ function HealthRow({ row }: { row: Row }) {
       </div>
 
       {/* ── Edit modal ── */}
-      {open && (
+      {open && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setOpen(false)}
@@ -319,7 +342,8 @@ function HealthRow({ row }: { row: Row }) {
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

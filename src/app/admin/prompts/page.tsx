@@ -30,14 +30,14 @@ export default async function AdminPromptsPage() {
       activeHref="/admin/prompts"
     >
       {rows.length === 0 ? (
-        <Card>
+        <Card showTrafficLights>
           <CardBody>
             <ScaffoldNotice detail="No prompt versions exist yet. Run `npm run db:seed-prompts` after applying the PromptVersion schema." />
           </CardBody>
         </Card>
       ) : (
-        <Card>
-          <CardHeader>
+        <Card showTrafficLights className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
+          <CardHeader className="border-bg pl-20">
             <CardTitle>Agent prompt versions</CardTitle>
           </CardHeader>
           <CardBody>

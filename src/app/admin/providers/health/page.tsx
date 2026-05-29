@@ -48,8 +48,8 @@ export default async function ProviderHealthPage() {
       navLinks={ADMIN_NAV}
       activeHref="/admin/providers"
     >
-      <Card>
-        <CardHeader>
+      <Card showTrafficLights className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
+        <CardHeader className="border-bg pl-20">
           <CardTitle>Real Provider Readiness</CardTitle>
         </CardHeader>
         <CardBody>

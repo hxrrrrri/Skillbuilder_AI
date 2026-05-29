@@ -37,10 +37,11 @@ const DEFAULTS: ProviderConfig = {
     },
     codex_cli: {
       command: "codex",
+      model: PROVIDER_MODEL_DEFAULTS.codex_cli ?? "gpt-5.5",
       args: ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-"],
       enabled: true,
     },
-    ollama: { model: PROVIDER_MODEL_DEFAULTS.ollama ?? "llama3.2:latest", baseUrl: "http://localhost:11434", enabled: true },
+    ollama: { model: PROVIDER_MODEL_DEFAULTS.ollama ?? "gemma4:31b-cloud", baseUrl: "http://localhost:11434", enabled: true },
     copilot_cli: {
       command: "copilot",
       args: ["-p", "{{prompt}}", "--silent", "--stream", "off", "--no-auto-update", "--no-ask-user"],
@@ -48,11 +49,11 @@ const DEFAULTS: ProviderConfig = {
     },
   },
   roles: {
-    orchestrator: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
-    worker: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
-    validator: ["anthropic_api", "codex_cli", "claude_cli", "copilot_cli", "ollama"],
-    interview: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
-    profile: ["anthropic_api", "claude_cli", "codex_cli", "copilot_cli", "ollama"],
+    orchestrator: ["codex_cli", "claude_cli", "anthropic_api", "copilot_cli", "ollama"],
+    worker: ["codex_cli", "claude_cli", "anthropic_api", "copilot_cli", "ollama"],
+    validator: ["codex_cli", "claude_cli", "anthropic_api", "copilot_cli", "ollama"],
+    interview: ["codex_cli", "claude_cli", "anthropic_api", "copilot_cli", "ollama"],
+    profile: ["codex_cli", "claude_cli", "anthropic_api", "copilot_cli", "ollama"],
   },
 };
 

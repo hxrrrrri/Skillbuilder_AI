@@ -1,9 +1,11 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TrafficLights } from "@/components/ui/card";
 import { Input, TextArea } from "@/components/ui/input";
 import { ClientDateTime } from "@/components/ui/client-datetime";
 import { cn } from "@/lib/utils";
@@ -107,15 +109,10 @@ function PromptCard({ agentName, rows }: { agentName: string; rows: PromptRow[] 
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <span
-              className={cn(
-                "dot flex-shrink-0",
-                active?.isActive ? "dot-alive" : "dot-disabled"
-              )}
-            />
+            <TrafficLights className="flex-shrink-0" />
             <code className="truncate text-sm font-semibold text-ink">{agentName}</code>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-1.5">
+          <div className="flex flex-shrink-0 items-center gap-2">
             <button
               type="button"
               onClick={() => setOpen(true)}
@@ -142,13 +139,13 @@ function PromptCard({ agentName, rows }: { agentName: string; rows: PromptRow[] 
         </div>
 
         {/* ── Metrics grid ── */}
-        <div className="mt-auto grid grid-cols-3 divide-x divide-border border-t border-border">
+        <div className="mt-auto grid grid-cols-3 border-t border-border">
           {[
             { k: "VERSIONS", v: String(rows.length) },
             { k: "ACTIVE", v: active ? `v${active.version}` : "—" },
             { k: "CHARS", v: active ? String(active.system.length) : "0" },
           ].map(({ k, v }) => (
-            <div key={k} className="bg-panel2/20 px-3 py-3 text-center">
+            <div key={k} className="px-3 py-3 text-center">
               <div className="text-[9px] font-semibold uppercase tracking-widest text-muted/60">{k}</div>
               <div className="mt-1 font-mono text-sm font-medium text-ink">{v}</div>
             </div>
@@ -165,7 +162,7 @@ function PromptCard({ agentName, rows }: { agentName: string; rows: PromptRow[] 
       </div>
 
       {/* ── Edit modal ── */}
-      {open && (
+      {open && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={() => setOpen(false)}
@@ -324,7 +321,8 @@ function PromptCard({ agentName, rows }: { agentName: string; rows: PromptRow[] 
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

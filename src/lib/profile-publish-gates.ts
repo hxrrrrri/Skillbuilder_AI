@@ -52,6 +52,10 @@ function hasPrivateTraceMarker(value: string): boolean {
   return PRIVATE_TRACE_PATTERNS.some((pattern) => pattern.test(value));
 }
 
+function impliesVerifiedOwnership(value: string): boolean {
+  return /\bverified\s+(repo\s+)?ownership\b/i.test(value) || /\bownership\s+(badge|status)\s*:\s*verified\b/i.test(value);
+}
+
 export function getPublicProfilePublishBlockers(run: RunLike): PublishBlocker[] {
   const blockers: PublishBlocker[] = [];
 
@@ -119,6 +123,21 @@ export function getPublicProfilePublishBlockers(run: RunLike): PublishBlocker[] 
     blockers.push({
       code: "public_private_trace_detected",
       message: "Public report payload references private traces, prompts, raw model output, private answers, or raw terminal output.",
+    });
+  }
+  const ownership = safeJson<{ confidence?: string; verification_method?: string } | null>(run.ownershipStatus, null);
+  if (
+    publicPayload &&
+    impliesVerifiedOwnership(publicPayload) &&
+    ownership?.confidence !== "verified" &&
+    ownership?.verification_method !== "owner_match" &&
+    ownership?.verification_method !== "collaborator_verified" &&
+    ownership?.verification_method !== "repo_token_verified"
+  ) {
+    blockers.push({
+      code: "ownership_badge_unsupported",
+      message: "Public payload implies verified repository ownership, but ownership is self-declared or unverified.",
+      detail: ownership,
     });
   }
   if (publicPayload && hasRedaction(publicPayload)) {
