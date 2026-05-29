@@ -12,7 +12,7 @@ const baseConfig = {
   providers: {
     claude_cli: { command: "claude", args: ["--print", "{{prompt}}"], enabled: true },
     codex_cli: { command: "codex", args: ["exec", "--ephemeral", "--skip-git-repo-check", "-"], enabled: true },
-    ollama: { model: "llama3.1:8b", baseUrl: "http://localhost:11434", enabled: true },
+    ollama: { model: "llama3.2:latest", baseUrl: "http://localhost:11434", enabled: true },
     copilot_cli: { command: "copilot", args: ["-p", "{{prompt}}", "--silent"], enabled: false },
   },
   roles: {

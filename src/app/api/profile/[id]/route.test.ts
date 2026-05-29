@@ -25,7 +25,17 @@ const profileOwnedByU1 = {
   ownerUserId: "u1",
   visibility: "public",
   includeTerminalProof: false,
-  run: { tenantId: null },
+  run: {
+    tenantId: null,
+    status: "completed",
+    executionMode: "api",
+    providerMatrix: JSON.stringify({ agents: {} }),
+    validationSummary: JSON.stringify({ total: 1 }),
+    profileSummary: JSON.stringify({ developer_summary: "Evidence-backed." }),
+    employerVerifier: JSON.stringify({ role_fit_summary: "Backed by evidence." }),
+    ownershipStatus: JSON.stringify({ confidence: "verified" }),
+    scores: [{ skillName: "Testing", score: 80, scoreSource: "llm", evidence: JSON.stringify([{ reason: "file-backed" }]) }],
+  },
 };
 
 function patchReq(body: any): Request {
@@ -39,6 +49,7 @@ function patchReq(body: any): Request {
 describe("/api/profile/[id]", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.writeAuditLog.mockResolvedValue(undefined);
     mocks.prisma.publicProfile.update.mockResolvedValue({
       id: "p1",
       visibility: "unlisted",
@@ -67,6 +78,29 @@ describe("/api/profile/[id]", () => {
     });
     expect(mocks.writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "profile.update" }),
+    );
+  });
+
+  it("PATCH blocks public visibility when publish gates fail", async () => {
+    mocks.getCurrentUser.mockResolvedValue({ id: "u1", role: "candidate", tenantIds: [] });
+    mocks.prisma.publicProfile.findUnique.mockResolvedValue({
+      ...profileOwnedByU1,
+      visibility: "private",
+      run: {
+        ...profileOwnedByU1.run,
+        scores: [{ skillName: "Testing", score: 80, scoreSource: "llm", evidence: "[]" }],
+      },
+    });
+    const { PATCH } = await import("./route");
+    const res = await PATCH(patchReq({ visibility: "public" }), { params: { id: "p1" } });
+    const data = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(data.error).toBe("public_profile_blocked");
+    expect(data.blockers.map((b: any) => b.code)).toContain("missing_evidence");
+    expect(mocks.prisma.publicProfile.update).not.toHaveBeenCalled();
+    expect(mocks.writeAuditLog).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "profile.update.blocked" }),
     );
   });
 

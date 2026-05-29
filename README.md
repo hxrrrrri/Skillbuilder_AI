@@ -33,6 +33,38 @@ Default local seeded users:
 
 Local seeded account password: `demo1234`.
 
+`npm run setup:demo` runs the full local bootstrap (`db:generate`, `db:push`, seeded users, provider registry, and prompts). `npm run db:seed-users` also creates a clearly labeled private judge walkthrough dataset:
+
+- completed run: `casey-candidate/skillproof-commerce`
+- private draft profile: `/profile/casey-candidate-skillproof-ai-demo`
+- demo launcher: `/demo`
+- certified setup checklist: `/demo/checklist`
+- demo cohort: `SkillProof AI Judge Demo Cohort`
+- employer shortlist: `Hackathon judge shortlist`
+
+The seeded run is marked `DEMO DATA` in run/profile surfaces. It exists so judges can inspect a completed private flow immediately; it is not presented as a live verification and cannot satisfy public/unlisted publish gates.
+
+## Judge Demo Mode
+
+Open `/demo` after seeding. It provides:
+
+- one-line product explanation
+- problem/solution framing
+- Candidate, Employer, College, and Admin demo buttons
+- completed private run/profile/report links
+- certified setup checklist
+- live repository verification path
+- seeded account emails and the shared local password
+
+Recommended judging order:
+
+1. `/demo`
+2. Candidate seeded account -> completed run -> private draft profile
+3. Candidate seeded account -> `/candidate/new-verification` for a live repo run
+4. Employer seeded account -> search, compare, shortlist, interview kit
+5. College seeded account -> dashboard, cohort, skill gaps, placement readiness, employer share
+6. Admin seeded account -> provider health, runs, evidence, agents, prompts, audit logs
+
 ## Environment
 
 Required:
@@ -49,15 +81,15 @@ Provider-specific:
 Runtime controls:
 
 - `SKILLPROOF_WORKER_MODE=1` makes API requests enqueue pending runs for `npm run worker`.
-- `SKILLPROOF_TERMINAL_ENABLED=1` is required for production terminal execution.
+- `SKILLPROOF_TERMINAL_ENABLED=1` enables local terminal proof. Leave disabled in production unless container isolation is deployed.
 - `SKILLPROOF_PUBLIC_REPORTS_ENABLED=0` disables public profile report downloads.
 - `SKILLPROOF_OWNERSHIP_SECRET` optionally overrides the HMAC secret for server-issued ownership challenge tokens. If omitted, `NEXTAUTH_SECRET` is used.
 
 Model overrides:
 
-- `MODEL_ORCHESTRATOR=claude-opus-4-1-20250805`
-- `MODEL_WORKER=claude-sonnet-4-20250514`
-- `MODEL_VALIDATOR=claude-opus-4-1-20250805`
+- `MODEL_ORCHESTRATOR=claude-opus-4-7`
+- `MODEL_WORKER=claude-sonnet-4-6`
+- `MODEL_VALIDATOR=claude-opus-4-7`
 
 ## Provider Policy
 
@@ -121,8 +153,7 @@ Ollama:
 
 ```bash
 ollama serve
-ollama pull qwen2.5-coder
-ollama pull llama3.1
+ollama pull llama3.2
 ```
 
 Set the desired model in Admin -> Providers and run the health test. SkillProof never auto-pulls models.
@@ -169,6 +200,10 @@ Only the token hash is stored. Candidates can place the token in `.skillproof-ve
 Public profiles and employer reports use public/shared profile data only. They do not expose raw context packs, raw prompts, raw model outputs, admin traces, private terminal output, private interview answers, secrets, or unpublished/private data.
 
 Private reports require owner/admin access. College reports are tenant-scoped. Employer reports are public-safe.
+
+Seeded demo artifacts, mock sources, heuristic sources, missing evidence, raw trace markers, and secret-like payloads block public/unlisted publishing. If no real provider has passed health checks, SkillProof AI permits private walkthroughs only.
+
+Changing an existing profile from private to public/unlisted re-runs the same publish gates as first publish. Unsafe or missing evidence cannot be made public by editing visibility.
 
 ## Scoring
 
@@ -219,6 +254,40 @@ npm run test
 npm run build
 npm run dev
 ```
+
+Route checklist for judges:
+
+- `/demo`
+- `/demo/checklist`
+- `/login`
+- `/candidate/dashboard`
+- `/candidate/new-verification`
+- `/candidate/runs/[id]`
+- `/candidate/interview/[runId]`
+- `/candidate/ai-challenge/[runId]`
+- `/profile/casey-candidate-skillproof-ai-demo`
+- `/employer/search`
+- `/employer/compare`
+- `/employer/shortlist`
+- `/college/dashboard`
+- `/college/cohorts`
+- `/college/skill-gaps`
+- `/admin/dashboard`
+- `/admin/providers/health`
+- `/admin/runs`
+- `/admin/evidence`
+
+Additional docs:
+
+- `docs/DEMO_SCRIPT.md`
+- `docs/JUDGE_WALKTHROUGH.md`
+- `docs/ARCHITECTURE.md`
+- `docs/TRUST_MODEL.md`
+- `docs/PROVIDER_SETUP.md`
+- `docs/SECURITY.md`
+- `docs/SECURITY_MODEL.md`
+- `docs/HACKATHON_DEMO_SCRIPT.md`
+- `DEMO_LIMITATIONS.md`
 
 Recommended hackathon demo process:
 

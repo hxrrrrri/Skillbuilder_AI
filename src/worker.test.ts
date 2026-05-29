@@ -25,6 +25,7 @@ describe("worker ownership challenge handoff", () => {
     (process.env as Record<string, string | undefined>).NODE_ENV = "test";
     mocks.prisma.analysisRun.findFirst.mockResolvedValue({
       id: "run-1",
+      attemptCount: 0,
       targetRole: "Full-stack Developer",
       candidateLevel: "Junior",
       jobDescription: null,
@@ -56,5 +57,36 @@ describe("worker ownership challenge handoff", () => {
         ownershipChallengeId: "challenge-1",
       }),
     );
+  });
+
+  it("claims pending runs with worker metadata and in_progress state", async () => {
+    const { claimNextRun } = await import("./worker");
+    const claimed = await claimNextRun("worker-test-1");
+
+    expect(claimed?.id).toBe("run-1");
+    expect(mocks.prisma.analysisRun.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({ id: "run-1", status: "pending" }),
+      data: expect.objectContaining({
+        status: "in_progress",
+        workerId: "worker-test-1",
+        attemptCount: { increment: 1 },
+        statusMessage: "Claimed by worker worker-test-1.",
+      }),
+    });
+  });
+
+  it("marks failed attempts with clear worker failure metadata", async () => {
+    mocks.runMission.mockRejectedValueOnce(new Error("provider failed"));
+    const { processOne } = await import("./worker");
+
+    await expect(processOne("worker-test-2")).resolves.toBe(true);
+    expect(mocks.prisma.analysisRun.update).toHaveBeenCalledWith({
+      where: { id: "run-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        lastFailureReason: "provider failed",
+        workerId: "worker-test-2",
+      }),
+    });
   });
 });

@@ -231,9 +231,7 @@ export async function runMission(opts: {
 
   // Run local proof runner first when execution mode uses CLI/hybrid.
   let proof: Awaited<ReturnType<typeof runProof>> | null = null;
-  const ownershipToken = opts.ownershipToken ?? (opts.githubUsername
-    ? `skillproof:${opts.githubUsername}:${opts.runId}:${opts.runId.slice(-8)}`
-    : null);
+  const ownershipToken = opts.ownershipToken ?? null;
   if ((mode === "cli" || mode === "hybrid" || mode === "local") && opts.repoUrl) {
     try {
       proof = await runProof({
@@ -261,7 +259,7 @@ export async function runMission(opts: {
       raw: proof.ownership,
       repoOwner: opts.owner,
       githubUsername: opts.githubUsername ?? null,
-      verificationToken: ownershipToken,
+      verificationToken: ownershipToken ? "server_issued_challenge_token_redacted" : null,
       ownershipChallengeId: opts.ownershipChallengeId ?? null,
     });
     state.ownership_status = ownership;
@@ -276,7 +274,7 @@ export async function runMission(opts: {
       raw: { owner_match: false, repo_token_verified: false, collaborator_verified: false, self_declared: !!opts.githubUsername },
       repoOwner: opts.owner,
       githubUsername: opts.githubUsername ?? null,
-      verificationToken: ownershipToken,
+      verificationToken: ownershipToken ? "server_issued_challenge_token_redacted" : null,
       ownershipChallengeId: opts.ownershipChallengeId ?? null,
     });
   }

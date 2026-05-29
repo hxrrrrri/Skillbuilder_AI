@@ -555,18 +555,14 @@ export async function runProof(opts: {
     const readme = ["README.md", "README", "readme.md"]
       .map((f) => path.join(workspace, f))
       .find((p) => fs.existsSync(p));
-    if (readme && (opts.githubUsername || opts.ownershipTokenHash)) {
+    if (readme && opts.ownershipTokenHash) {
       const txt = fs.readFileSync(readme, "utf8");
-      const tag = opts.ownershipToken ?? `skillproof:${opts.githubUsername}`;
       if (opts.ownershipTokenHash && contentHasOwnershipTokenHash(txt, opts.ownershipTokenHash)) repo_token_verified = true;
-      if (!repo_token_verified && opts.githubUsername && txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
     }
     const verifyFile = path.join(workspace, ".skillproof-verify.json");
     if (!repo_token_verified && fs.existsSync(verifyFile)) {
       const txt = fs.readFileSync(verifyFile, "utf8");
-      const tag = opts.ownershipToken ?? (opts.githubUsername ? `skillproof:${opts.githubUsername}` : "");
       if (opts.ownershipTokenHash && contentHasOwnershipTokenHash(txt, opts.ownershipTokenHash)) repo_token_verified = true;
-      if (!repo_token_verified && tag && txt.toLowerCase().includes(tag.toLowerCase())) repo_token_verified = true;
     }
   } catch {}
 

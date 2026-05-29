@@ -8,7 +8,7 @@ import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PublishRunButton } from "./publish-run-button";
 
-type StageStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+type StageStatus = "pending" | "running" | "in_progress" | "completed" | "failed" | "skipped";
 
 type RunPayload = {
   id: string;
@@ -122,7 +122,7 @@ const STAGES: Array<{ key: string; label: string; agent?: string }> = [
 function statusTone(status: string) {
   if (status === "completed") return "good" as const;
   if (status === "failed") return "bad" as const;
-  if (status === "running") return "warn" as const;
+  if (status === "running" || status === "in_progress") return "warn" as const;
   return "default" as const;
 }
 
@@ -184,7 +184,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
     void load();
     const id = window.setInterval(() => {
       setRun((current) => {
-        if (current && current.status !== "pending" && current.status !== "running") return current;
+        if (current && current.status !== "pending" && current.status !== "running" && current.status !== "in_progress") return current;
         void load();
         return current;
       });
@@ -193,7 +193,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
-  const isActive = run?.status === "pending" || run?.status === "running" || (loading && !run);
+  const isActive = run?.status === "pending" || run?.status === "running" || run?.status === "in_progress" || (loading && !run);
   const completedAgentCount = run?.events.filter((e) => e.status === "completed").length ?? 0;
   const totalAgentCount = run?.events.length ?? STAGES.filter((s) => s.agent).length;
   const progressPercent = totalAgentCount ? Math.round((completedAgentCount / totalAgentCount) * 100) : 0;
@@ -312,7 +312,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           ready={!!run?.events.length}
           emptyText="No agent events generated yet."
         >
-          <AgentTimeline events={run?.events ?? []} partial={run?.status === "running"} />
+          <AgentTimeline events={run?.events ?? []} partial={run?.status === "running" || run?.status === "in_progress"} />
         </ReportSection>
 
         <ReportSection
@@ -378,14 +378,14 @@ function MissionProgress({ run }: { run: RunPayload | null }) {
         const ev = agentEvent(run, stage.agent);
         return (
           <li key={stage.key} className="flex gap-3 rounded-md border border-border bg-panel2/35 p-2.5">
-            <span className={cn("dot mt-1", status === "completed" ? "dot-completed" : status === "running" ? "dot-running" : status === "failed" ? "dot-failed" : status === "skipped" ? "dot-skipped" : "dot-pending")} />
+            <span className={cn("dot mt-1", status === "completed" ? "dot-completed" : status === "running" || status === "in_progress" ? "dot-running" : status === "failed" ? "dot-failed" : status === "skipped" ? "dot-skipped" : "dot-pending")} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate text-sm text-ink">{stage.label}</span>
                 <span className="font-mono text-[10px] uppercase text-muted">{status}</span>
               </div>
               {ev?.checked && <p className="mt-1 text-xs text-muted">{ev.checked}</p>}
-              {status === "running" && <p className="mt-1 font-mono text-[11px] text-warn">running provider-backed check...</p>}
+              {(status === "running" || status === "in_progress") && <p className="mt-1 font-mono text-[11px] text-warn">running provider-backed check...</p>}
               {status === "failed" && <p className="mt-1 text-xs text-bad">{ev?.next_action || "Check failure details below."}</p>}
             </div>
           </li>

@@ -43,6 +43,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
 
   const run = profile.run;
   const candidate = run.candidate;
+  const isDemoProfile = /DEMO DATA/i.test(run.statusMessage ?? "");
 
   const scores = run.scores.map((s) => ({
     skill: s.skillName,
@@ -106,8 +107,15 @@ export default async function PublicProfile({ params }: { params: { slug: string
           <code className="rounded bg-panel2 px-1">{profile.visibility}</code> — only you (and admins) see this view.
         </div>
       )}
+      {isDemoProfile && (
+        <div className="rounded-lg border border-warn/45 bg-warn/10 px-4 py-3 text-xs leading-5 text-ink">
+          <span className="font-semibold text-warn">Seeded demo data.</span> This public profile is provided for judge
+          walkthroughs and is not a live verification. Start a new verification to analyze a real repository.
+        </div>
+      )}
       <header className="rounded-lg border border-border bg-panel/88 p-8 shadow-glow">
         <div className="flex flex-wrap items-center gap-2">
+          {isDemoProfile && <Badge tone="warn">Seeded Demo Data</Badge>}
           <Badge tone="accent">Verified Profile</Badge>
           <Badge tone="accent">Published Profile</Badge>
           {evidenceBacked && <Badge tone="good">Evidence-Backed Profile</Badge>}
@@ -125,7 +133,7 @@ export default async function PublicProfile({ params }: { params: { slug: string
           {terminalEvidence.length > 0 && (
             <Badge tone="good">Terminal Proof Included</Badge>
           )}
-          {ai && <Badge tone="good">Challenge Verified</Badge>}
+          {ai && <Badge tone="good">AI Collaboration Verified</Badge>}
         </div>
         <h1 className="mt-3 text-3xl font-bold md:text-4xl">
           {candidate?.name ?? "Anonymous Candidate"}

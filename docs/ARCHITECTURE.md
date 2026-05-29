@@ -1,5 +1,12 @@
 # SkillProof AI Architecture
 
+## Prototype Reliability Updates
+
+- Provider/model defaults are centralized in `src/lib/providers/defaults.ts` and mirrored into DB registry rows by `npm run db:seed-registry -- --force`.
+- Mission runs are processed by the web process only as a local fallback. Demo/production should set `SKILLPROOF_WORKER_MODE=1` and run `npm run demo:worker`.
+- Worker claims use `in_progress`, `workerId`, `heartbeatAt`, `attemptCount`, `maxAttempts`, and `lastFailureReason` fields on `AnalysisRun`.
+- `/demo/checklist` reports database, seeds, provider registry, prompts, provider health, worker mode, terminal proof, public reports, and GitHub token status.
+
 SkillProof AI converts a real GitHub repository into hiring evidence through a validation-contract-first pipeline.
 
 ## Validation Contract First
@@ -19,7 +26,9 @@ Default demo/production flow is out-of-process:
 
 Agent order:
 
-`orchestrator -> repo-scanner -> architecture -> code-quality -> testing -> security -> ai-collaboration -> git-evidence -> documentation -> authenticity -> interview-gen -> validator -> skill-graph -> profile-gen`
+`orchestrator -> repo-scanner -> architecture -> code-quality -> testing -> security -> ai-collaboration -> git-evidence -> documentation -> authenticity -> interview-gen -> answer-evaluator -> ai-collaboration-evaluator -> validator -> skill-graph -> employer-verifier -> improvement-plan -> profile-gen`
+
+The seeded judge run follows the same persisted shape, but every seeded artifact is marked as demo data. Live runs regenerate provider outputs, repo intelligence, ownership status, terminal proof, interview results, and challenge scores.
 
 ## Provider Matrix
 
@@ -40,6 +49,21 @@ Evidence is stored across:
 
 Every measured public score must cite evidence. Missing evidence becomes `not_measured` or blocks public publishing.
 
+## Repository Intelligence
+
+The repo scanner builds a deterministic intelligence index before LLM scoring:
+
+- file tree and language summary
+- framework and package manager detection
+- route/API/component/function/class/schema extraction
+- test, CI, Docker, deployment, Prisma, auth/security-sensitive file signals
+- dependency graph approximation
+- risk flags and committed config warnings
+- recent commit and contributor summaries
+- script map for test/build/typecheck/lint proof
+
+Candidate, employer, public, and admin surfaces render the index with role-appropriate filtering.
+
 ## Terminal Proof Safety
 
 Terminal proof uses a run-scoped workspace under `.skillproof/runs/<run_id>`. Commands are allowlisted, destructive patterns and env dumps are blocked, installs require approval, outputs are redacted/truncated/hashed, and saving evidence marks an existing command run instead of rerunning it.
@@ -51,3 +75,5 @@ Ownership proof prefers authenticated GitHub signals, then server-issued repo to
 ## Trust Surfaces
 
 Candidate pages show full candidate-safe evidence. Employer pages show public-safe evidence only. College pages are tenant-scoped. Admin pages expose provider, agent, evidence, prompt, rubric, terminal, and audit details needed to inspect why a score exists.
+
+`/demo` is the judge launcher. It links seeded role flows and the live verification path without treating seeded data as live verification.

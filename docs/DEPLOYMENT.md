@@ -15,6 +15,18 @@ npm run dev
 
 Seeded accounts use password `demo1234`.
 
+For certified local setup, run `npm run setup:demo` and review `/demo/checklist`.
+
+CI and release certification run:
+
+```bash
+npm install
+npm run db:generate
+npm run typecheck
+npm run test
+npm run build
+```
+
 ## Worker Mode
 
 Recommended demo/production mode:
@@ -24,7 +36,7 @@ SKILLPROOF_WORKER_MODE=1 npm run dev
 SKILLPROOF_WORKER_MODE=1 npm run worker
 ```
 
-With `SKILLPROOF_WORKER_MODE=1`, `/api/analyze` queues pending runs and the worker claims them out-of-process. Without it in local development, the API uses an in-process fallback and the run page shows a visible banner.
+With `SKILLPROOF_WORKER_MODE=1`, `/api/analyze` queues pending runs and the worker claims them out-of-process. Claims record `workerId`, heartbeat, attempts, max attempts, and last failure reason. Without worker mode in local development, the API uses an in-process fallback and the run page shows a visible banner.
 
 PowerShell:
 

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/roles";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { getPublicProfilePublishBlockers } from "@/lib/profile-publish-gates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,7 +17,11 @@ const PatchBody = z.object({
 async function loadProfile(id: string) {
   return prisma.publicProfile.findUnique({
     where: { id },
-    include: { run: { select: { tenantId: true } } },
+    include: {
+      run: {
+        include: { scores: true },
+      },
+    },
   });
 }
 
@@ -42,6 +47,29 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.visibility !== undefined) data.visibility = body.visibility;
   if (body.includeTerminalProof !== undefined) data.includeTerminalProof = body.includeTerminalProof;
   if (Object.keys(data).length === 0) return NextResponse.json({ error: "nothing_to_update" }, { status: 400 });
+
+  if (body.visibility === "public" || body.visibility === "unlisted") {
+    const blockers = getPublicProfilePublishBlockers(profile.run);
+    if (blockers.length) {
+      await writeAuditLog({
+        action: "profile.update.blocked",
+        actorUserId: user.id,
+        tenantId: profile.run.tenantId ?? null,
+        targetType: "profile",
+        targetId: profile.id,
+        metadata: { requested_visibility: body.visibility, blockers },
+      }).catch(() => {});
+      return NextResponse.json(
+        {
+          error: "public_profile_blocked",
+          reason: "Public and unlisted profiles require evidence-backed, validated, provider-backed scores.",
+          blockers,
+          allowed_visibility: ["private"],
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   const updated = await prisma.publicProfile.update({ where: { id: params.id }, data });
 

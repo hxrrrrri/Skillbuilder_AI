@@ -1,11 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { ROLE_MODEL_DEFAULTS } from "@/lib/providers/defaults";
 
 export type Role = "orchestrator" | "worker" | "validator";
 
 const DEFAULT_MODELS: Record<Role, string> = {
-  orchestrator: process.env.MODEL_ORCHESTRATOR || "claude-opus-4-7",
-  worker: process.env.MODEL_WORKER || "claude-sonnet-4-6",
-  validator: process.env.MODEL_VALIDATOR || "claude-opus-4-7",
+  orchestrator: process.env.MODEL_ORCHESTRATOR || ROLE_MODEL_DEFAULTS.orchestrator,
+  worker: process.env.MODEL_WORKER || ROLE_MODEL_DEFAULTS.worker,
+  validator: process.env.MODEL_VALIDATOR || ROLE_MODEL_DEFAULTS.validator,
 };
 
 let client: Anthropic | null = null;

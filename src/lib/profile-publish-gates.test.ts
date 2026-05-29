@@ -33,6 +33,20 @@ describe("getPublicProfilePublishBlockers", () => {
     expect(blockers.map((b) => b.code)).toContain("mock_execution_mode");
   });
 
+  it("blocks seeded demo run artifacts from public publishing", () => {
+    const blockers = getPublicProfilePublishBlockers(baseRun({
+      statusMessage: "DEMO DATA: Seeded completed run for hackathon judging.",
+    } as any));
+    expect(blockers.map((b) => b.code)).toContain("seeded_demo_profile");
+  });
+
+  it("blocks public payloads containing raw prompts or private output markers", () => {
+    const blockers = getPublicProfilePublishBlockers(baseRun({
+      profileSummary: JSON.stringify({ developer_summary: "raw_prompt: score this private answer" }),
+    }));
+    expect(blockers.map((b) => b.code)).toContain("public_private_trace_detected");
+  });
+
   it("blocks mock and heuristic score sources", () => {
     const blockers = getPublicProfilePublishBlockers(baseRun({
       scores: [

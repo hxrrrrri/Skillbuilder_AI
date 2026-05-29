@@ -2,6 +2,8 @@
 
 SkillProof AI is designed to avoid fake verification. A score is publishable only when it has a real source and evidence.
 
+Seeded demo artifacts are private walkthrough material. They are labeled `DEMO DATA` and blocked from public/unlisted publishing even when they contain realistic evidence-shaped records.
+
 ## Score Sources
 
 Allowed sources:
@@ -39,6 +41,8 @@ Public and unlisted profiles require:
 - completed run
 - non-mock execution mode
 - no `mock` or `heuristic` score source
+- no seeded demo artifacts
+- no raw prompt, raw model output, admin trace, private answer, raw terminal output, context pack, or secret-like content
 - every measured skill has evidence
 - provider matrix stored
 - validation summary stored
@@ -48,6 +52,8 @@ Public and unlisted profiles require:
 - public report redaction passes
 - candidate-selected visibility
 - explicit control over terminal proof inclusion
+
+The same gates run when an existing profile is edited from private to public or unlisted. Visibility updates cannot bypass missing evidence, unsafe sources, missing validation summaries, or redaction failures.
 
 Trust tiers visible on candidate and public profile surfaces:
 
@@ -61,6 +67,10 @@ Trust tiers visible on candidate and public profile surfaces:
 The fully verified badge additionally requires verified ownership, completed repo analysis, validator completion, evaluated interview evidence, no unsafe score source, no high-risk security signal, and evidence-backed measured scores.
 
 If gates fail, only a private draft profile is allowed.
+
+## Demo Data
+
+Seeded demo data is allowed only when clearly labeled. It must still use evidence-backed score rows, confidence values, validator notes, source labels, provider matrix, validation summary, ownership status, and redacted public-safe artifacts. It must never be described as a live verification.
 
 ## Redaction
 

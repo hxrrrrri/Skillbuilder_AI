@@ -132,7 +132,7 @@ async function detectOllama(): Promise<DetectedTool> {
     authenticated: hasModels,
     authStatus: hasModels ? "models available" : "no models pulled",
     capabilities: hasModels ? ["llm", "llm_local"] : ["llm_local"],
-    setupHint: hasModels ? undefined : "Pull a model, e.g. `ollama pull llama3.1:8b`.",
+    setupHint: hasModels ? undefined : "Pull a model, e.g. `ollama pull llama3.2`.",
   };
 }
 

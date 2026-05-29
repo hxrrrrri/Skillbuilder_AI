@@ -5,7 +5,7 @@ export function Card({ className, ...rest }: React.HTMLAttributes<HTMLDivElement
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-panel/88 shadow-card backdrop-blur-sm",
+        "rounded-lg border border-border bg-panel/82 shadow-card backdrop-blur-sm",
         className
       )}
       {...rest}
@@ -14,7 +14,7 @@ export function Card({ className, ...rest }: React.HTMLAttributes<HTMLDivElement
 }
 
 export function CardHeader({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("border-b border-border p-5", className)} {...rest} />;
+  return <div className={cn("border-b border-border px-5 py-4", className)} {...rest} />;
 }
 
 export function CardBody({ className, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
@@ -22,5 +22,5 @@ export function CardBody({ className, ...rest }: React.HTMLAttributes<HTMLDivEle
 }
 
 export function CardTitle({ className, ...rest }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("font-display text-xl font-medium text-ink", className)} {...rest} />;
+  return <h3 className={cn("font-display text-xl font-medium leading-tight text-ink", className)} {...rest} />;
 }

@@ -9,6 +9,7 @@ type ScoreLike = {
 
 type RunLike = {
   status: string;
+  statusMessage?: string | null;
   executionMode: string | null;
   providerMatrix: string | null;
   validationSummary: string | null;
@@ -38,11 +39,30 @@ function hasObject(raw: string | null | undefined): boolean {
   return !!parsed && (typeof parsed !== "object" || Object.keys(parsed).length > 0);
 }
 
+const PRIVATE_TRACE_PATTERNS = [
+  /\braw[_ -]?prompt\b/i,
+  /\braw[_ -]?model[_ -]?output\b/i,
+  /\badmin[_ -]?trace\b/i,
+  /\bprivate[_ -]?answer\b/i,
+  /\bterminal[_ -]?raw\b/i,
+  /\bcontext[_ -]?pack\b/i,
+];
+
+function hasPrivateTraceMarker(value: string): boolean {
+  return PRIVATE_TRACE_PATTERNS.some((pattern) => pattern.test(value));
+}
+
 export function getPublicProfilePublishBlockers(run: RunLike): PublishBlocker[] {
   const blockers: PublishBlocker[] = [];
 
   if (run.status !== "completed") {
     blockers.push({ code: "run_incomplete", message: `Run must be completed before publishing. Current status: ${run.status}.` });
+  }
+  if (/DEMO DATA|seeded demo|demo_data/i.test(run.statusMessage ?? "")) {
+    blockers.push({
+      code: "seeded_demo_profile",
+      message: "Seeded walkthrough data cannot be published as verified public evidence. Run a real provider-backed verification first.",
+    });
   }
   if (run.executionMode === "mock") {
     blockers.push({ code: "mock_execution_mode", message: "Mock execution mode cannot publish a public or unlisted profile." });
@@ -89,6 +109,18 @@ export function getPublicProfilePublishBlockers(run: RunLike): PublishBlocker[] 
     run.employerVerifier,
     ...run.scores.map((s) => s.evidence),
   ].filter(Boolean).join("\n");
+  if (/DEMO DATA|seeded demo|demo_data/i.test(publicPayload)) {
+    blockers.push({
+      code: "seeded_demo_profile",
+      message: "Seeded walkthrough artifacts cannot be published as verified public evidence.",
+    });
+  }
+  if (publicPayload && hasPrivateTraceMarker(publicPayload)) {
+    blockers.push({
+      code: "public_private_trace_detected",
+      message: "Public report payload references private traces, prompts, raw model output, private answers, or raw terminal output.",
+    });
+  }
   if (publicPayload && hasRedaction(publicPayload)) {
     blockers.push({
       code: "public_redaction_failed",

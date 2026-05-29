@@ -21,7 +21,8 @@ export function redactText(value: unknown, maxLength = 1200): string {
 }
 
 export function hasRedaction(value: unknown): boolean {
-  return redactText(value) !== (typeof value === "string" ? value : value == null ? "" : JSON.stringify(value));
+  const original = typeof value === "string" ? value : value == null ? "" : JSON.stringify(value);
+  return redactText(value, Number.POSITIVE_INFINITY) !== original;
 }
 
 export function publicSafeEvidenceText(input: {

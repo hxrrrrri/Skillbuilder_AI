@@ -67,21 +67,21 @@ export function RegisterForm() {
   }
 
   return (
-    <Card className="mt-6">
+    <Card className="mt-7">
       <CardBody>
         <form onSubmit={submit} className="space-y-4">
           <div>
             <label className="text-xs font-semibold uppercase tracking-wide text-muted">I am a</label>
-            <div className="mt-2 grid grid-cols-3 gap-2">
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
               {ROLE_OPTIONS.map((opt) => (
                 <button
                   key={opt.id}
                   type="button"
                   onClick={() => setRole(opt.id)}
-                  className={`rounded-md border px-2 py-2 text-left text-xs transition ${
+                  className={`rounded-md border px-3 py-3 text-left text-xs transition ${
                     role === opt.id
-                      ? "border-accent bg-panel2 text-ink"
-                      : "border-border bg-panel/40 text-muted hover:border-accent/60"
+                      ? "border-accent/70 bg-accent/10 text-ink"
+                      : "border-border bg-panel2/50 text-muted hover:border-accent/60 hover:text-ink"
                   }`}
                 >
                   <div className="font-semibold">{opt.label}</div>

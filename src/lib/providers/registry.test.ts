@@ -10,6 +10,8 @@ import {
   isCostTier,
   isQualityTier,
 } from "./registry";
+import { LLM_AGENT_NAMES, PROVIDER_MODEL_DEFAULTS } from "./defaults";
+import { PROVIDER_MODEL_CATALOG } from "./model-catalog";
 
 describe("registry defaults shape", () => {
   it("provider defaults cover every ProviderId we ship", () => {
@@ -62,6 +64,22 @@ describe("registry defaults shape", () => {
       if (a.fallbackProvider) {
         expect(knownIds.has(a.fallbackProvider)).toBe(true);
       }
+    }
+  });
+
+  it("provider defaults and catalogs come from one consistent model table", () => {
+    for (const provider of PROVIDER_DEFAULTS) {
+      const configuredDefault = provider.defaultModel;
+      if (!configuredDefault) continue;
+      expect(PROVIDER_MODEL_DEFAULTS[provider.providerId]).toBe(configuredDefault);
+      expect(PROVIDER_MODEL_CATALOG[provider.providerId]).toContain(configuredDefault);
+    }
+  });
+
+  it("never assigns deterministic provider to LLM scoring agents", () => {
+    for (const agentName of LLM_AGENT_NAMES) {
+      const agent = AGENT_DEFAULTS.find((item) => item.agentName === agentName);
+      expect(agent?.providerId).not.toBe("deterministic");
     }
   });
 });
