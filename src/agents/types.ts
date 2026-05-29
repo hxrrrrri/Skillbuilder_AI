@@ -18,8 +18,11 @@ export type AgentName =
   | "authenticity"
   | "interview-gen"
   | "answer-evaluator"
+  | "ai-collaboration-evaluator"
   | "validator"
   | "skill-graph"
+  | "employer-verifier"
+  | "improvement-plan"
   | "profile-gen";
 
 export type ScoreSource =
@@ -367,6 +370,8 @@ export type MissionState = {
   assertion_results: ValidationAssertionResult[];
   authenticity?: AuthenticityOutput | null;
   aiCollaboration?: AICollabEvaluation | null;
+  employerVerifier?: EmployerVerifier | null;
+  improvementPlan?: ImprovementPlan | null;
   tokens_in: number;
   tokens_out: number;
   mock_mode: boolean;

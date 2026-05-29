@@ -11,6 +11,12 @@ import type { ProviderMatrix } from "@/lib/providers/types";
 import { getCurrentUser } from "@/lib/auth/session";
 import { evaluateRunMutationAccess } from "@/lib/auth/guards-api";
 import { writeAuditLog } from "@/lib/auth/audit";
+import { applyAiChallengeScoreCaps, buildAiChallengeExecutionProof } from "@/lib/ai-challenge/evaluation";
+import {
+  completeEvaluatorSkillRun,
+  failEvaluatorSkillRun,
+  prepareEvaluatorSkillRun,
+} from "@/lib/evaluator-runtime/skill-runner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,7 +87,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid_body", detail: err?.message }, { status: 400 });
   }
 
-  const run = await prisma.analysisRun.findUnique({ where: { id: body.run_id } });
+  const run = await prisma.analysisRun.findUnique({
+    where: { id: body.run_id },
+    include: { repository: true },
+  });
   if (!run) return NextResponse.json({ error: "run_not_found" }, { status: 404 });
 
   // Authorization: only owners/creators/admins/tenant members may submit challenge results.
@@ -113,6 +122,11 @@ export async function POST(req: Request) {
 
   const deterministic = deterministicContext(body);
   const mode: ExecutionMode = (run.executionMode as ExecutionMode) ?? "api";
+  const executionProof = await buildAiChallengeExecutionProof({
+    runId: body.run_id,
+    repoUrl: run.repository.repoUrl,
+    proposedDiff: body.proposed_diff,
+  });
 
   const state: MissionState = {
     mission_id: `challenge_${body.run_id.slice(0, 8)}`,
@@ -130,7 +144,21 @@ export async function POST(req: Request) {
     mock_mode: false,
     execution_mode: mode,
     provider_matrix: safeJsonParse<ProviderMatrix | null>(run.providerMatrix ?? null, null),
-    terminal_evidence: safeJsonParse<TerminalEvidence[]>(run.terminalEvidence ?? null, []),
+    terminal_evidence: [
+      ...safeJsonParse<TerminalEvidence[]>(run.terminalEvidence ?? null, []),
+      ...executionProof.checks.map((check) => ({
+        commandRunId: check.commandRunId,
+        command: check.command,
+        cwd: executionProof.workspace ?? "",
+        exitCode: check.exitCode,
+        stdoutSummary: check.stdoutSummary ?? "",
+        stderrSummary: check.stderrSummary ?? "",
+        durationMs: 0,
+        usedFor: check.usedFor,
+        evidenceSource: "ai_challenge_workspace" as const,
+        includeInReport: true,
+      })),
+    ],
     ownership_status: safeJsonParse(run.ownershipStatus ?? null, null),
   };
 
@@ -154,6 +182,22 @@ Deterministic submission context: ${JSON.stringify(deterministic)}
 
 Return the JSON now.`;
 
+  const preparedSkillRun = await prepareEvaluatorSkillRun({
+    agentName: "ai-collaboration-evaluator",
+    runId: body.run_id,
+    tenantId: access.tenantId,
+    state,
+  });
+  const agentEvent = await prisma.agentEvent.create({
+    data: {
+      runId: body.run_id,
+      agentName: "ai-collaboration-evaluator",
+      status: "running",
+      startedAt: new Date(),
+      order: 100,
+    },
+  });
+
   let res;
   try {
     res = await runAgentJson<AICollabEvaluation>({
@@ -166,6 +210,11 @@ Return the JSON now.`;
       maxTokens: 900,
     });
   } catch (err) {
+    await prisma.agentEvent.update({
+      where: { id: agentEvent.id },
+      data: { status: "failed", completedAt: new Date(), notes: err instanceof Error ? err.message : String(err) },
+    }).catch(() => {});
+    await failEvaluatorSkillRun({ prepared: preparedSkillRun, state, error: err }).catch(() => {});
     if (err instanceof ProviderExecutionError) {
       return NextResponse.json(
         {
@@ -181,18 +230,37 @@ Return the JSON now.`;
     throw err;
   }
 
-  const out = res.output;
+  const out = applyAiChallengeScoreCaps(res.output, {
+    patchStatus: executionProof.patchStatus,
+    checks: executionProof.checks,
+    reviewedAiOutput: body.reviewed_ai_output,
+    limitationsDiscussed: body.limitations_discussed,
+  });
   out.challenge_id = out.challenge_id ?? body.challenge_id;
   out.prompt = out.prompt ?? body.challenge_prompt;
   out.target_files = out.target_files ?? body.target_files;
   out.expected_capabilities = out.expected_capabilities ?? body.expected_capabilities;
   out.difficulty = out.difficulty ?? body.difficulty;
-  out.evidence = out.evidence ?? deterministic.evidence;
-  out.what_this_proves = out.what_this_proves ?? deterministic.what_this_proves;
+  out.evidence = [...(out.evidence ?? deterministic.evidence ?? []), ...executionProof.evidence];
+  out.what_this_proves = [
+    ...(out.what_this_proves ?? deterministic.what_this_proves ?? []),
+    ...executionProof.whatThisProves,
+    ...executionProof.remainingUnverified.map((item) => `Unverified: ${item}`),
+  ];
 
   await prisma.analysisRun.update({
     where: { id: body.run_id },
-    data: { aiCollaboration: JSON.stringify(out) },
+    data: {
+      aiCollaboration: JSON.stringify({
+        ...out,
+        execution_proof: {
+          patch_status: executionProof.patchStatus,
+          patch_failure_reason: executionProof.patchFailureReason ?? null,
+          checks: executionProof.checks,
+          remaining_unverified: executionProof.remainingUnverified,
+        },
+      }),
+    },
   });
 
   const existing = await prisma.skillScore.findFirst({
@@ -237,6 +305,43 @@ Return the JSON now.`;
       publicSafe: true,
       adminOnly: false,
       redactedText: `AI collaboration score ${out.overall_score}/100. ${out.feedback}`,
+    },
+  });
+  for (const check of executionProof.checks) {
+    await prisma.evidenceFinding.create({
+      data: {
+        runId: body.run_id,
+        category: "ai_collaboration_execution",
+        claim: `AI challenge check '${check.command}' exited ${check.exitCode}.`,
+        evidenceType: "terminal_command",
+        commandRunId: check.commandRunId ?? null,
+        confidence: check.exitCode === 0 ? 0.85 : 0.7,
+        candidateSafe: true,
+        employerSafe: true,
+        publicSafe: false,
+        adminOnly: false,
+        redactedText: `Challenge check ${check.usedFor}: ${check.command} exited ${check.exitCode}.`,
+      },
+    });
+  }
+
+  const handoff = {
+    agent: "ai-collaboration-evaluator" as const,
+    completed: ["ai_challenge_scored", "execution_proof_recorded"],
+    unresolved: executionProof.remainingUnverified,
+    evidence: out.evidence ?? [],
+    commands_run: executionProof.checks.map((check) => ({ cmd: check.command, exitCode: check.exitCode ?? undefined })),
+    issues_found: executionProof.remainingUnverified,
+    output: out,
+  };
+  await completeEvaluatorSkillRun({ prepared: preparedSkillRun, state, handoff }).catch(() => {});
+  await prisma.agentEvent.update({
+    where: { id: agentEvent.id },
+    data: {
+      status: "completed",
+      completedAt: new Date(),
+      output: JSON.stringify(handoff),
+      notes: executionProof.remainingUnverified.join(" | "),
     },
   });
 

@@ -208,7 +208,8 @@ Return the JSON now.`;
     throw new Error("profile-gen returned incomplete JSON");
   }
   // Always augment employer_verifier with deterministic local-proof signals.
-  out.employer_verifier = augmentEmployerVerifier(state, graph, out.employer_verifier);
+  out.employer_verifier = augmentEmployerVerifier(state, graph, state.employerVerifier ?? out.employer_verifier);
+  out.improvement_plan = state.improvementPlan ?? out.improvement_plan;
 
   state.tokens_in += res.inputTokens;
   state.tokens_out += res.outputTokens;

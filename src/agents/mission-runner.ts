@@ -21,6 +21,8 @@ import { runAuthenticity } from "./authenticity";
 import { runInterviewGen } from "./interview-gen";
 import { runValidator } from "./validator";
 import { runSkillGraph } from "./skill-graph";
+import { runEmployerVerifier } from "./employer-verifier";
+import { runImprovementPlan } from "./improvement-plan";
 import { runProfileGen } from "./profile-gen";
 import { upsertHarnessContextSnapshot } from "@/lib/evaluator-runtime/harness-context";
 import {
@@ -92,6 +94,8 @@ export const PIPELINE: AgentName[] = [
   "interview-gen",
   "validator",
   "skill-graph",
+  "employer-verifier",
+  "improvement-plan",
   "profile-gen",
 ];
 
@@ -108,8 +112,11 @@ const PHASE_LABELS: Record<AgentName, string> = {
   authenticity: "authenticity review",
   "interview-gen": "interview generation",
   "answer-evaluator": "answer evaluation",
+  "ai-collaboration-evaluator": "AI collaboration challenge evaluation",
   validator: "validation",
   "skill-graph": "skill graph generation",
+  "employer-verifier": "employer verifier generation",
+  "improvement-plan": "improvement plan generation",
   "profile-gen": "profile/report generation",
 };
 
@@ -464,6 +471,8 @@ export async function runMission(opts: {
           not_measured: [],
         };
 
+    await step("employer-verifier", () => runEmployerVerifier(state, graph!));
+    await step("improvement-plan", () => runImprovementPlan(state, graph!));
     const profileHandoff = await step("profile-gen", () => runProfileGen(state, graph!));
     const maybeProfile = profileHandoff.output as any;
     profile = maybeProfile?.developer_summary ? (maybeProfile as ProfileOutput) : null;
@@ -543,8 +552,8 @@ export async function runMission(opts: {
           },
         ),
         authenticitySignals: JSON.stringify(state.authenticity ?? null),
-        improvementPlan: JSON.stringify(profile?.improvement_plan ?? null),
-        employerVerifier: JSON.stringify(profile?.employer_verifier ?? null),
+        improvementPlan: JSON.stringify(state.improvementPlan ?? profile?.improvement_plan ?? null),
+        employerVerifier: JSON.stringify(state.employerVerifier ?? profile?.employer_verifier ?? null),
         aiCollaboration: JSON.stringify(state.aiCollaboration ?? null),
         profileSummary: JSON.stringify(profile ?? null),
         providerMatrix: state.provider_matrix ? JSON.stringify(state.provider_matrix) : null,

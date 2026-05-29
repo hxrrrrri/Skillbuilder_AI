@@ -184,6 +184,20 @@ Controls:
 
 Saving terminal evidence marks an existing command run as evidence. It does not rerun the command.
 
+## AI-Collaboration Challenge Proof
+
+The AI challenge is now executable proof, not only a text questionnaire. When a candidate submits a valid unified diff, SkillProof creates a challenge workspace at `.skillproof/runs/<run_id>/ai-challenge`, safely clones the candidate repo, runs `git apply --check`, applies the patch if valid, and then runs available safe npm checks (`test`, `typecheck`, `lint`, `build`). Command output is redacted, summarized, hashed, and persisted as `TerminalCommandRun` rows plus `EvidenceFinding` rows.
+
+Score caps are enforced:
+
+- patch cannot apply or is not a unified diff: max 45
+- no executable checks available: max 70
+- tests/build/typecheck/lint fail: max 65
+- candidate did not review AI output: review discipline max 50
+- candidate did not discuss limitations/tradeoffs: AI collaboration maturity max 70
+
+The evaluator uses both deterministic execution proof and candidate explanation/review behavior. Public and employer-safe views show summaries only, never raw diffs, raw prompts, raw terminal logs, or private traces.
+
 ## Ownership Verification
 
 The candidate wizard calls `/api/ownership/challenge` to issue a signed token before analysis. The token is tied to:

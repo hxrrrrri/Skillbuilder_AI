@@ -79,3 +79,8 @@ Public-safe reports never expose raw prompts, raw model output, private terminal
 ## Not Measured
 
 Missing terminal proof, skipped providers, missing interview answers, or insufficient AI-collaboration evidence do not become passing scores. They stay `not_measured` and are excluded from the denominator.
+## AI Challenge Trust
+
+AI Collaboration is trusted only to the degree supported by execution evidence and candidate review behavior. A valid unified diff that applies cleanly and passes safe checks provides stronger evidence. Failed patch application, unavailable checks, failing checks, missing AI-output review, or missing limitations/tradeoff discussion caps the score instead of inflating it.
+
+Public/employer reports may show redacted summaries of challenge proof, score caps, and remaining unverified areas. They must not expose raw prompts, raw diffs, raw terminal logs, raw model output, private answers, secrets, or admin traces.

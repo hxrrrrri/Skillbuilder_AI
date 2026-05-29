@@ -54,11 +54,11 @@ export type TerminalEvidence = {
   stdoutSummary: string;
   stderrSummary: string;
   durationMs: number;
-  usedFor: "install" | "testing" | "build" | "git" | "security" | "ownership" | "agent" | "typecheck" | "lint";
+  usedFor: "install" | "testing" | "build" | "git" | "security" | "ownership" | "agent" | "typecheck" | "lint" | "ai_challenge";
   statusLabel?: "install_pending_approval" | "install_completed" | "skipped" | "passed" | "failed";
   outputSha256?: string;
   redactionWarning?: boolean;
-  evidenceSource?: "sandbox_terminal" | "local_proof_runner";
+  evidenceSource?: "sandbox_terminal" | "local_proof_runner" | "ai_challenge_workspace";
   includeInReport?: boolean;
 };
 

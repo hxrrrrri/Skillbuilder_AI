@@ -39,3 +39,18 @@ Use `/demo/checklist` before judging. Any blocked item includes the next action.
 - `admin@skillproof.dev`
 
 Password: `demo1234`
+## Final Demo Certification Notes
+
+Current local certification passed after setup:
+
+- `npm install`
+- `npm run db:generate`
+- `npm run db:push`
+- `npm run db:seed-users`
+- `npm run db:seed-registry -- --force`
+- `npm run db:seed-prompts`
+- `npm run typecheck`
+- `npm run test`
+- `npm run build`
+
+`npm run test` passed 56 files / 275 tests. `npm run build` generated 53 app routes. The only build warning is the existing `<img>` warning on `src/app/page.tsx`.
