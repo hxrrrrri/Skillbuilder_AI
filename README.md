@@ -1,5 +1,8 @@
+<<<<<<< HEAD
+=======
 ![SkillProof](public/skillproof.png)
 
+>>>>>>> aa9ed9b (fix: update SkillProof image reference and add new developer image)
 # SkillProof AI
 
 SkillProof AI is a proof-of-work developer verification SaaS. It verifies real GitHub projects, local terminal proof, own-code interviews, AI-collaboration challenges, ownership signals, provider-audited analysis, and evidence-backed scoring into candidate profiles that employers and colleges can trust.
@@ -45,29 +48,6 @@ Local seeded account password: `demo1234`.
 - employer shortlist: `Hackathon judge shortlist`
 
 The seeded run is marked `DEMO DATA` in run/profile surfaces. It exists so judges can inspect a completed private flow immediately; it is not presented as a live verification and cannot satisfy public/unlisted publish gates.
-
-Before judging, verify the prototype with:
-
-```bash
-npm run typecheck
-npm run test
-npm run build
-npm run e2e
-```
-
-Worker mode for live runs:
-
-```bash
-SKILLPROOF_WORKER_MODE=1 npm run dev
-SKILLPROOF_WORKER_MODE=1 npm run worker
-```
-
-Windows PowerShell:
-
-```powershell
-$env:SKILLPROOF_WORKER_MODE="1"; npm run dev
-$env:SKILLPROOF_WORKER_MODE="1"; npm run worker
-```
 
 ## Judge Demo Mode
 
@@ -145,19 +125,6 @@ Open `/admin/providers/health` after seeding the registry.
 Every provider health row shows enabled state, installation/auth state, version, configured model, available models where known, JSON contract result, non-interactive support, model/reasoning support, last test time, latency, raw output preview, last error, fix instructions, and a Run test action.
 
 Mission start checks required providers before creating a run. A blocked start returns `provider_not_ready` with exact blockers and setup instructions.
-
-## Command Copilot
-
-SkillProof Command Copilot is a secure, provider-powered AI assistant with two surfaces (see `docs/COMMAND_COPILOT.md`):
-
-- **Public Help Assistant** — a floating, role-aware help button across the app. Answers product-usage questions, cites docs, and guides users. Never exposes admin/cross-role/private data or secrets; it only summarizes the current user's own visible data.
-- **Admin Command Copilot** — a full command center at `/admin/copilot` (admin/super_admin only). It operates the app through a typed, RBAC-enforced tool registry.
-
-It uses the **same provider system** as the rest of the app (`anthropic_api`, `claude_cli`, `codex_cli`, `copilot_cli`, `ollama`) with **no fake fallback** — if no provider is ready it fails closed with `provider_not_ready` and setup instructions.
-
-Tools carry risk levels: `read` (runs immediately), `write_safe` / `write_sensitive` (require approval; sensitive shows a before/after diff), `destructive` (typed confirmation phrase), and `forbidden` (never executes). Permission is derived from the server-trusted session role, not the user's message, so prompt injection cannot widen access. Write actions create a pending `ChatActionApproval`; on approval the backend executes and writes an `AuditLog`.
-
-Example: *"Set Claude CLI for all agents"* → checks Claude CLI health, shows a before/after diff for every enabled agent, and only updates them after you approve (or returns `provider_not_ready` if Claude CLI is not healthy).
 
 ## CLI Setup
 
@@ -339,7 +306,6 @@ Additional docs:
 - `docs/SECURITY.md`
 - `docs/SECURITY_MODEL.md`
 - `docs/HACKATHON_DEMO_SCRIPT.md`
-- `docs/COMMAND_COPILOT.md`
 - `DEMO_LIMITATIONS.md`
 
 Recommended hackathon demo process:
