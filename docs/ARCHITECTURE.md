@@ -77,3 +77,12 @@ Ownership proof prefers authenticated GitHub signals, then server-issued repo to
 Candidate pages show full candidate-safe evidence. Employer pages show public-safe evidence only. College pages are tenant-scoped. Admin pages expose provider, agent, evidence, prompt, rubric, terminal, and audit details needed to inspect why a score exists.
 
 `/demo` is the judge launcher. It links seeded role flows and the live verification path without treating seeded data as live verification.
+## Verification Lifecycle
+
+The runtime pipeline is implemented in `src/agents/mission-runner.ts` and is the source of truth for timeline events:
+
+`orchestrator -> repo-scanner -> architecture -> code-quality -> testing -> security -> ai-collaboration -> git-evidence -> documentation -> authenticity -> interview-gen -> validator -> skill-graph -> employer-verifier -> improvement-plan -> profile-gen`.
+
+Every pipeline stage is represented by an `AgentEvent`. Evaluator-backed stages also create `SkillRun` rows, and evidence-backed claims become `EvidenceFinding` rows. Post-run tasks use `answer-evaluator` for own-code interviews and `ai-collaboration-evaluator` for executable AI challenge proof.
+
+AI challenge execution lives in `src/lib/ai-challenge/evaluation.ts`: it clones to `.skillproof/runs/<run_id>/ai-challenge`, applies valid unified diffs, runs safe checks, persists terminal proof, and enforces score caps.

@@ -23,3 +23,8 @@ API mode requires a configured API provider for required LLM agents. CLI/local m
 - `json_contract_failed`: use a JSON-capable model, lower temperature, or fix the prompt.
 - `non_interactive_failed`: configure a provider that supports non-interactive CLI/API execution.
 - `model_unavailable`: choose a model from the provider's available model list.
+## Provider-Gated Lifecycle
+
+Required LLM-reviewed stages include orchestrator, architecture, code quality, testing, security, documentation, authenticity, interview generation, validator, employer verifier, improvement plan, profile generation, answer evaluator, and AI collaboration evaluator. Deterministic evidence is allowed only for deterministic stages such as repo scanning, git evidence, skill graph aggregation, and evidence processing.
+
+Mission start fails closed until required providers pass the JSON contract health test. Optional agents may skip only when explicitly configured with `skip_optional`.

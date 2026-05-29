@@ -13,6 +13,7 @@ export const AGENT_TO_EVALUATOR_SKILL: Partial<Record<AgentName, string>> = {
   testing: "testing-depth-review",
   security: "security-review",
   "ai-collaboration": "ai-collaboration-review",
+  "ai-collaboration-evaluator": "ai-collaboration-review",
 };
 
 type PreparedSkillRun =

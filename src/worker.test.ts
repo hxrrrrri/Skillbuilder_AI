@@ -28,6 +28,7 @@ describe("worker ownership challenge handoff", () => {
       attemptCount: 0,
       targetRole: "Full-stack Developer",
       candidateLevel: "Junior",
+      maxAttempts: 3,
       jobDescription: null,
       executionMode: "hybrid",
       localInstallApproved: false,
@@ -75,7 +76,7 @@ describe("worker ownership challenge handoff", () => {
     });
   });
 
-  it("marks failed attempts with clear worker failure metadata", async () => {
+  it("retries failed runs until max attempts with clear worker failure metadata", async () => {
     mocks.runMission.mockRejectedValueOnce(new Error("provider failed"));
     const { processOne } = await import("./worker");
 
@@ -83,9 +84,38 @@ describe("worker ownership challenge handoff", () => {
     expect(mocks.prisma.analysisRun.update).toHaveBeenCalledWith({
       where: { id: "run-1" },
       data: expect.objectContaining({
-        status: "failed",
+        status: "pending",
+        statusMessage: "Worker worker-test-2 failed attempt 1/3; queued for retry.",
         lastFailureReason: "provider failed",
         workerId: "worker-test-2",
+      }),
+    });
+  });
+
+  it("marks the run failed when the max attempt is reached", async () => {
+    mocks.prisma.analysisRun.findFirst.mockResolvedValueOnce({
+      id: "run-1",
+      attemptCount: 2,
+      maxAttempts: 3,
+      targetRole: "Full-stack Developer",
+      candidateLevel: "Junior",
+      jobDescription: null,
+      executionMode: "hybrid",
+      localInstallApproved: false,
+      repository: { owner: "octo", repoName: "demo", repoUrl: "https://github.com/octo/demo" },
+      candidate: { name: "Test Candidate", githubUsername: "octo" },
+    });
+    mocks.runMission.mockRejectedValueOnce(new Error("provider failed"));
+    const { processOne } = await import("./worker");
+
+    await expect(processOne("worker-test-3")).resolves.toBe(true);
+    expect(mocks.prisma.analysisRun.update).toHaveBeenCalledWith({
+      where: { id: "run-1" },
+      data: expect.objectContaining({
+        status: "failed",
+        statusMessage: "provider failed",
+        lastFailureReason: "provider failed",
+        workerId: "worker-test-3",
       }),
     });
   });

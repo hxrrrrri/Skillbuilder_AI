@@ -14,14 +14,10 @@ function defaultWorkerId() {
   return process.env.SKILLPROOF_WORKER_ID || `worker-${process.pid}-${randomUUID().slice(0, 8)}`;
 }
 
-type ClaimedRun = Awaited<ReturnType<typeof prisma.analysisRun.findFirst>>;
-
-const analysisRun = prisma.analysisRun as any;
-
 export async function recoverStuckRuns() {
-  return analysisRun.updateMany({
+  return prisma.analysisRun.updateMany({
     where: {
-      status: "in_progress",
+      status: { in: ["in_progress", "running"] },
       heartbeatAt: { lt: nowMinus(STUCK_AFTER_MS) },
     },
     data: {
@@ -35,7 +31,7 @@ export async function recoverStuckRuns() {
 
 export async function claimNextRun(workerId = defaultWorkerId()) {
   await recoverStuckRuns();
-  const run = await analysisRun.findFirst({
+  const run = await prisma.analysisRun.findFirst({
     where: { status: "pending" },
     orderBy: { createdAt: "asc" },
     include: { repository: true, candidate: true },
@@ -43,9 +39,9 @@ export async function claimNextRun(workerId = defaultWorkerId()) {
   if (!run) return null;
 
   const attemptCount = Number((run as any).attemptCount ?? 0);
-  const maxAttempts = Number((run as any).maxAttempts ?? 1);
+  const maxAttempts = Number(run.maxAttempts ?? 3);
   if (attemptCount >= maxAttempts) {
-    await analysisRun.update({
+    await prisma.analysisRun.update({
       where: { id: run.id },
       data: {
         status: "failed",
@@ -56,7 +52,7 @@ export async function claimNextRun(workerId = defaultWorkerId()) {
     return null;
   }
 
-  const claimed = await analysisRun.updateMany({
+  const claimed = await prisma.analysisRun.updateMany({
     where: { id: run.id, status: "pending" },
     data: {
       status: "in_progress",
@@ -71,8 +67,8 @@ export async function claimNextRun(workerId = defaultWorkerId()) {
   return run;
 }
 
-async function heartbeat(runId: string, workerId: string) {
-  await analysisRun.updateMany({
+export async function heartbeat(runId: string, workerId: string) {
+  await prisma.analysisRun.updateMany({
     where: { id: runId, workerId, status: { in: ["in_progress", "running"] } },
     data: { heartbeatAt: new Date() },
   });
@@ -109,8 +105,8 @@ export async function processOne(workerId = defaultWorkerId()) {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const attemptCount = Number((run as any).attemptCount ?? 0) + 1;
-    const maxAttempts = Number((run as any).maxAttempts ?? 1);
-    await analysisRun.update({
+    const maxAttempts = Number(run.maxAttempts ?? 3);
+    await prisma.analysisRun.update({
       where: { id: run.id },
       data: {
         status: attemptCount < maxAttempts ? "pending" : "failed",
