@@ -3,6 +3,7 @@ import { JetBrains_Mono, Lora, Manrope } from "next/font/google";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { SiteHeader } from "@/components/site-header";
+import { HelpAssistant } from "@/components/copilot/help-assistant";
 
 const sans = Manrope({
   subsets: ["latin"],
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <footer className="border-t border-border bg-bg/80 py-7 text-center text-xs text-muted">
             SkillProof AI · Proof, not claims · Built for the AI era
           </footer>
+          <HelpAssistant />
         </AuthSessionProvider>
       </body>
     </html>

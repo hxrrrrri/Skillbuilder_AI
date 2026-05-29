@@ -630,3 +630,82 @@ model SavedSearch {
   createdAt   DateTime @default(now())
   owner       User     @relation(fields: [ownerUserId], references: [id])
 }
+
+// ---------- SkillProof Command Copilot (AI assistant) ----------
+// Two modes: "help" (public, role-aware product guidance) and "admin" (Command
+// Copilot with a typed, RBAC-enforced tool registry). Every write tool flows
+// through an approval gate (ChatActionApproval) before execution, and each tool
+// call is recorded for audit. Implementation lives in src/lib/copilot/*.
+// userId / approvedByUserId are stored as plain strings (no FK) so these tables
+// stay self-contained and portable; access control is enforced server-side.
+
+model ChatSession {
+  id        String         @id @default(cuid())
+  userId    String? // null for anonymous public help sessions
+  mode      String         @default("help") // help|admin
+  role      String? // role captured at session start, for audit
+  title     String         @default("New chat")
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  messages  ChatMessage[]
+  toolCalls ChatToolCall[]
+
+  @@index([userId])
+  @@index([mode])
+}
+
+model ChatMessage {
+  id           String      @id @default(cuid())
+  sessionId    String
+  role         String // user|assistant|system|tool
+  content      String
+  metadataJson String? // JSON: provider, model, citations, toolCallId, ...
+  createdAt    DateTime    @default(now())
+  session      ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model ChatToolCall {
+  id         String              @id @default(cuid())
+  sessionId  String
+  messageId  String?
+  toolName   String
+  riskLevel  String // read|write_safe|write_sensitive|destructive|forbidden
+  inputJson  String?
+  outputJson String?
+  status     String              @default("proposed") // proposed|approved|rejected|executed|failed
+  error      String?
+  createdAt  DateTime            @default(now())
+  executedAt DateTime?
+  session    ChatSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  approval   ChatActionApproval?
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+model ChatActionApproval {
+  id               String       @id @default(cuid())
+  toolCallId       String       @unique
+  approvedByUserId String?
+  status           String       @default("pending") // pending|approved|rejected|expired
+  approvalText     String?
+  expiresAt        DateTime?
+  createdAt        DateTime     @default(now())
+  resolvedAt       DateTime?
+  toolCall         ChatToolCall @relation(fields: [toolCallId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+}
+
+model ChatKnowledgeSource {
+  id            String   @id @default(cuid())
+  title         String
+  sourceType    String // docs|route|schema|provider|admin_help
+  path          String   @unique
+  contentHash   String
+  lastIndexedAt DateTime @default(now())
+
+  @@index([sourceType])
+}

@@ -472,7 +472,19 @@ export async function seedRegistry(options: { force?: boolean } = {}): Promise<{
       });
       providersCreated++;
     } else if (options.force) {
-      await prisma.providerConfig.update({ where: { providerId: p.providerId }, data });
+      await prisma.providerConfig.update({
+        where: { providerId: p.providerId },
+        data: {
+          ...data,
+          lastTestedAt: null,
+          lastTestStatus: null,
+          lastTestModel: null,
+          lastTestRaw: null,
+          lastTestJsonOk: null,
+          lastTestLatencyMs: null,
+          lastTestError: null,
+        },
+      });
       providersUpdated++;
     }
   }
