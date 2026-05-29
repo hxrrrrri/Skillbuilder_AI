@@ -261,6 +261,16 @@ export default function Landing() {
               </code>
             </pre>
           </div>
+          <div className="relative top-4 mt-10 pl-24">
+            <Image
+              src="/lapguy.png"
+              alt="Developer working on a laptop"
+              width={420}
+              height={320}
+              sizes="(max-width: 1024px) 45vw, 420px"
+              className="h-auto w-full max-w-[320px] object-contain"
+            />
+          </div>
         </div>
 
         {/* Right: form card */}
