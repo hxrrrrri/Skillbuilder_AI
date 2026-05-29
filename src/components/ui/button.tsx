@@ -9,7 +9,7 @@ type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ className, variant = "primary", size = "md", ...rest }: Props) {
   const base =
-    "inline-flex items-center justify-center rounded-md font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
+    "inline-flex items-center justify-center rounded-xl font-semibold transition disabled:cursor-not-allowed disabled:opacity-50";
   const variants = {
     primary: "border border-ink/90 bg-ink text-bg shadow-glow hover:border-cream hover:bg-cream active:bg-soft",
     ghost: "bg-transparent text-muted hover:bg-panel2 hover:text-ink",

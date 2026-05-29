@@ -75,7 +75,7 @@ export default function CampusPreview() {
           <CardBody>
             <ul className="space-y-2 text-sm">
               {LEADERBOARD.filter((c) => c.role === "Frontend").map((c) => (
-              <li key={c.name} className="flex items-center justify-between rounded-md border border-border bg-panel2/50 px-3 py-2">
+              <li key={c.name} className="flex items-center justify-between rounded-xl border border-border bg-panel2/50 px-3 py-2">
                   <span>{c.name} <span className="text-xs text-muted">· {c.level}</span></span>
                   <Badge tone="good">{c.overall}/100</Badge>
                 </li>
@@ -90,7 +90,7 @@ export default function CampusPreview() {
           <CardBody>
             <ul className="space-y-2 text-sm">
               {LEADERBOARD.filter((c) => c.role === "Backend").map((c) => (
-              <li key={c.name} className="flex items-center justify-between rounded-md border border-border bg-panel2/50 px-3 py-2">
+              <li key={c.name} className="flex items-center justify-between rounded-xl border border-border bg-panel2/50 px-3 py-2">
                   <span>{c.name} <span className="text-xs text-muted">· {c.level}</span></span>
                   <Badge tone="good">{c.overall}/100</Badge>
                 </li>
@@ -137,21 +137,48 @@ export default function CampusPreview() {
       <section>
         <Card>
           <CardHeader>
-            <CardTitle>Skill distribution (avg across cohort)</CardTitle>
+            <CardTitle>
+              Skill distribution{" "}
+              <span className="font-mono text-xs font-normal text-muted">avg across cohort</span>
+            </CardTitle>
           </CardHeader>
           <CardBody>
-            <div className="space-y-2">
-              {DIST.map((d) => (
-                <div key={d.dim}>
-                  <div className="flex justify-between text-xs text-muted">
-                    <span>{d.dim}</span>
-                    <span>{d.avg}/100</span>
+            <div className="space-y-5">
+              {DIST.map((d) => {
+                const SEGMENTS = 24;
+                const filled = Math.round((d.avg / 100) * SEGMENTS);
+                return (
+                  <div key={d.dim}>
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="font-mono text-[11px] uppercase tracking-widest text-muted">
+                        {d.dim}
+                      </span>
+                      <span className="font-mono text-[11px] text-accent">
+                        {d.avg}
+                        <span className="text-border">/100</span>
+                      </span>
+                    </div>
+                    {/* Segmented bar — separate rectangular blocks like Windows XP loader */}
+                    <div className="flex gap-[3px]">
+                      {Array.from({ length: SEGMENTS }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-5 flex-1 transition-opacity duration-300 ${
+                            i < filled ? "bg-accent" : "bg-[#1c1c1b]"
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    <div className="mt-1 flex justify-between font-mono text-[9px] text-border/50">
+                      <span>0</span>
+                      <span>25</span>
+                      <span>50</span>
+                      <span>75</span>
+                      <span>100</span>
+                    </div>
                   </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-panel2">
-                    <div className="h-full bg-accent" style={{ width: `${d.avg}%` }} />
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardBody>
         </Card>

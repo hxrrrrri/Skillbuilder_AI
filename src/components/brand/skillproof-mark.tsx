@@ -49,6 +49,25 @@ export function HeroProofGraphic({ className }: { className?: string }) {
   );
 }
 
+export function VerificationChecklist({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 512 512"
+      aria-hidden="true"
+      className={cn("h-8 w-8", className)}
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect x="100" y="56" width="312" height="400" rx="32" stroke="currentColor" strokeWidth="28" />
+      <line x1="148" y1="142" x2="364" y2="142" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <line x1="148" y1="218" x2="364" y2="218" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <line x1="148" y1="294" x2="364" y2="294" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <line x1="148" y1="370" x2="364" y2="370" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+      <line x1="148" y1="446" x2="324" y2="446" stroke="currentColor" strokeWidth="20" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function SectionPictogram({
   type,
   className,
