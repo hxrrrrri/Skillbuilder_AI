@@ -72,7 +72,7 @@ function score(
     confidence,
     scoreSource,
     evidence: json(evidenceItems),
-    validatorNotes,
+    validatorNotes: /demo/i.test(validatorNotes) ? validatorNotes : `${validatorNotes} Seeded demo data is private walkthrough material and not live verification.`,
   };
 }
 

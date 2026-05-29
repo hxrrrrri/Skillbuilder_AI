@@ -24,32 +24,27 @@ export function SkillProofMark({ className, label = "SkillProof" }: { className?
 export function HeroProofGraphic({ className }: { className?: string }) {
   return (
     <svg
-      viewBox="0 0 360 260"
+      viewBox="0 0 260 260"
       aria-hidden="true"
-      className={cn("proof-float h-auto w-full max-w-[280px] text-accent", className)}
+      className={cn("h-auto w-full max-w-[220px]", className)}
       fill="none"
+      xmlns="http://www.w3.org/2000/svg"
     >
-      <path
-        className="proof-line"
-        d="M150 64 210 54 252 98 232 158 166 150 128 104 150 64ZM166 150l44-96M128 104l124-6M210 54l22 104"
-        stroke="currentColor"
-        strokeWidth="10"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        opacity=".88"
-      />
-      {[150, 210, 252, 232, 166, 128].map((cx, i) => {
-        const cy = [64, 54, 98, 158, 150, 104][i];
-        return <circle key={`${cx}-${cy}`} className="proof-node" cx={cx} cy={cy} r="18" fill="currentColor" />;
-      })}
-      <path
-        d="M80 172c22-44 48-50 42-12 13-28 38-28 30 4 16-20 36-12 24 10 20-4 30 12 13 28-18 18-48 30-78 22-22-6-38-20-31-52Z"
-        stroke="#eef7ff"
-        strokeWidth="9"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle cx="146" cy="172" r="16" fill="currentColor" opacity=".95" />
+      {/* dark card */}
+      <rect x="48" y="60" width="148" height="148" rx="22" fill="#1a1208" stroke="#c1623f" strokeWidth="7" />
+      {/* avatar circle */}
+      <circle cx="90" cy="104" r="18" stroke="#c1623f" strokeWidth="6" fill="none" />
+      {/* text lines */}
+      <line x1="118" y1="98" x2="178" y2="98" stroke="#c1623f" strokeWidth="6" strokeLinecap="round" />
+      <line x1="80" y1="148" x2="178" y2="148" stroke="#c1623f" strokeWidth="6" strokeLinecap="round" />
+      <line x1="80" y1="170" x2="178" y2="170" stroke="#c1623f" strokeWidth="6" strokeLinecap="round" />
+      <line x1="80" y1="192" x2="150" y2="192" stroke="#c1623f" strokeWidth="6" strokeLinecap="round" />
+      {/* code brackets bottom-right */}
+      <text x="162" y="242" fontFamily="monospace" fontSize="30" fill="white" fontWeight="bold">&lt;&gt;</text>
+      {/* arrow + CV label top-right */}
+      <path d="M140 40 Q170 20 190 50" stroke="white" strokeWidth="5" strokeLinecap="round" fill="none" />
+      <path d="M188 46 L190 55 L181 52" fill="white" />
+      <text x="192" y="38" fontFamily="sans-serif" fontSize="22" fill="white" fontWeight="600">CV</text>
     </svg>
   );
 }

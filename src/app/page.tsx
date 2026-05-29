@@ -89,7 +89,7 @@ export default function Landing() {
           <Badge tone="accent" className="mb-8">
             Proof-of-work hiring infrastructure
           </Badge>
-          <HeroProofGraphic className="mb-7" />
+          <img src="/hero-cv.png" alt="CV to code" className="mb-7 h-72 w-72 object-contain" />
           <h1 className="max-w-4xl font-display text-5xl font-medium leading-[1.05] text-ink md:text-6xl lg:text-7xl">
             Turn real GitHub work into verified hiring evidence.
           </h1>

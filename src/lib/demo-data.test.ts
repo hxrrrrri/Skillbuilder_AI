@@ -8,7 +8,7 @@ import {
 import { getPublicProfilePublishBlockers } from "./profile-publish-gates";
 
 describe("demo seed data", () => {
-  it("keeps seeded demo scores evidence-backed and never mock sourced", () => {
+  it("keeps seeded demo scores private and never public-publishable as verification", () => {
     const scores = buildDemoSkillScores();
     const measured = measuredDemoScores(scores);
 
@@ -17,9 +17,10 @@ describe("demo seed data", () => {
     expect(measured.every((score) => score.scoreSource !== "mock" && score.scoreSource !== "heuristic")).toBe(true);
     expect(measured.every((score) => score.validatorNotes && score.validatorNotes.length > 12)).toBe(true);
     expect(measured.every((score) => JSON.parse(score.evidence).length > 0)).toBe(true);
+    expect(measured.every((score) => /demo/i.test(score.validatorNotes))).toBe(true);
   });
 
-  it("builds a completed demo profile that satisfies public publish gates", () => {
+  it("blocks completed seeded demo profiles from public publish gates", () => {
     const artifacts = buildDemoRunArtifacts();
     const blockers = getPublicProfilePublishBlockers({
       status: "completed",
@@ -33,6 +34,6 @@ describe("demo seed data", () => {
     });
 
     expect(DEMO_PROFILE_SLUG).toBe("casey-candidate-skillproof-ai-demo");
-    expect(blockers).toEqual([]);
+    expect(blockers.map((b) => b.code)).toContain("seeded_demo_profile");
   });
 });

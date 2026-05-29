@@ -58,23 +58,16 @@ export async function POST(req: Request) {
     where: { runId: run.id, consumedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: "desc" },
   });
-  const token = previous?.verification_token && !previous.verification_token.includes("redacted")
-    ? previous.verification_token
-    : username
-      ? `skillproof:${username}:${run.id}:${run.id.slice(-8)}`
-      : null;
   let repoTokenVerified = false;
   const checkedFiles = ["README.md", "README", "readme.md", ".skillproof-verify.json"];
 
-  if (token || challenge) {
+  if (challenge) {
     for (const file of checkedFiles) {
       const content = await getFile(run.repository.owner, run.repository.repoName, file).catch(() => null);
       if (
         content &&
-        (
-          (challenge?.tokenHash && contentHasOwnershipTokenHash(content, challenge.tokenHash)) ||
-          (token ? content.toLowerCase().includes(token.toLowerCase()) : false)
-        )
+        challenge.tokenHash &&
+        contentHasOwnershipTokenHash(content, challenge.tokenHash)
       ) {
         repoTokenVerified = true;
         break;
@@ -90,7 +83,7 @@ export async function POST(req: Request) {
     collaborator_verified: previous?.collaborator_verified ?? false,
     self_declared: !verified && !!username,
     verification_method: ownerMatch ? "owner_match" : repoTokenVerified ? "repo_token_verified" : username ? "self_declared" : "unverified",
-    verification_token: challenge ? "server_issued_challenge_token_redacted" : token,
+    verification_token: challenge ? "server_issued_challenge_token_redacted" : null,
     ownership_challenge_id: challenge?.id ?? previous?.ownership_challenge_id ?? null,
     gh_user: previous?.gh_user ?? null,
     github_username: username,
@@ -98,9 +91,9 @@ export async function POST(req: Request) {
     confidence: verified ? "verified" : username ? "self_declared" : "unverified",
     notes: verified
       ? [`Ownership verified by ${ownerMatch ? "repo owner username match" : "repo token"}.`]
-      : token
+      : challenge
         ? [`Token not found in README or .skillproof-verify.json. Checked: ${checkedFiles.join(", ")}.`]
-        : ["No GitHub username supplied, so token verification is unavailable."],
+        : ["No active server-issued ownership challenge is linked to this run. GitHub username alone is self-declared unless owner/collaborator proof exists."],
   };
 
   await prisma.analysisRun.update({

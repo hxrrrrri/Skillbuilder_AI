@@ -1,5 +1,12 @@
 # SkillProof AI Architecture
 
+## Prototype Reliability Updates
+
+- Provider/model defaults are centralized in `src/lib/providers/defaults.ts` and mirrored into DB registry rows by `npm run db:seed-registry -- --force`.
+- Mission runs are processed by the web process only as a local fallback. Demo/production should set `SKILLPROOF_WORKER_MODE=1` and run `npm run demo:worker`.
+- Worker claims use `in_progress`, `workerId`, `heartbeatAt`, `attemptCount`, `maxAttempts`, and `lastFailureReason` fields on `AnalysisRun`.
+- `/demo/checklist` reports database, seeds, provider registry, prompts, provider health, worker mode, terminal proof, public reports, and GitHub token status.
+
 SkillProof AI converts a real GitHub repository into hiring evidence through a validation-contract-first pipeline.
 
 ## Validation Contract First

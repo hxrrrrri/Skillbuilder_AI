@@ -5,6 +5,7 @@ import type { ProviderTemplate } from "./config";
 import { ProviderExecutionError, ProviderInvalidJsonError } from "./errors";
 import { jsonRepairPrompt, parseProviderJson } from "./json";
 import type { LLMProvider, ProviderHealth, ProviderPrompt, ProviderResult } from "./types";
+import { PROVIDER_MODEL_DEFAULTS } from "./defaults";
 
 async function listModels(baseUrl: string): Promise<any[]> {
   const controller = new AbortController();
@@ -22,7 +23,7 @@ async function listModels(baseUrl: string): Promise<any[]> {
 export async function detectOllama(template?: ProviderTemplate): Promise<ProviderHealth> {
   const cfg = template ?? loadProviderConfig().providers.ollama;
   const baseUrl = cfg?.baseUrl ?? "http://localhost:11434";
-  const model = cfg?.model ?? "llama3.1:8b";
+  const model = cfg?.model ?? PROVIDER_MODEL_DEFAULTS.ollama ?? "llama3.2:latest";
   if (cfg?.enabled === false) {
     return {
       providerId: "ollama",
@@ -83,7 +84,7 @@ export async function detectOllama(template?: ProviderTemplate): Promise<Provide
       availableModels: [],
       configuredModel: model,
       lastError: err?.message ?? String(err),
-      fix: "Install/start Ollama, then run `ollama pull qwen2.5-coder` or another configured model. Pulling is never automatic.",
+      fix: `Install/start Ollama, then run \`ollama pull ${model}\` or another configured model. Pulling is never automatic.`,
       command: baseUrl,
     };
   }
@@ -103,7 +104,7 @@ export function makeOllamaProvider(template?: ProviderTemplate): LLMProvider {
     async runJson(prompt: ProviderPrompt, schemaHint: string): Promise<ProviderResult> {
       const cfg = template ?? loadProviderConfig().providers.ollama;
       const baseUrl = cfg?.baseUrl ?? "http://localhost:11434";
-      const model = prompt.model ?? cfg?.model ?? "llama3.1:8b";
+      const model = prompt.model ?? cfg?.model ?? PROVIDER_MODEL_DEFAULTS.ollama ?? "llama3.2:latest";
       let models: any[];
       try {
         models = await listModels(baseUrl);

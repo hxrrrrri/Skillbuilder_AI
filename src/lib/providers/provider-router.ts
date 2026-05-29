@@ -10,6 +10,7 @@ import { ProviderExecutionError, ProviderInvalidJsonError } from "./errors";
 import { makeOllamaProvider } from "./ollama";
 import { mapReasoningBudget, type ReasoningBudget } from "./reasoning";
 import { defaultModelForProvider } from "./model-catalog";
+import { isDeterministicOnlyAgent } from "./defaults";
 import {
   AGENT_NAMES,
   listProviderConfigs,
@@ -192,6 +193,14 @@ async function resolveMatrixEntry(
   reg: Record<ProviderId, LLMProvider>,
 ): Promise<ProviderMatrixAgentEntry> {
   const resolved = await resolveAgentConfig(agentName);
+  if (resolved.provider === "deterministic" && !isDeterministicOnlyAgent(agentName)) {
+    throw new ProviderExecutionError({
+      provider: "deterministic",
+      code: "provider_unsupported",
+      message: `Agent '${agentName}' requires a real LLM provider; deterministic evidence cannot score LLM-reviewed skills.`,
+      fix: "Choose Anthropic API, Claude CLI, Codex CLI, Copilot CLI, or Ollama for this agent in Admin -> Agents.",
+    });
+  }
   const modeRequiresNonApi = mode === "cli" || mode === "local";
   const apiUnavailableInHybrid =
     mode === "hybrid" && resolved.provider === "anthropic_api" && !(await reg.anthropic_api.available());

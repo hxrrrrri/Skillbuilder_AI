@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { PROVIDER_MODEL_DEFAULTS } from "./defaults";
 
 export type ProviderTemplate = {
   command?: string;
@@ -39,7 +40,7 @@ const DEFAULTS: ProviderConfig = {
       args: ["exec", "--ephemeral", "--skip-git-repo-check", "--sandbox", "read-only", "-"],
       enabled: true,
     },
-    ollama: { model: "llama3.1:8b", baseUrl: "http://localhost:11434", enabled: true },
+    ollama: { model: PROVIDER_MODEL_DEFAULTS.ollama ?? "llama3.2:latest", baseUrl: "http://localhost:11434", enabled: true },
     copilot_cli: {
       command: "copilot",
       args: ["-p", "{{prompt}}", "--silent", "--stream", "off", "--no-auto-update", "--no-ask-user"],

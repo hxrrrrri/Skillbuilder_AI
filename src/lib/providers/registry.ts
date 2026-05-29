@@ -12,7 +12,7 @@
 import { prisma } from "@/lib/db";
 import type { FallbackStrategy, ProviderId, ProviderMatrixAgentEntry } from "./types";
 import { REASONING_BUDGETS, isReasoningBudget, type ReasoningBudget } from "./reasoning";
-import { PROVIDER_MODEL_CATALOG } from "./model-catalog";
+import { PROVIDER_MODEL_CATALOG, PROVIDER_MODEL_DEFAULTS, LLM_AGENT_NAMES } from "./defaults";
 
 export const PROVIDER_DEFAULTS: Array<{
   providerId: ProviderId;
@@ -33,7 +33,7 @@ export const PROVIDER_DEFAULTS: Array<{
     providerId: "anthropic_api",
     label: "Anthropic API",
     kind: "api",
-    defaultModel: "claude-sonnet-4-6",
+    defaultModel: PROVIDER_MODEL_DEFAULTS.anthropic_api,
     apiKeyEnv: "ANTHROPIC_API_KEY",
     command: null,
     baseUrl: null,
@@ -78,7 +78,7 @@ export const PROVIDER_DEFAULTS: Array<{
     providerId: "ollama",
     label: "Ollama (local)",
     kind: "local",
-    defaultModel: "llama3.1:8b",
+    defaultModel: PROVIDER_MODEL_DEFAULTS.ollama,
     apiKeyEnv: null,
     command: null,
     baseUrl: "http://localhost:11434",
@@ -93,7 +93,7 @@ export const PROVIDER_DEFAULTS: Array<{
     providerId: "deterministic",
     label: "Deterministic evidence",
     kind: "deterministic",
-    defaultModel: "evidence-derived",
+    defaultModel: PROVIDER_MODEL_DEFAULTS.deterministic,
     apiKeyEnv: null,
     command: null,
     baseUrl: null,
@@ -177,23 +177,7 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
     enabled: true,
   },
   // Worker agents → Sonnet + medium reasoning.
-  ...(
-    [
-      "architecture",
-      "code-quality",
-      "testing",
-      "security",
-      "ai-collaboration",
-      "documentation",
-      "authenticity",
-      "interview-gen",
-      "answer-evaluator",
-      "ai-collaboration-evaluator",
-      "employer-verifier",
-      "improvement-plan",
-      "profile-gen",
-    ] as const
-  ).map<AgentDefault>((name) => ({
+  ...LLM_AGENT_NAMES.filter((name) => name !== "orchestrator" && name !== "validator").map<AgentDefault>((name) => ({
     agentName: name,
     providerId: "anthropic_api",
     model: "claude-sonnet-4-6",

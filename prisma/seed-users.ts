@@ -611,7 +611,7 @@ async function seedJudgeDemo() {
       candidateId: candidate.id,
       ownerUserId: candidateUser.id,
       runId: run.id,
-      visibility: "public",
+      visibility: "private",
       includeTerminalProof: true,
       interviewKit: null,
     },
@@ -620,7 +620,7 @@ async function seedJudgeDemo() {
       ownerUserId: candidateUser.id,
       runId: run.id,
       slug: DEMO_PROFILE_SLUG,
-      visibility: "public",
+      visibility: "private",
       includeTerminalProof: true,
     },
   });

@@ -1,6 +1,6 @@
 # SkillProof AI Demo (Real Provider)
 
-This demo path uses real providers and real evidence only.
+This demo path uses real providers and real evidence only. For a private UI walkthrough without a real provider, run `npm run setup:demo` and open `/demo/checklist`. Seeded walkthrough scores are private demo artifacts and cannot be published as verified public evidence.
 
 ## Certification Commands (Run in Order)
 
@@ -14,6 +14,12 @@ npm run db:seed-prompts
 npm run typecheck
 npm run test
 npm run build
+```
+
+Shortcut for local setup:
+
+```bash
+npm run setup:demo
 ```
 
 ## Seeded Users
@@ -40,7 +46,8 @@ Then validate readiness:
 1. Sign in as admin@skillproof.dev.
 2. Open /admin/providers/health.
 3. Run provider tests until required agents show ready and JSON contract ok.
-4. Confirm /api/providers/readiness?mode=hybrid returns ok=true.
+4. Open /demo/checklist and confirm Real provider health is ready.
+5. Confirm /api/providers/readiness?mode=hybrid returns ok=true.
 
 ## Runtime (Worker Mode)
 
@@ -70,7 +77,7 @@ $env:SKILLPROOF_WORKER_MODE="1"; npm run worker
 ## Employer Demo Flow
 
 1. Sign in as employer@skillproof.dev.
-2. Open the published profile at /profile/[slug].
+2. Open a published real-provider profile at /profile/[slug].
 3. Open the report or export from the profile view.
 4. Show interview kit and compare if needed.
 

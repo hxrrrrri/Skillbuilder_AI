@@ -73,8 +73,8 @@ export default async function DemoPage() {
               immediately. It is not presented as a live verification.
             </p>
             <p>
-              Public trust labels still require evidence, source, confidence, validator notes, provider matrix,
-              validation summary, and ownership status to pass publish gates.
+            Seeded walkthrough profiles stay private. Public trust labels require real provider-backed evidence, source,
+            confidence, validator notes, provider matrix, validation summary, and ownership status to pass publish gates.
             </p>
           </CardBody>
         </Card>
@@ -113,7 +113,10 @@ export default async function DemoPage() {
                 Open completed run
               </Link>
               <Link href={`/profile/${DEMO_PROFILE_SLUG}`} className="rounded-md border border-border bg-panel px-4 py-2 text-sm font-semibold text-ink hover:border-accent/60">
-                Open public profile
+                Open private draft profile
+              </Link>
+              <Link href="/demo/checklist" className="rounded-md border border-border bg-panel px-4 py-2 text-sm font-semibold text-muted hover:border-accent/60 hover:text-ink">
+                Demo checklist
               </Link>
               <Link href="/report/casey-candidate-skillproof-ai-demo" className="rounded-md border border-border bg-panel px-4 py-2 text-sm font-semibold text-muted hover:border-accent/60 hover:text-ink">
                 Open report

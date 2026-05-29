@@ -323,8 +323,13 @@ model AnalysisRun {
   targetRole           String
   candidateLevel       String?
   jobDescription       String?
-  status               String                  @default("pending") // pending|running|completed|failed
+  status               String                  @default("pending") // pending|in_progress|running|completed|failed
   statusMessage        String?
+  workerId             String?
+  heartbeatAt          DateTime?
+  attemptCount         Int                     @default(0)
+  maxAttempts          Int                     @default(3)
+  lastFailureReason    String?
   overallScore         Int?
   roleFit              String?
   verificationLevel    String                  @default("repo_only") // repo_only|repo_interview_verified

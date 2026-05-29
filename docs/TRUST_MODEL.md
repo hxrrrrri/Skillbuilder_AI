@@ -2,6 +2,8 @@
 
 SkillProof AI is designed to avoid fake verification. A score is publishable only when it has a real source and evidence.
 
+Seeded demo artifacts are private walkthrough material. They are labeled `DEMO DATA` and blocked from public/unlisted publishing even when they contain realistic evidence-shaped records.
+
 ## Score Sources
 
 Allowed sources:
@@ -39,6 +41,8 @@ Public and unlisted profiles require:
 - completed run
 - non-mock execution mode
 - no `mock` or `heuristic` score source
+- no seeded demo artifacts
+- no raw prompt, raw model output, admin trace, private answer, raw terminal output, context pack, or secret-like content
 - every measured skill has evidence
 - provider matrix stored
 - validation summary stored
