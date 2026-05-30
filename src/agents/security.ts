@@ -1,6 +1,5 @@
 import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
-import { buildContextBlock } from "./_analysis";
 import { getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
 import { assertionResultsForDimension } from "./assertions";
@@ -78,9 +77,7 @@ function applyTerminalEvidence(state: MissionState, out: SecurityOutput) {
 export async function runSecurity(state: MissionState): Promise<Handoff<SecurityOutput>> {
   if (!state.context_pack) throw new Error("security: context_pack missing");
 
-  const user = `${buildContextBlock(state.context_pack)}
-
-Return the JSON now.`;
+  const user = "Review the focused security-relevant context and return the JSON now.";
 
   const res = await runAgentJson<SecurityOutput>({
     state,
@@ -90,6 +87,7 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1500,
+    useSelectedContext: true,
   });
 
   const out: SecurityOutput = { ...res.output, score_source: res.source };

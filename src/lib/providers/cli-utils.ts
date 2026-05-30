@@ -57,7 +57,7 @@ export function hasFlag(help: string, ...flags: string[]): boolean {
   return flags.some((flag) => help.includes(flag));
 }
 
-function parseModelList(raw: string): string[] {
+export function parseModelList(raw: string): string[] {
   const trimmed = raw.trim();
   if (!trimmed) return [];
 

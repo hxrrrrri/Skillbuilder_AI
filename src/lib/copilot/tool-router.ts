@@ -14,6 +14,7 @@
 // ever sees the few tools that the deterministic router already judged relevant.
 
 import { listTools } from "./tools";
+import { needsLlmSynthesis } from "./answer-planner";
 import type { CopilotMode } from "./context";
 
 export type ToolRouteMode = "direct_execute" | "llm_with_tools" | "clarify" | "refuse";
@@ -217,10 +218,20 @@ export function routeCopilotToolIntent(params: RouteParams): ToolRouteDecision {
     };
   }
 
-  // 2) Admin deterministic read intents execute directly with no model call.
+  // 2) Admin deterministic read intents execute directly with no model call —
+  //    UNLESS the admin also asked the model to explain/compare/recommend, in
+  //    which case we still run that tool but route through the LLM to synthesize.
   if (mode === "admin") {
     const direct = detectAdminRead(message);
     if (direct && availableNames.has(direct.name)) {
+      if (needsLlmSynthesis(message)) {
+        return {
+          mode: "llm_with_tools",
+          reason: `synthesis_over_read:${direct.name}`,
+          selectedTools: Array.from(new Set([direct.name, ...selectCandidateTools(message, available)])).slice(0, COPILOT_BUDGET.maxSelectedTools),
+          confidence: 0.6,
+        };
+      }
       return {
         mode: "direct_execute",
         reason: `deterministic_read:${direct.name}`,

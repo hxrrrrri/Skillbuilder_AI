@@ -102,6 +102,20 @@ export type ProviderMatrixAgentEntry = {
   requestedModel?: string;
   reasoning?: ProviderReasoningMapping;
   note?: string;
+  agentName?: string;
+  plannedInputTokens?: number;
+  plannedOutputTokens?: number;
+  estimatedInputTokens?: number;
+  inputTokens?: number;
+  outputTokens?: number;
+  actualOutputTokens?: number;
+  budgetExceeded?: boolean;
+  compressionRatio?: number;
+  contextStrategy?: "minimal" | "focused" | "broad" | "validator" | "none";
+  modelTier?: "deterministic" | "cheap" | "balanced" | "strong";
+  modelReason?: string;
+  contextTruncated?: boolean;
+  promptTruncated?: boolean;
 };
 
 export type ProviderMatrix = Record<AgentRole, ProviderId> & {

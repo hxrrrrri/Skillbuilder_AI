@@ -241,6 +241,7 @@ export async function updateProviderConfig(
     argsTemplate: string | null;
     apiKeyEnv: string | null;
     notes: string | null;
+    customModelsJson: string | null;
   }>,
 ) {
   const updated = await prisma.providerConfig.update({
@@ -249,6 +250,38 @@ export async function updateProviderConfig(
   });
   invalidateProviderRegistryCache();
   return updated;
+}
+
+/** Persist the result of a live model-discovery probe for a provider. */
+export async function saveDiscoveredModels(
+  providerId: string,
+  result: {
+    models: string[];
+    status: "live" | "cached" | "static" | "custom_only" | "failed";
+    error?: string | null;
+  },
+) {
+  const updated = await prisma.providerConfig.update({
+    where: { providerId },
+    data: {
+      // Only overwrite the cached list when a live probe actually returned models.
+      ...(result.status === "live" && result.models.length
+        ? { discoveredModelsJson: JSON.stringify(result.models), modelsDiscoveredAt: new Date() }
+        : {}),
+      modelDiscoveryStatus: result.status,
+      modelDiscoveryError: result.error ?? null,
+    },
+  });
+  invalidateProviderRegistryCache();
+  return updated;
+}
+
+/** Replace the admin-curated custom model list for a provider. */
+export async function setCustomModels(providerId: string, models: string[]) {
+  const deduped = Array.from(new Set(models.map((m) => m.trim()).filter(Boolean)));
+  return updateProviderConfig(providerId, {
+    customModelsJson: deduped.length ? JSON.stringify(deduped) : null,
+  });
 }
 
 export async function recordProviderTest(

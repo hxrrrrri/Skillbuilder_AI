@@ -69,14 +69,7 @@ function deriveAssertionResults(state: MissionState, out: DocumentationOutput): 
 export async function runDocumentation(state: MissionState): Promise<Handoff<DocumentationOutput>> {
   if (!state.context_pack) throw new Error("documentation: context_pack missing");
 
-  const readmeSnippet = state.context_pack.snippets.find(
-    (s) => s.path === state.context_pack?.filesIndex.readme
-  );
-  const user = `README path: ${state.context_pack.filesIndex.readme ?? "(none)"}
-README content (truncated to 4k chars):
-${(readmeSnippet?.content ?? "(none)").slice(0, 4000)}
-
-Return the JSON now.`;
+  const user = "Review the focused documentation context and return the JSON now.";
 
   const res = await runAgentJson<DocumentationOutput>({
     state,
@@ -86,6 +79,7 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 800,
+    useSelectedContext: true,
   });
 
   const out: DocumentationOutput = { ...res.output, score_source: res.source };

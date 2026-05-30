@@ -119,26 +119,10 @@ export async function runValidator(state: MissionState): Promise<Handoff<Validat
   // Always run the deterministic baseline so unsupported claims are caught.
   const baseline = fallback(state);
 
-  const truth = state.context_pack?.filesIndex.all ?? [];
-  const sampledTruth = truth.length > 400
-    ? [...truth.slice(0, 200), `... (${truth.length - 400} more) ...`, ...truth.slice(-200)]
-    : truth;
-  const claims = state.scores.map((c) => ({
-    skill: c.skill,
-    score: c.score,
-    source: c.source,
-    evidence: c.evidence,
-  }));
-  const user = `Repo file truth set (these are the only files that exist):
-${sampledTruth.map((p) => "- " + p).join("\n")}
-
-Score claims to audit:
-${JSON.stringify(claims, null, 2)}
-
-Deterministic evidence audit already computed:
+  const user = `Deterministic evidence audit already computed:
 ${JSON.stringify(baseline, null, 2)}
 
-Return the JSON now.`;
+Use the compact claim table and focused snippets to review the audit. Return the JSON now.`;
 
   const res = await runAgentJson<ValidatorOutput>({
     state,
@@ -148,6 +132,7 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
+    useSelectedContext: true,
   });
 
   const out: ValidatorOutput = {

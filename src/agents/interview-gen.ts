@@ -1,7 +1,6 @@
 import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
-import { buildContextBlock } from "./_analysis";
 import type { Handoff, InterviewGenOutput, InterviewQuestionT, MissionState } from "./types";
 
 const SYSTEM = `You are the Interview Generator agent of SkillProof AI.
@@ -98,11 +97,7 @@ function fallback(state: MissionState): InterviewGenOutput {
 export async function runInterviewGen(state: MissionState): Promise<Handoff<InterviewGenOutput>> {
   if (!state.context_pack) throw new Error("interview-gen: context_pack missing");
 
-  const user = `Target role: ${state.target_role}
-
-${buildContextBlock(state.context_pack)}
-
-Generate the JSON now.`;
+  const user = "Generate repo-specific interview questions from the focused context and return the JSON now.";
 
   const res = await runAgentJson<InterviewGenOutput>({
     state,
@@ -112,6 +107,7 @@ Generate the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1600,
+    useSelectedContext: true,
   });
 
   const fallbackFile = state.context_pack.filesIndex.important[0] ?? state.context_pack.filesIndex.readme ?? "README";

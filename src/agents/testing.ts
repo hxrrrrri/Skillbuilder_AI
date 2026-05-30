@@ -1,6 +1,5 @@
 import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
-import { buildContextBlock } from "./_analysis";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
 import { assertionResultsForDimension } from "./assertions";
 import {
@@ -80,9 +79,7 @@ function applyTerminalEvidence(state: MissionState, out: TestingOutput) {
 export async function runTesting(state: MissionState): Promise<Handoff<TestingOutput>> {
   if (!state.context_pack) throw new Error("testing: context_pack missing");
 
-  const user = `${buildContextBlock(state.context_pack)}
-
-Return the JSON now.`;
+  const user = "Analyze testing and reliability from the focused context and return the JSON now.";
 
   const res = await runAgentJson<TestingOutput>({
     state,
@@ -92,6 +89,7 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1200,
+    useSelectedContext: true,
   });
 
   const out: TestingOutput = { ...res.output, score_source: res.source };

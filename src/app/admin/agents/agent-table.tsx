@@ -166,10 +166,26 @@ function AgentRow({
   );
   const reasoningSupported = !!currentProvider?.reasoningSupported;
   const isDeterministic = providerId === "deterministic";
+  // Live model list for the SELECTED provider — refetched whenever the provider
+  // changes so the dropdown always reflects currently available models.
+  const [liveModels, setLiveModels] = useState<string[]>([]);
+  useEffect(() => {
+    if (!open || !providerId) return;
+    let cancelled = false;
+    fetch(`/api/admin/providers/${providerId}/models`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: any) => {
+        if (!cancelled && Array.isArray(d?.options)) setLiveModels(d.options.map((o: any) => o.value));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [open, providerId]);
   const models = useMemo(() => {
-    const listed = currentProvider?.capabilities?.models ?? [];
+    const listed = Array.from(new Set([...liveModels, ...(currentProvider?.capabilities?.models ?? [])]));
     return model && !listed.includes(model) ? [model, ...listed] : listed;
-  }, [currentProvider, model]);
+  }, [currentProvider, model, liveModels]);
   const fallbackProviderOption = useMemo(
     () => providers.find((p) => p.id === fallbackProvider),
     [providers, fallbackProvider],

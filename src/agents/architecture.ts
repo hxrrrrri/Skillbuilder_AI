@@ -1,7 +1,6 @@
 import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
-import { buildContextBlock } from "./_analysis";
 import { assertionResultsForDimension } from "./assertions";
 import type {
   ArchitectureOutput,
@@ -58,12 +57,7 @@ function deriveAssertionResults(
 export async function runArchitecture(state: MissionState): Promise<Handoff<ArchitectureOutput>> {
   if (!state.context_pack) throw new Error("architecture: context_pack missing — run repo-scanner first");
 
-  const user = `Validation contract dimensions: ${state.contract?.evaluation_dimensions.join(", ") ?? "n/a"}
-Target role: ${state.target_role}
-
-${buildContextBlock(state.context_pack)}
-
-Return the JSON now.`;
+  const user = "Analyze the focused repository context and return the JSON now.";
 
   const res = await runAgentJson<ArchitectureOutput>({
     state,
@@ -73,6 +67,7 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
+    useSelectedContext: true,
   });
 
   const out: ArchitectureOutput = {

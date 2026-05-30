@@ -153,6 +153,12 @@ model ProviderConfig {
   lastTestLatencyMs Int?
   lastTestError     String?
   notes             String?
+  // Dynamic model discovery (live CLI/API probing) + admin custom models.
+  discoveredModelsJson String?
+  modelsDiscoveredAt   DateTime?
+  modelDiscoveryStatus String?
+  modelDiscoveryError  String?
+  customModelsJson     String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }

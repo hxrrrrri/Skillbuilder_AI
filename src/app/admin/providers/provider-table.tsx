@@ -105,11 +105,80 @@ function ProviderRow({
   const [testBusy, setTestBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const modelOptions = row.capabilities?.models ?? [];
-  const defaultModelOptions =
-    defaultModel && !modelOptions.includes(defaultModel)
-      ? [defaultModel, ...modelOptions]
-      : modelOptions;
+  // Dynamic model discovery state (loaded when the edit modal opens).
+  type ModelOption = { value: string; source: "live" | "cached" | "static" | "custom" };
+  const [modelOpts, setModelOpts] = useState<ModelOption[]>(
+    (row.capabilities?.models ?? []).map((value) => ({ value, source: "static" as const })),
+  );
+  const [discoveryStatus, setDiscoveryStatus] = useState<string | null>(null);
+  const [discoveredAt, setDiscoveredAt] = useState<string | null>(null);
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null);
+  const [modelsBusy, setModelsBusy] = useState(false);
+  const [customDraft, setCustomDraft] = useState("");
+
+  function applyModelsPayload(data: any) {
+    if (Array.isArray(data?.options)) setModelOpts(data.options);
+    if (typeof data?.status === "string") setDiscoveryStatus(data.status);
+    setDiscoveredAt(data?.discoveredAt ?? null);
+    setDiscoveryError(data?.error ?? null);
+  }
+
+  const loadModels = useCallback(async () => {
+    try {
+      const resp = await fetch(`/api/admin/providers/${row.providerId}/models`, { cache: "no-store" });
+      if (resp.ok) applyModelsPayload(await resp.json());
+    } catch {
+      /* keep static fallback */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row.providerId]);
+
+  useEffect(() => {
+    if (open) loadModels();
+  }, [open, loadModels]);
+
+  async function refreshModels() {
+    setModelsBusy(true);
+    setError(null);
+    try {
+      const resp = await fetch(`/api/admin/providers/${row.providerId}/models/refresh`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) applyModelsPayload(data);
+      else setError(data?.error ?? `HTTP ${resp.status}`);
+    } catch (err: any) {
+      setError(err?.message ?? "Could not refresh models");
+    } finally {
+      setModelsBusy(false);
+    }
+  }
+
+  async function addCustomModel() {
+    const model = customDraft.trim();
+    if (!model) return;
+    setModelsBusy(true);
+    try {
+      const resp = await fetch(`/api/admin/providers/${row.providerId}/models`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ addModel: model }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok) {
+        applyModelsPayload(data);
+        setCustomDraft("");
+        setDefaultModel(model);
+      } else {
+        setError(data?.error ?? `HTTP ${resp.status}`);
+      }
+    } finally {
+      setModelsBusy(false);
+    }
+  }
+
+  const defaultModelOptions: ModelOption[] =
+    defaultModel && !modelOpts.some((m) => m.value === defaultModel)
+      ? [{ value: defaultModel, source: "custom" }, ...modelOpts]
+      : modelOpts;
 
   const caps = row.capabilities
     ? [
@@ -344,17 +413,67 @@ function ProviderRow({
             </div>
             <div className="p-5 text-xs">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <Field label="Default model">
-                  <select
-                    value={defaultModel}
-                    onChange={(e) => setDefaultModel(e.target.value)}
-                    className="mt-1 h-8 w-full rounded-xl border border-border bg-bg/65 px-2 text-xs text-ink"
-                  >
-                    <option value="">Provider default</option>
-                    {defaultModelOptions.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
+                <Field label="Default model" className="sm:col-span-2">
+                  <div className="mt-1 flex items-center gap-2">
+                    <select
+                      value={defaultModel}
+                      onChange={(e) => setDefaultModel(e.target.value)}
+                      className="h-8 w-full rounded-xl border border-border bg-bg/65 px-2 text-xs text-ink"
+                    >
+                      <option value="">Provider default</option>
+                      {defaultModelOptions.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.value}
+                          {m.source === "custom" ? "  (custom)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={refreshModels}
+                      disabled={modelsBusy}
+                      className="flex-shrink-0 rounded-xl border border-border bg-panel2 px-3 py-1.5 text-[11px] text-ink transition hover:border-accent/60 hover:text-accent disabled:opacity-40"
+                    >
+                      {modelsBusy ? "…" : "Refresh models"}
+                    </button>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {discoveryStatus && (
+                      <Badge tone={discoveryStatus === "live" ? "good" : discoveryStatus === "failed" ? "bad" : "default"}>
+                        source: {discoveryStatus}
+                      </Badge>
+                    )}
+                    <span className="text-[10px] text-muted">
+                      {discoveredAt ? (
+                        <>discovered <ClientDateTime value={discoveredAt} empty="never" /></>
+                      ) : (
+                        "not yet discovered"
+                      )}
+                    </span>
+                    {discoveryError && <span className="text-[10px] text-bad">· {discoveryError}</span>}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <input
+                      value={customDraft}
+                      onChange={(e) => setCustomDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCustomModel();
+                        }
+                      }}
+                      placeholder="Add a custom model id…"
+                      className="h-8 w-full rounded-xl border border-border bg-bg/65 px-2 font-mono text-xs text-ink"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomModel}
+                      disabled={modelsBusy || !customDraft.trim()}
+                      className="flex-shrink-0 rounded-xl border border-border bg-panel2 px-3 py-1.5 text-[11px] text-ink transition hover:border-accent/60 hover:text-accent disabled:opacity-40"
+                    >
+                      Add custom
+                    </button>
+                  </div>
                 </Field>
                 <Field label="API key env var">
                   <input

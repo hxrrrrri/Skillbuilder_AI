@@ -1,6 +1,5 @@
 import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
-import { buildContextBlock } from "./_analysis";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
 import { assertionResultsForDimension } from "./assertions";
 import {
@@ -84,11 +83,7 @@ function applyTerminalEvidence(state: MissionState, out: CodeQualityOutput) {
 export async function runCodeQuality(state: MissionState): Promise<Handoff<CodeQualityOutput>> {
   if (!state.context_pack) throw new Error("code-quality: context_pack missing");
 
-  const user = `Target role: ${state.target_role}
-
-${buildContextBlock(state.context_pack)}
-
-Return the JSON now.`;
+  const user = "Analyze maintainability from the focused source snippets and return the JSON now.";
 
   const res = await runAgentJson<CodeQualityOutput>({
     state,
@@ -98,6 +93,7 @@ Return the JSON now.`;
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,
+    useSelectedContext: true,
   });
 
   const out: CodeQualityOutput = { ...res.output, score_source: res.source };
