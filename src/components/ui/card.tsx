@@ -1,11 +1,7 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-type CardProps = React.HTMLAttributes<HTMLDivElement> & {
-  showTrafficLights?: boolean;
-};
-
-export function Card({ className, children, showTrafficLights = false, ...rest }: CardProps) {
+export function Card({ className, children, ...rest }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
@@ -14,7 +10,6 @@ export function Card({ className, children, showTrafficLights = false, ...rest }
       )}
       {...rest}
     >
-      {showTrafficLights ? <TrafficLights className="absolute left-5 top-5" /> : null}
       {children}
     </div>
   );
@@ -32,12 +27,11 @@ export function CardTitle({ className, ...rest }: React.HTMLAttributes<HTMLHeadi
   return <h3 className={cn("font-display text-xl font-medium leading-tight text-ink", className)} {...rest} />;
 }
 
-export function TrafficLights({ className }: { className?: string }) {
+export function StatusLight({ className, healthy = true }: { className?: string; healthy?: boolean }) {
   return (
-    <div className={cn("traffic-lights", className)} aria-hidden="true">
-      <span className="traffic-light traffic-light-red" />
-      <span className="traffic-light traffic-light-yellow" />
-      <span className="traffic-light traffic-light-green" />
-    </div>
+    <span
+      className={cn("status-light", healthy ? "status-light-good" : "status-light-bad", className)}
+      aria-hidden="true"
+    />
   );
 }

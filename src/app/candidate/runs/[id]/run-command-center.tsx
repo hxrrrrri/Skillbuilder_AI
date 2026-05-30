@@ -7,6 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PublishRunButton } from "./publish-run-button";
+import { AgentTraceDrawer } from "@/components/run/agent-trace-drawer";
+import {
+  GeneratingReportPanel,
+  ProviderMatrixSkeleton,
+  ValidationContractSkeleton,
+  RepoIntelligenceSkeleton,
+  AgentTimelineSkeleton,
+  EvidenceLockerSkeleton,
+  SkillGraphSkeleton,
+  TerminalProofSkeleton,
+  InterviewSkeleton,
+  ProfileReportSkeleton,
+} from "@/components/report/report-generation-skeleton";
 
 type StageStatus = "pending" | "running" | "in_progress" | "completed" | "failed" | "skipped";
 
@@ -171,6 +184,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
   const [run, setRun] = useState<RunPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState<number>(() => Date.now());
   const runRef = useRef<RunPayload | null>(null);
 
   async function load() {
@@ -206,11 +220,39 @@ export function RunCommandCenter({ runId }: { runId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId]);
 
+  // Ticking clock so the "Generating verified report" elapsed timer advances
+  // smoothly between polls. Only runs while the run is active.
   const isActive = run?.status === "pending" || run?.status === "running" || run?.status === "in_progress" || (loading && !run);
+  useEffect(() => {
+    if (!isActive) return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [isActive]);
+
   const completedAgentCount = run?.events.filter((e) => e.status === "completed").length ?? 0;
   const totalAgentCount = run?.events.length ?? STAGES.filter((s) => s.agent).length;
   const progressPercent = totalAgentCount ? Math.round((completedAgentCount / totalAgentCount) * 100) : 0;
   const failedEvent = run?.events.find((e) => e.status === "failed");
+
+  // Real-event-driven props for the top-level generating panel.
+  const activeEvent = run?.events.find((e) => e.status === "running" || e.status === "in_progress") ?? null;
+  const activeStage = STAGES.find((s) => {
+    const st = stageStatus(run, s);
+    return st === "running" || st === "in_progress";
+  });
+  const activeAgentName = activeEvent
+    ? AGENT_META[activeEvent.agent]?.title ?? activeEvent.agent
+    : activeStage?.label ?? null;
+  const elapsedMs = run?.created_at ? now - new Date(run.created_at).getTime() : 0;
+  const ws = run?.worker_status ?? null;
+  const workerLabel = ws ? workerStatusTitle(ws.state) : run?.processing_mode === "in_process" ? "In-process" : null;
+  const workerTone: "good" | "warn" | "bad" = ws
+    ? ws.state === "stale" || ws.state === "failed"
+      ? "bad"
+      : ws.state === "active" || ws.state === "completed"
+        ? "good"
+        : "warn"
+    : "warn";
   const terminalTotal = run?.terminal_summary?.total ?? 0;
   const terminalLoading = isActive && (!run || (run.execution_mode !== "api" && terminalTotal === 0));
   const terminalReady = !!run && (run.execution_mode === "api" || !isActive || terminalTotal > 0);
@@ -247,6 +289,21 @@ export function RunCommandCenter({ runId }: { runId: string }) {
             />
           </CardBody>
         </Card>
+      )}
+
+      {isActive && run?.status !== "failed" && (
+        <GeneratingReportPanel
+          stageLabel={activeStage?.label ?? "preparing mission"}
+          completedAgents={completedAgentCount}
+          totalAgents={totalAgentCount}
+          progressPercent={progressPercent}
+          activeAgent={activeAgentName}
+          statusMessage={run?.status_message ?? null}
+          providerMode={run ? `${run.execution_mode} · ${run.processing_mode}` : "preparing"}
+          elapsedMs={elapsedMs}
+          workerLabel={workerLabel}
+          workerTone={workerTone}
+        />
       )}
 
       <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -306,6 +363,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Loading provider matrix..."
           ready={!!run?.provider_matrix}
           emptyText="Provider matrix not stored yet."
+          skeleton={<ProviderMatrixSkeleton />}
         >
           <ProviderMatrix matrix={run?.provider_matrix} />
         </ReportSection>
@@ -316,6 +374,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Generating validation contract..."
           ready={!!run?.validation_contract}
           emptyText="No validation contract generated yet."
+          skeleton={<ValidationContractSkeleton />}
         >
           <ValidationContract contract={run?.validation_contract} summary={run?.validation_summary} />
         </ReportSection>
@@ -326,6 +385,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Scanning repository tree, routes, configs, tests, and risk flags..."
           ready={!!run?.repo_intelligence}
           emptyText="No repository intelligence generated yet."
+          skeleton={<RepoIntelligenceSkeleton />}
         >
           <RepoIntelligence data={run?.repo_intelligence} />
         </ReportSection>
@@ -336,8 +396,9 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Waiting for agent events..."
           ready={!!run?.events.length}
           emptyText="No agent events generated yet."
+          skeleton={<AgentTimelineSkeleton />}
         >
-          <AgentTimeline events={run?.events ?? []} partial={run?.status === "running" || run?.status === "in_progress"} />
+          <AgentTimeline events={run?.events ?? []} partial={run?.status === "running" || run?.status === "in_progress"} runId={runId} />
         </ReportSection>
 
         <ReportSection
@@ -346,6 +407,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Collecting file-backed evidence..."
           ready={!!run?.evidence_findings.length || !!run?.scores.length}
           emptyText="No evidence generated yet."
+          skeleton={<EvidenceLockerSkeleton />}
         >
           <EvidenceLocker run={run} />
         </ReportSection>
@@ -356,6 +418,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Aggregating measured dimensions only..."
           ready={!!run?.scores.length}
           emptyText="No skill scores generated yet."
+          skeleton={<SkillGraphSkeleton />}
         >
           <SkillGraph scores={run?.scores ?? []} />
         </ReportSection>
@@ -366,6 +429,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Waiting for sandbox policy and terminal proof..."
           ready={terminalReady}
           emptyText="No terminal proof saved yet."
+          skeleton={<TerminalProofSkeleton />}
         >
           <TerminalProof run={run} />
         </ReportSection>
@@ -376,6 +440,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           loadingText="Generating own-code interview questions..."
           ready={!!run?.questions.length}
           emptyText="No interview questions generated yet."
+          skeleton={<InterviewSkeleton />}
         >
           <InterviewQuestions run={run} />
         </ReportSection>
@@ -387,6 +452,7 @@ export function RunCommandCenter({ runId }: { runId: string }) {
           ready={!!run?.profile_summary || run?.status === "completed"}
           emptyText="No public-safe profile preview generated yet."
           className="xl:col-span-2"
+          skeleton={<ProfileReportSkeleton />}
         >
           <ProfilePreview run={run} />
         </ReportSection>
@@ -428,6 +494,7 @@ function ReportSection({
   emptyText,
   children,
   className,
+  skeleton,
 }: {
   title: string;
   loading: boolean;
@@ -436,6 +503,7 @@ function ReportSection({
   emptyText: string;
   children: ReactNode;
   className?: string;
+  skeleton?: ReactNode;
 }) {
   return (
     <Card className={className}>
@@ -443,7 +511,7 @@ function ReportSection({
         <CardTitle>{title}</CardTitle>
       </CardHeader>
       <CardBody>
-        {ready ? children : loading ? <SectionSkeleton text={loadingText} /> : <StateNotice title="Empty" detail={emptyText} />}
+        {ready ? children : loading ? skeleton ?? <SectionSkeleton text={loadingText} /> : <StateNotice title="Empty" detail={emptyText} />}
       </CardBody>
     </Card>
   );
@@ -571,7 +639,8 @@ const AGENT_META: Record<string, { title: string; subtitle: string }> = {
   "profile-gen": { title: "Profile Generator", subtitle: "Verified credibility" },
 };
 
-function AgentTimeline({ events, partial }: { events: RunPayload["events"]; partial: boolean }) {
+function AgentTimeline({ events, partial, runId }: { events: RunPayload["events"]; partial: boolean; runId: string }) {
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null);
   return (
     <div className="space-y-4">
       {partial && (
@@ -587,12 +656,15 @@ function AgentTimeline({ events, partial }: { events: RunPayload["events"]; part
           const isFailed = event.status === "failed";
 
           return (
-            <div
+            <button
               key={`${event.order}-${event.agent}`}
+              type="button"
+              onClick={() => setSelectedAgent(event.agent)}
+              aria-label={`Inspect agent ${meta.title}`}
               className={cn(
-                "group relative overflow-hidden rounded-2xl border bg-panel/60 p-5 transition-all duration-300",
+                "group relative w-full overflow-hidden rounded-2xl border bg-panel/60 p-5 text-left transition-all duration-300 hover:border-accent/50 hover:shadow-card focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent/50",
                 isDone && "border-accent/25 bg-panel/75",
-                isRunning && "border-warn/40 bg-warn/5 ring-1 ring-warn/20",
+                isRunning && "border-warn/40 bg-warn/5 ring-1 ring-warn/20 sp-agent-glow",
                 isFailed && "border-bad/35 bg-bad/5",
                 !isDone && !isRunning && !isFailed && "border-border/60"
               )}
@@ -663,10 +735,21 @@ function AgentTimeline({ events, partial }: { events: RunPayload["events"]; part
                   <div className="skeleton-shimmer absolute inset-y-0 left-0 w-1/2 bg-warn" />
                 </div>
               )}
-            </div>
+
+              <span className="pointer-events-none relative mt-4 ml-auto block w-fit rounded-md border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
+                Inspect agent →
+              </span>
+            </button>
           );
         })}
       </div>
+      <AgentTraceDrawer
+        open={!!selectedAgent}
+        onOpenChange={(o) => !o && setSelectedAgent(null)}
+        runId={runId}
+        agentName={selectedAgent ?? ""}
+        mode="candidate"
+      />
     </div>
   );
 }

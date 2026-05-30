@@ -128,6 +128,7 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
             <ScaffoldNotice detail="No agent events yet. The pipeline has not started." />
           ) : (
             <TraceEventList
+              runId={run.id}
               events={run.events.map((e) => ({
                 id: e.id,
                 agent: e.agentName,
@@ -151,13 +152,13 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
           {run.skillRuns.length === 0 ? (
             <ScaffoldNotice detail="No SkillRun provenance rows have been recorded yet." />
           ) : (
-            <ul className="space-y-2">
+            <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {run.skillRuns.map((s) => {
                 const trace = safeJsonParse<any>(s.adminTraceJson, null);
                 const evidenceIds = safeJsonParse<string[]>(s.evidenceIdsJson, []);
                 return (
-                  <li key={s.id} className="rounded-md border border-border bg-panel2/40 p-3">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <li key={s.id} className="flex flex-col overflow-hidden rounded-2xl border border-border bg-panel/60 backdrop-blur-sm">
+                    <div className="flex flex-wrap items-center gap-2 p-4 text-xs">
                       <Badge tone={s.status === "completed" ? "good" : s.status === "failed" ? "bad" : "warn"}>{s.status}</Badge>
                       <code className="text-ink">{s.skillId}</code>
                       <Badge>v{s.skillVersion}</Badge>
@@ -167,14 +168,14 @@ export default async function AdminRunDetailPage({ params }: { params: { id: str
                       <span className="font-mono text-muted">in:{s.inputHash.slice(0, 10)}</span>
                       {s.outputHash && <span className="font-mono text-muted">out:{s.outputHash.slice(0, 10)}</span>}
                     </div>
-                    <div className="mt-2 grid gap-2 text-xs md:grid-cols-3">
+                    <div className="grid gap-2 border-t border-border p-4 text-xs">
                       <KV k="Candidate summary" v={s.candidateSummary ?? "—"} />
                       <KV k="Employer summary" v={s.employerSummary ?? "—"} />
                       <KV k="Evidence produced" v={String(evidenceIds.length)} />
                     </div>
-                    {s.error && <p className="mt-2 text-xs text-bad">{s.error}</p>}
-                    <details className="mt-2">
-                      <summary className="cursor-pointer text-xs text-muted">admin trace JSON</summary>
+                    {s.error && <p className="border-t border-border px-4 py-2 text-xs text-bad">{s.error}</p>}
+                    <details className="mt-auto border-t border-border px-4 py-2.5">
+                      <summary className="cursor-pointer text-xs text-accent">Open trace JSON</summary>
                       <pre className="mt-2 max-h-96 overflow-auto whitespace-pre-wrap rounded bg-bg/40 p-3 text-[11px] text-muted">
                         {JSON.stringify(trace, null, 2)}
                       </pre>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { MarkdownMessage } from "@/components/copilot/markdown-message";
 
 type Citation = string;
 type ChatMessage = {
@@ -177,27 +178,22 @@ export function HelpAssistant() {
 
             {messages.map((m, i) => (
               <div key={i} className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                <div
-                  className={cn(
-                    "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[13px] leading-5",
-                    m.role === "user"
-                      ? "bg-accent/20 text-ink"
-                      : m.error
-                        ? "border border-red-500/40 bg-red-500/10 text-ink"
-                        : "border border-border bg-bg/60 text-ink",
-                  )}
-                >
-                  {m.content}
-                  {m.citations && m.citations.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {m.citations.map((c) => (
-                        <span key={c} className="rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-muted">
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                {m.role === "assistant" && !m.error ? (
+                  <div className="max-w-[88%] rounded-lg border border-border bg-bg/60 px-3 py-2.5 text-[13px] leading-5 text-ink">
+                    <MarkdownMessage content={m.content} citations={m.citations} />
+                  </div>
+                ) : (
+                  <div
+                    className={cn(
+                      "max-w-[85%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[13px] leading-5",
+                      m.role === "user"
+                        ? "bg-accent/20 text-ink"
+                        : "border border-red-500/40 bg-red-500/10 text-ink",
+                    )}
+                  >
+                    {m.content}
+                  </div>
+                )}
               </div>
             ))}
             {busy && <p className="text-xs text-muted">Thinking…</p>}

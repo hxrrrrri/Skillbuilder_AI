@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { TrafficLights } from "@/components/ui/card";
+import { StatusLight } from "@/components/ui/card";
 import { ClientDateTime } from "@/components/ui/client-datetime";
 import { cn } from "@/lib/utils";
 
@@ -256,7 +256,7 @@ function AgentRow({
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <TrafficLights className="flex-shrink-0" />
+            <StatusLight healthy={enabled} className="flex-shrink-0" />
             <code className="truncate text-sm font-semibold text-ink">{row.agentName}</code>
           </div>
           <div className="flex flex-shrink-0 items-center gap-2">

@@ -80,14 +80,14 @@ export default async function AdminAgentsPage() {
       activeHref="/admin/agents"
     >
       {rows.length === 0 ? (
-        <Card showTrafficLights>
+        <Card>
           <CardBody>
             <ScaffoldNotice detail="Agent registry is empty. Run `npm run db:seed-registry` to populate defaults." />
           </CardBody>
         </Card>
       ) : (
-        <Card showTrafficLights className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
-          <CardHeader className="border-bg pl-20">
+        <Card className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
+          <CardHeader className="border-bg">
             <CardTitle>Effective runtime config ({rows.length})</CardTitle>
           </CardHeader>
           <CardBody>
@@ -106,8 +106,8 @@ export default async function AdminAgentsPage() {
         </Card>
       )}
 
-      <Card showTrafficLights>
-        <CardHeader className="pl-20">
+      <Card>
+        <CardHeader>
           <CardTitle>Reasoning budget abstraction</CardTitle>
         </CardHeader>
         <CardBody>

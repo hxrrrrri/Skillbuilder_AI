@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { TrafficLights } from "@/components/ui/card";
+import { StatusLight } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 type SkillRow = {
@@ -107,7 +107,7 @@ function SkillCard({ skill }: { skill: SkillRow }) {
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <TrafficLights className="flex-shrink-0" />
+            <StatusLight healthy={enabled && !skill.lastFailure} className="flex-shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-ink">{skill.name}</div>
               <code className="font-mono text-[11px] text-muted">{skill.slug}</code>

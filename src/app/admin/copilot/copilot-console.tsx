@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
+import { MarkdownMessage } from "@/components/copilot/markdown-message";
 
 type RiskLevel = "read" | "write_safe" | "write_sensitive" | "destructive" | "forbidden";
 
@@ -118,17 +119,311 @@ function pickRows(data: unknown): unknown[] {
   return [];
 }
 
-function ToolResultView({ toolResult }: { toolResult: { toolName: string; data: unknown } }) {
+function Th({ children, className }: { children: ReactNode; className?: string }) {
+  return <th className={cn("whitespace-nowrap px-2 py-1.5 text-left font-medium text-muted", className)}>{children}</th>;
+}
+function Td({ children, className, title }: { children: ReactNode; className?: string; title?: string }) {
+  return <td className={cn("px-2 py-1.5 align-top text-ink", className)} title={title}>{children ?? "—"}</td>;
+}
+function RouteLink({ href, label }: { href?: string | null; label: string }) {
+  if (!href) return <span className="text-muted">—</span>;
+  return (
+    <a href={href} className="rounded border border-accent/35 bg-accent/10 px-1.5 py-0.5 font-mono text-[10px] text-accent transition hover:border-accent/70">
+      {label}
+    </a>
+  );
+}
+function AskButton({ onAsk, text, label }: { onAsk?: (t: string) => void; text: string; label: string }) {
+  if (!onAsk) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onAsk(text)}
+      className="rounded border border-border bg-panel2/60 px-1.5 py-0.5 text-[10px] text-muted transition hover:border-accent/60 hover:text-ink"
+    >
+      {label}
+    </button>
+  );
+}
+
+function TableShell({ children }: { children: ReactNode }) {
+  return (
+    <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+      <table className="w-full border-collapse text-[11px]">{children}</table>
+    </div>
+  );
+}
+
+function StudentsWithProfilesTable({ items, onAsk }: { items: any[]; onAsk?: (t: string) => void }) {
+  return (
+    <TableShell>
+      <thead className="bg-panel2/70">
+        <tr>
+          {["Student", "Email", "GitHub", "Profile", "Visibility", "Score", "Role", "Repo", "Run status", "Actions"].map((h) => (
+            <Th key={h} className={h === "Score" ? "text-right" : undefined}>{h}</Th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-border/60">
+        {items.slice(0, 25).map((it, i) => {
+          const name = it.candidate?.name ?? it.candidate?.email ?? "candidate";
+          return (
+            <tr key={i} className="transition hover:bg-panel2/30">
+              <Td className="font-medium">{name}</Td>
+              <Td className="max-w-[12rem] truncate" title={it.candidate?.email ?? ""}>{it.candidate?.email ?? it.candidate?.ownerUserEmail ?? "—"}</Td>
+              <Td>{it.candidate?.githubUsername ?? "—"}</Td>
+              <Td className="font-mono">{it.profile?.slug ?? "—"}</Td>
+              <Td>{it.profile?.visibility ?? "—"}</Td>
+              <Td className="text-right font-mono">{it.run?.overallScore ?? "—"}</Td>
+              <Td>{it.run?.targetRole ?? "—"}</Td>
+              <Td className="font-mono">{it.repository?.fullName ?? it.repository?.name ?? "—"}</Td>
+              <Td>{it.run?.status ?? "—"}</Td>
+              <Td>
+                <div className="flex flex-wrap gap-1">
+                  <RouteLink href={it.profile?.route} label="Profile" />
+                  <RouteLink href={it.run?.route} label="Run" />
+                  <AskButton onAsk={onAsk} text={`Tell me about candidate ${name}`} label="Ask" />
+                </div>
+              </Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function CandidateSearchTable({ items, onAsk }: { items: any[]; onAsk?: (t: string) => void }) {
+  return (
+    <TableShell>
+      <thead className="bg-panel2/70">
+        <tr>{["Candidate", "Linked user", "Runs", "Completed", "Profiles", "Best", "Strongest", "Weakest", "Actions"].map((h) => <Th key={h}>{h}</Th>)}</tr>
+      </thead>
+      <tbody className="divide-y divide-border/60">
+        {items.slice(0, 25).map((it, i) => {
+          const name = it.candidate?.name ?? it.candidate?.email ?? "candidate";
+          return (
+            <tr key={i} className="transition hover:bg-panel2/30">
+              <Td className="font-medium">{name}</Td>
+              <Td className="max-w-[12rem] truncate">{it.linkedUserEmail ?? "—"}</Td>
+              <Td className="text-right font-mono">{it.runsCount ?? 0}</Td>
+              <Td className="text-right font-mono">{it.completedRunsCount ?? 0}</Td>
+              <Td className="text-right font-mono">{it.profilesCount ?? 0}</Td>
+              <Td className="text-right font-mono">{it.bestScore ?? "—"}</Td>
+              <Td>{it.strongestSkill?.skillName ?? "—"}</Td>
+              <Td>{it.weakestSkill?.skillName ?? "—"}</Td>
+              <Td>
+                <div className="flex flex-wrap gap-1">
+                  {it.latestProfileSlug && <RouteLink href={`/profile/${it.latestProfileSlug}`} label="Profile" />}
+                  {it.latestRun?.route && <RouteLink href={it.latestRun.route} label="Run" />}
+                  <AskButton onAsk={onAsk} text={`Tell me about candidate ${name}`} label="Ask" />
+                </div>
+              </Td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function ProfilesTable({ items }: { items: any[] }) {
+  return (
+    <TableShell>
+      <thead className="bg-panel2/70">
+        <tr>{["Profile", "Visibility", "Candidate", "Owner", "Repo", "Role", "Score", "Actions"].map((h) => <Th key={h}>{h}</Th>)}</tr>
+      </thead>
+      <tbody className="divide-y divide-border/60">
+        {items.slice(0, 25).map((it, i) => (
+          <tr key={i} className="transition hover:bg-panel2/30">
+            <Td className="font-mono">{it.profile?.slug ?? "—"}</Td>
+            <Td>{it.profile?.visibility ?? "—"}</Td>
+            <Td>{it.candidate?.name ?? it.candidate?.email ?? "—"}</Td>
+            <Td className="max-w-[12rem] truncate">{it.candidate?.ownerUserEmail ?? it.ownerEmail ?? "—"}</Td>
+            <Td className="font-mono">{it.repository?.fullName ?? it.repository?.name ?? "—"}</Td>
+            <Td>{it.run?.targetRole ?? "—"}</Td>
+            <Td className="text-right font-mono">{it.run?.overallScore ?? it.run?.score ?? "—"}</Td>
+            <Td>
+              <div className="flex flex-wrap gap-1">
+                <RouteLink href={it.profile?.route} label="Profile" />
+                <RouteLink href={it.run?.route} label="Run" />
+              </div>
+            </Td>
+          </tr>
+        ))}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function ProviderHealthTable({ rows }: { rows: any[] }) {
+  return (
+    <TableShell>
+      <thead className="bg-panel2/70">
+        <tr>{["Provider", "Status", "Enabled", "Installed", "Auth", "JSON", "Model"].map((h) => <Th key={h}>{h}</Th>)}</tr>
+      </thead>
+      <tbody className="divide-y divide-border/60">
+        {rows.map((p, i) => (
+          <tr key={i} className="transition hover:bg-panel2/30">
+            <Td className="font-medium">{p.label ?? p.providerId}</Td>
+            <Td>
+              <span className={cn("rounded px-1.5 py-0.5 text-[10px]",
+                p.status === "ready" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300")}>{p.status ?? "?"}</span>
+            </Td>
+            <Td>{p.enabled ? "yes" : "no"}</Td>
+            <Td>{p.installed ? "yes" : "no"}</Td>
+            <Td>{p.authenticated ? "yes" : "no"}</Td>
+            <Td>{p.supportsJson ? "yes" : "no"}</Td>
+            <Td className="font-mono">{p.configuredModel ?? "—"}</Td>
+          </tr>
+        ))}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function AgentConfigsTable({ rows }: { rows: any[] }) {
+  return (
+    <TableShell>
+      <thead className="bg-panel2/70">
+        <tr>{["Agent", "Provider", "Model", "Reasoning", "Enabled", "Fallback"].map((h) => <Th key={h}>{h}</Th>)}</tr>
+      </thead>
+      <tbody className="divide-y divide-border/60">
+        {rows.map((a, i) => (
+          <tr key={i} className="transition hover:bg-panel2/30">
+            <Td className="font-medium">{a.agentName}</Td>
+            <Td className="font-mono">{a.providerId}</Td>
+            <Td className="font-mono">{a.model}</Td>
+            <Td>{a.reasoningBudget ?? "—"}</Td>
+            <Td>{a.enabled ? "yes" : "no"}</Td>
+            <Td>{a.fallbackProvider ? `${a.fallbackProvider} (${a.fallbackStrategy ?? "fail"})` : a.fallbackStrategy ?? "—"}</Td>
+          </tr>
+        ))}
+      </tbody>
+    </TableShell>
+  );
+}
+
+function PlatformOverviewCards({ detail }: { detail: any }) {
+  const r = detail?.providerReadiness ?? {};
+  const cards = [
+    { label: "Candidates", value: detail?.candidatesCount ?? 0 },
+    { label: "Cohorts", value: detail?.cohortsCount ?? 0 },
+    { label: "Providers ready", value: `${r.ready ?? 0}/${r.configured ?? 0}` },
+  ];
+  const breakdown = [
+    ["Users by role", detail?.usersByRole],
+    ["Profiles by visibility", detail?.profilesByVisibility],
+    ["Runs by status", detail?.runsByStatus],
+    ["Tenants by kind", detail?.tenantsByKind],
+  ] as Array<[string, Record<string, number> | undefined]>;
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="grid grid-cols-3 gap-2">
+        {cards.map((c) => (
+          <div key={c.label} className="rounded-lg border border-border bg-panel2/40 p-2 text-center">
+            <div className="font-mono text-base text-ink">{c.value}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted">{c.label}</div>
+          </div>
+        ))}
+      </div>
+      <TableShell>
+        <thead className="bg-panel2/70"><tr><Th>Dimension</Th><Th>Breakdown</Th></tr></thead>
+        <tbody className="divide-y divide-border/60">
+          {breakdown.map(([label, rec]) => (
+            <tr key={label}>
+              <Td className="font-medium">{label}</Td>
+              <Td>{rec && Object.keys(rec).length ? Object.entries(rec).map(([k, v]) => `${k}: ${v}`).join(", ") : "—"}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </TableShell>
+    </div>
+  );
+}
+
+function StudentDetailCard({ detail }: { detail: any }) {
+  if (!detail) return <p className="mt-2 text-muted">No matching student found.</p>;
+  const c = detail.candidate ?? {};
+  const runs: any[] = detail.runs ?? [];
+  return (
+    <div className="mt-2 space-y-2">
+      <div className="rounded-lg border border-border bg-panel2/40 p-2.5">
+        <div className="text-[13px] font-semibold text-ink">{c.name ?? c.email ?? c.id}</div>
+        <div className="mt-1 grid gap-1 text-[11px] text-muted sm:grid-cols-2">
+          <span>email: {c.email ?? "—"}</span>
+          <span>github: {c.githubUsername ?? "—"}</span>
+          <span>profiles: {(detail.profiles ?? []).length}</span>
+          <span>runs: {runs.length}</span>
+        </div>
+      </div>
+      {runs.length > 0 && (
+        <TableShell>
+          <thead className="bg-panel2/70"><tr>{["Run", "Status", "Role", "Score", "Verification"].map((h) => <Th key={h}>{h}</Th>)}</tr></thead>
+          <tbody className="divide-y divide-border/60">
+            {runs.slice(0, 10).map((r, i) => (
+              <tr key={i}>
+                <Td><RouteLink href={r.route} label={String(r.id ?? "run").slice(0, 8)} /></Td>
+                <Td>{r.status ?? "—"}</Td>
+                <Td>{r.targetRole ?? "—"}</Td>
+                <Td className="font-mono">{r.overallScore ?? "—"}</Td>
+                <Td>{r.verificationLevel ?? "—"}</Td>
+              </tr>
+            ))}
+          </tbody>
+        </TableShell>
+      )}
+    </div>
+  );
+}
+
+function SpecializedToolView({ toolName, data, onAsk }: { toolName: string; data: any; onAsk?: (t: string) => void }) {
+  const items: any[] = Array.isArray(data?.items) ? data.items : [];
+  switch (toolName) {
+    case "list_students_with_profiles":
+      return items.length ? <StudentsWithProfilesTable items={items} onAsk={onAsk} /> : null;
+    case "search_candidates_admin":
+      return items.length ? <CandidateSearchTable items={items} onAsk={onAsk} /> : null;
+    case "list_profiles_admin":
+      return items.length ? <ProfilesTable items={items} /> : null;
+    case "get_student_profile_admin":
+      return <StudentDetailCard detail={data?.detail} />;
+    case "read_platform_overview":
+      return <PlatformOverviewCards detail={data?.detail} />;
+    case "read_provider_health":
+      return Array.isArray(data) ? <ProviderHealthTable rows={data} /> : null;
+    case "read_agent_configs":
+      return Array.isArray(data) ? <AgentConfigsTable rows={data} /> : null;
+    default:
+      return null;
+  }
+}
+
+const SPECIALIZED_TOOLS = new Set([
+  "list_students_with_profiles",
+  "search_candidates_admin",
+  "list_profiles_admin",
+  "get_student_profile_admin",
+  "read_platform_overview",
+  "read_provider_health",
+  "read_agent_configs",
+]);
+
+function ToolResultView({ toolResult, onAsk }: { toolResult: { toolName: string; data: unknown }; onAsk?: (t: string) => void }) {
   const data = toolResult.data as any;
+  const specialized = SPECIALIZED_TOOLS.has(toolResult.toolName);
   const rows = pickRows(toolResult.data);
-  const noData = isRecord(data) && data.ok === true && (data.count === 0 || (Array.isArray(data.items) && data.items.length === 0));
-  const flattened = rows.slice(0, 8).map((r) => flattenForTable(r));
+  const noData =
+    (isRecord(data) && data.ok === true && (data.count === 0 || (Array.isArray(data.items) && data.items.length === 0))) ||
+    (Array.isArray(data) && data.length === 0);
+  const flattened = !specialized ? rows.slice(0, 8).map((r) => flattenForTable(r)) : [];
   const headers = Array.from(new Set(flattened.flatMap((r) => Object.keys(r)))).slice(0, 8);
   const routes = collectRoutes(toolResult.data);
 
   return (
     <div className="rounded-md border border-border bg-bg/40 px-3 py-2 text-[12px]">
       <div className="flex flex-wrap items-center gap-2 text-muted">
+        <span aria-hidden>🔧</span>
         <span>tool used</span>
         <code className="text-ink">{toolResult.toolName}</code>
         {typeof data?.count === "number" && <span>· {data.count} result{data.count === 1 ? "" : "s"}</span>}
@@ -136,7 +431,9 @@ function ToolResultView({ toolResult }: { toolResult: { toolName: string; data: 
 
       {noData && <p className="mt-2 rounded border border-zinc-600/40 bg-zinc-700/10 px-2 py-1 text-muted">No matching data found.</p>}
 
-      {headers.length > 0 && (
+      {specialized && !noData && <SpecializedToolView toolName={toolResult.toolName} data={data} onAsk={onAsk} />}
+
+      {!specialized && headers.length > 0 && (
         <div className="mt-2 overflow-x-auto">
           <table className="w-full text-left text-[11px]">
             <thead>
@@ -400,32 +697,27 @@ export function CopilotConsole({ role }: { role: string }) {
             {messages.map((m) => (
               <div key={m.id} className="space-y-2">
                 <div className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}>
-                  <div
-                    className={cn(
-                      "max-w-[90%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[13px] leading-5",
-                      m.role === "user"
-                        ? "bg-accent/20 text-ink"
-                        : m.error
-                          ? "border border-red-500/40 bg-red-500/10 text-ink"
-                          : "border border-border bg-bg/60 text-ink",
-                    )}
-                  >
-                    {m.content}
-                    {m.role === "assistant" && m.providerId && (
-                      <div className="mt-1 text-[10px] text-muted">
-                        {m.providerId} · {m.model}
-                      </div>
-                    )}
-                    {m.citations && m.citations.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {m.citations.map((c) => (
-                          <span key={c} className="rounded bg-panel2 px-1.5 py-0.5 text-[10px] text-muted">
-                            {c}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {m.role === "assistant" && !m.error ? (
+                    <div className="max-w-[92%] rounded-lg border border-border bg-bg/60 px-3.5 py-3 text-[13px] leading-5 text-ink">
+                      <MarkdownMessage
+                        content={m.content}
+                        citations={m.citations}
+                        providerId={m.providerId}
+                        model={m.model}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className={cn(
+                        "max-w-[90%] whitespace-pre-wrap rounded-lg px-3 py-2 text-[13px] leading-5",
+                        m.role === "user"
+                          ? "bg-accent/20 text-ink"
+                          : "border border-red-500/40 bg-red-500/10 text-ink",
+                      )}
+                    >
+                      {m.content}
+                    </div>
+                  )}
                 </div>
 
                 {m.refusal && (
@@ -435,7 +727,7 @@ export function CopilotConsole({ role }: { role: string }) {
                   </div>
                 )}
 
-                {m.toolResult && <ToolResultView toolResult={m.toolResult} />}
+                {m.toolResult && <ToolResultView toolResult={m.toolResult} onAsk={send} />}
 
                 {m.proposal && (
                   <ProposalCard

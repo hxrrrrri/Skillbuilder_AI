@@ -199,9 +199,6 @@ function inferAdminReadToolRequest(
 function formatReadToolAnswer(question: string, toolName: string, data: unknown): string | null {
   const result = data as any;
   if (!result || typeof result !== "object") return null;
-  if (result.ok === true && result.count === 0) {
-    return `No matching data found for \`${toolName}\`.`;
-  }
 
   switch (toolName) {
     case "list_students_with_profiles":
@@ -219,115 +216,261 @@ function formatReadToolAnswer(question: string, toolName: string, data: unknown)
     case "explain_route_or_feature":
       return formatExplanation(toolName, result);
     default:
+      // For other read tools, surface a clean empty-state when there is nothing.
+      if (result.ok === true && result.count === 0) {
+        return noData(prettyToolTitle(toolName), `No records matched the \`${toolName}\` query.`, [
+          "Loosen any filters and ask again.",
+        ]);
+      }
       return null;
   }
 }
 
+// ── Markdown formatting helpers ──────────────────────────────────────────────
+// Each read-tool formatter returns professional markdown (heading → one-line
+// summary → table/bullets → route/action section) that the chat UI renders with
+// the MarkdownMessage component. Raw JSON is never the primary answer.
+
 function mdCell(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-";
+  if (value === null || value === undefined || value === "") return "—";
   return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ").slice(0, 120);
 }
 
-function formatStudentsWithProfiles(result: any): string {
-  const rows = result.items ?? [];
-  if (!rows.length) return "No matching data found: there are no students/candidates with created profiles for this query.";
-  const lines = [
-    `Found ${result.count ?? rows.length} student/candidate profile record(s).`,
-    "",
-    "| Candidate | Email / GitHub | Profile | Visibility | Repo | Score | Run | Role | Created | Routes |",
-    "|---|---|---|---|---|---:|---|---|---|---|",
-    ...rows.slice(0, 15).map((item: any) => {
-      const routes = item.routes?.join(", ") ?? [item.profile?.route, item.run?.route].filter(Boolean).join(", ");
-      return `| ${mdCell(item.candidate?.name)} | ${mdCell(item.candidate?.email ?? item.candidate?.githubUsername)} | ${mdCell(item.profile?.slug)} | ${mdCell(item.profile?.visibility)} | ${mdCell(item.repository?.fullName ?? item.repository?.name)} | ${mdCell(item.run?.overallScore)} | ${mdCell(item.run?.status)} | ${mdCell(item.run?.targetRole)} | ${mdCell(item.profile?.createdAt)} | ${mdCell(routes)} |`;
-    }),
-  ];
-  if (rows.length > 15) lines.push(`\nShowing first 15 of ${rows.length}. Narrow the query for more detail.`);
-  return lines.join("\n");
+function prettyToolTitle(toolName: string): string {
+  return toolName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function formatProfiles(result: any): string {
-  const rows = result.items ?? [];
-  if (!rows.length) return "No matching data found: no profiles matched this query.";
+/** Render a list of internal routes as markdown route-link bullets. */
+function routeBullets(routes: string[], fallback = "Open the matching profile or admin run from the table above."): string[] {
+  const unique = Array.from(new Set(routes.filter((r) => typeof r === "string" && r.startsWith("/"))));
+  if (!unique.length) return [`- ${fallback}`];
+  return unique.slice(0, 12).map((r) => `- [${r}](${r})`);
+}
+
+function collectItemRoutes(items: any[]): string[] {
+  const set = new Set<string>();
+  for (const it of items ?? []) {
+    for (const r of it?.routes ?? []) if (typeof r === "string") set.add(r);
+    if (typeof it?.profile?.route === "string") set.add(it.profile.route);
+    if (typeof it?.run?.route === "string") set.add(it.run.route);
+  }
+  return Array.from(set);
+}
+
+function recordPairs(record: Record<string, unknown> | undefined | null): string {
+  const entries = Object.entries(record ?? {});
+  if (!entries.length) return "—";
+  return entries.map(([k, v]) => `${k}: ${v}`).join(", ");
+}
+
+/** Standardized "No matching data found" answer. */
+export function noData(heading: string, detail: string, nextActions: string[]): string {
   return [
-    `Found ${result.count ?? rows.length} profile(s).`,
+    `## ${heading}`,
     "",
-    "| Profile | Visibility | Candidate | Owner | Repo | Role | Score | Routes |",
-    "|---|---|---|---|---|---|---:|---|",
-    ...rows.slice(0, 15).map((item: any) =>
-      `| ${mdCell(item.profile?.slug)} | ${mdCell(item.profile?.visibility)} | ${mdCell(item.candidate?.email ?? item.candidate?.name)} | ${mdCell(item.ownerEmail)} | ${mdCell(item.repository?.fullName)} | ${mdCell(item.run?.targetRole)} | ${mdCell(item.run?.score)} | ${mdCell(item.routes?.join(", "))} |`,
-    ),
+    `**No matching data found.** ${detail}`,
+    "",
+    "## Next action",
+    "",
+    ...nextActions.map((a) => `- ${a}`),
   ].join("\n");
 }
 
-function formatCandidateSearch(result: any): string {
-  const rows = result.items ?? [];
-  if (!rows.length) return "No matching data found: no candidates matched this query.";
-  return [
-    `Found ${result.count ?? rows.length} candidate(s).`,
-    "",
-    "| Candidate | Linked user | Runs | Completed | Profiles | Best score | Strongest | Weakest | Latest profile | Routes |",
-    "|---|---|---:|---:|---:|---:|---|---|---|---|",
-    ...rows.slice(0, 15).map((item: any) =>
-      `| ${mdCell(item.candidate?.name ?? item.candidate?.email)} | ${mdCell(item.linkedUserEmail)} | ${mdCell(item.runsCount)} | ${mdCell(item.completedRunsCount)} | ${mdCell(item.profilesCount)} | ${mdCell(item.bestScore)} | ${mdCell(item.strongestSkill?.skillName)} | ${mdCell(item.weakestSkill?.skillName)} | ${mdCell(item.latestProfileSlug)} | ${mdCell(item.routes?.join(", "))} |`,
+export function formatStudentsWithProfiles(result: any): string {
+  const rows: any[] = result.items ?? [];
+  if (!rows.length) {
+    return noData("Students with created profiles", "No students or candidates have a created profile for this query.", [
+      "Broaden the visibility filter to `any`.",
+      "Remove any cohort or tenant filter and ask again.",
+    ]);
+  }
+  const shown = rows.slice(0, 15);
+  const table = [
+    "| Student | Email | GitHub | Profile | Visibility | Score | Role | Repo | Run status |",
+    "|---|---|---|---|---|---:|---|---|---|",
+    ...shown.map((item) =>
+      `| ${mdCell(item.candidate?.name)} | ${mdCell(item.candidate?.email ?? item.candidate?.ownerUserEmail)} | ${mdCell(item.candidate?.githubUsername)} | ${mdCell(item.profile?.slug)} | ${mdCell(item.profile?.visibility)} | ${mdCell(item.run?.overallScore)} | ${mdCell(item.run?.targetRole)} | ${mdCell(item.repository?.fullName ?? item.repository?.name)} | ${mdCell(item.run?.status)} |`,
     ),
+  ].join("\n");
+  return [
+    "## Students with created profiles",
+    "",
+    `Found **${result.count ?? rows.length}** student/candidate profile record(s) on the platform.`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    rows.length > 15 ? `\n_Showing first 15 of ${rows.length}. Narrow the query (cohort, visibility, or search) for more._` : "",
+    "",
+    "## Next action",
+    "",
+    ...routeBullets(collectItemRoutes(shown)),
+    '- Ask "tell me about <candidate name>" for a full per-student breakdown.',
   ].join("\n");
 }
 
-function formatStudentDetail(result: any): string {
+export function formatProfiles(result: any): string {
+  const rows: any[] = result.items ?? [];
+  if (!rows.length) {
+    return noData("Profiles", "No profiles matched this query.", [
+      "Try a different visibility (`public`, `unlisted`, `private`, or `any`).",
+      "Search by candidate name, email, or repo.",
+    ]);
+  }
+  const shown = rows.slice(0, 15);
+  const table = [
+    "| Profile | Visibility | Candidate | Owner | Repo | Role | Score |",
+    "|---|---|---|---|---|---|---:|",
+    ...shown.map((item) =>
+      `| ${mdCell(item.profile?.slug)} | ${mdCell(item.profile?.visibility)} | ${mdCell(item.candidate?.email ?? item.candidate?.name)} | ${mdCell(item.candidate?.ownerUserEmail ?? item.ownerEmail)} | ${mdCell(item.repository?.fullName ?? item.repository?.name)} | ${mdCell(item.run?.targetRole)} | ${mdCell(item.run?.overallScore ?? item.run?.score)} |`,
+    ),
+  ].join("\n");
+  return [
+    "## Profiles",
+    "",
+    `Found **${result.count ?? rows.length}** profile(s).`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    ...routeBullets(collectItemRoutes(shown)),
+  ].join("\n");
+}
+
+export function formatCandidateSearch(result: any): string {
+  const rows: any[] = result.items ?? [];
+  if (!rows.length) {
+    return noData("Candidate search", "No candidates matched this query.", [
+      "Lower the minimum score or drop the completed-run filter.",
+      "Search by name, email, or GitHub username.",
+    ]);
+  }
+  const shown = rows.slice(0, 15);
+  const table = [
+    "| Candidate | Linked user | Runs | Completed | Profiles | Best score | Strongest | Weakest |",
+    "|---|---|---:|---:|---:|---:|---|---|",
+    ...shown.map((item) =>
+      `| ${mdCell(item.candidate?.name ?? item.candidate?.email)} | ${mdCell(item.linkedUserEmail)} | ${mdCell(item.runsCount)} | ${mdCell(item.completedRunsCount)} | ${mdCell(item.profilesCount)} | ${mdCell(item.bestScore)} | ${mdCell(item.strongestSkill?.skillName)} | ${mdCell(item.weakestSkill?.skillName)} |`,
+    ),
+  ].join("\n");
+  return [
+    "## Candidate search",
+    "",
+    `Found **${result.count ?? rows.length}** candidate(s).`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    ...routeBullets(collectItemRoutes(shown)),
+  ].join("\n");
+}
+
+export function formatStudentDetail(result: any): string {
   const d = result.detail;
-  if (!d) return "No matching data found for that student/candidate.";
-  const runs = d.runs ?? [];
-  const profiles = d.profiles ?? [];
-  const lines = [
-    `Student detail: ${d.candidate?.name ?? d.candidate?.email ?? d.candidate?.id}`,
-    "",
-    `- Candidate: ${d.candidate?.id} · ${d.candidate?.email ?? "no email"} · GitHub: ${d.candidate?.githubUsername ?? "-"}`,
-    `- Linked user: ${d.linkedUser?.email ?? "none"}`,
-    `- Cohorts: ${(d.cohortMemberships ?? []).map((c: any) => c.name).filter(Boolean).join(", ") || "-"}`,
-    `- Repositories: ${(d.repositories ?? []).map((r: any) => `${r.owner}/${r.name}`).join(", ") || "-"}`,
-    `- Profiles: ${profiles.map((p: any) => `${p.slug} (${p.visibility}) ${p.route}`).join(", ") || "-"}`,
-    `- Routes: ${(d.routes ?? []).join(", ") || "-"}`,
-    "",
-    "| Run | Status | Role | Score | Verification | Terminal proof | Repo |",
-    "|---|---|---|---:|---|---|---|",
-    ...runs.slice(0, 10).map((r: any) =>
-      `| ${mdCell(r.route ?? r.id)} | ${mdCell(r.status)} | ${mdCell(r.targetRole)} | ${mdCell(r.overallScore)} | ${mdCell(r.verificationLevel)} | ${mdCell(r.terminalProofAvailable ? "yes" : "no")} | ${mdCell(r.repository ? `${r.repository.owner}/${r.repository.name}` : null)} |`,
-    ),
-  ];
-  return lines.join("\n");
-}
-
-function formatPlatformOverview(result: any): string {
-  const d = result.detail ?? {};
+  if (!d) {
+    return noData("Student detail", "No matching student or candidate was found.", [
+      "Check the email, GitHub username, or profile slug and ask again.",
+    ]);
+  }
+  const runs: any[] = d.runs ?? [];
+  const profiles: any[] = d.profiles ?? [];
+  const summary = [
+    `- **Candidate:** ${mdCell(d.candidate?.name)} · ${d.candidate?.email ?? "no email"} · GitHub: ${d.candidate?.githubUsername ?? "—"}`,
+    `- **Linked user:** ${d.linkedUser?.email ?? d.user?.email ?? "none"}`,
+    `- **Cohorts:** ${(d.cohortMemberships ?? []).map((c: any) => c.name ?? c.cohort?.name).filter(Boolean).join(", ") || "—"}`,
+    `- **Repositories:** ${(d.repositories ?? []).map((r: any) => `${r.owner}/${r.name ?? r.repoName}`).join(", ") || "—"}`,
+    `- **Profiles:** ${profiles.map((p: any) => `${p.slug} (${p.visibility})`).join(", ") || "—"}`,
+  ].join("\n");
+  const table = runs.length
+    ? [
+        "| Run | Status | Role | Score | Verification | Repo |",
+        "|---|---|---|---:|---|---|",
+        ...runs.slice(0, 10).map((r: any) =>
+          `| ${mdCell(r.route ?? r.id)} | ${mdCell(r.status)} | ${mdCell(r.targetRole)} | ${mdCell(r.overallScore)} | ${mdCell(r.verificationLevel)} | ${mdCell(r.repository ? `${r.repository.owner}/${r.repository.name ?? r.repository.repoName}` : null)} |`,
+        ),
+      ].join("\n")
+    : "_No verification runs recorded for this candidate yet._";
   return [
-    "Platform overview:",
-    `- Users by role: ${JSON.stringify(d.usersByRole ?? {})}`,
-    `- Candidates: ${d.candidatesCount ?? 0}`,
-    `- Profiles by visibility: ${JSON.stringify(d.profilesByVisibility ?? {})}`,
-    `- Runs by status: ${JSON.stringify(d.runsByStatus ?? {})}`,
-    `- Tenants by kind: ${JSON.stringify(d.tenantsByKind ?? {})}`,
-    `- Cohorts: ${d.cohortsCount ?? 0}`,
-    `- Provider readiness: ${d.providerReadiness?.ready ?? 0}/${d.providerReadiness?.configured ?? 0} ready`,
-    `- Useful routes: ${(result.routes ?? []).join(", ")}`,
+    `## Student detail — ${d.candidate?.name ?? d.candidate?.email ?? d.candidate?.id}`,
+    "",
+    summary,
+    "",
+    "## Verification runs",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    ...routeBullets(d.routes ?? []),
   ].join("\n");
 }
 
-function formatExplanation(toolName: string, result: any): string {
-  const rows = result.items ?? [];
-  if (!rows.length) return `No matching explanation entries found for \`${toolName}\`.`;
-  const label = toolName === "explain_data_model" ? "Data model" : toolName === "explain_project_architecture" ? "Project architecture" : "Route/feature map";
+export function formatPlatformOverview(result: any): string {
+  const d = result.detail ?? {};
+  const readiness = d.providerReadiness ?? {};
+  const table = [
+    "| Dimension | Breakdown |",
+    "|---|---|",
+    `| Users by role | ${mdCell(recordPairs(d.usersByRole))} |`,
+    `| Profiles by visibility | ${mdCell(recordPairs(d.profilesByVisibility))} |`,
+    `| Runs by status | ${mdCell(recordPairs(d.runsByStatus))} |`,
+    `| Tenants by kind | ${mdCell(recordPairs(d.tenantsByKind))} |`,
+  ].join("\n");
   return [
-    `${label}:`,
+    "## Platform overview",
+    "",
+    "Live snapshot of platform counts and provider readiness.",
+    "",
+    "## Key counts",
+    "",
+    `- **Candidates:** ${d.candidatesCount ?? 0}`,
+    `- **Cohorts:** ${d.cohortsCount ?? 0}`,
+    `- **Provider readiness:** ${readiness.ready ?? 0}/${readiness.configured ?? 0} ready (${readiness.enabled ?? 0} enabled)`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    ...routeBullets(result.routes ?? ["/admin/users", "/admin/profiles", "/admin/runs", "/admin/providers/health"]),
+  ].join("\n");
+}
+
+export function formatExplanation(toolName: string, result: any): string {
+  const rows: any[] = result.items ?? [];
+  const label =
+    toolName === "explain_data_model" ? "Data model" : toolName === "explain_project_architecture" ? "Project architecture" : "Route / feature map";
+  if (!rows.length) {
+    return noData(label, `No explanation entries were found for \`${toolName}\`.`, [
+      "Rephrase the topic, or ask about a specific model, route, or feature.",
+    ]);
+  }
+  return [
+    `## ${label}`,
+    "",
+    `Found **${rows.length}** relevant entr${rows.length === 1 ? "y" : "ies"}.`,
+    "",
+    "## Details",
     "",
     ...rows.map((row: any) => {
-      const name = row.model ?? row.area ?? row.route;
-      const text = row.explanation ?? row.purpose;
-      const files = row.files ? ` Files: ${row.files.join(", ")}.` : "";
-      const models = row.models ? ` Models: ${row.models.join(", ")}.` : "";
-      return `- ${name}: ${text}${files}${models}`;
+      const name = row.model ?? row.area ?? row.route ?? "entry";
+      const text = row.explanation ?? row.purpose ?? "";
+      const files = row.files?.length ? ` _Files: ${row.files.join(", ")}._` : "";
+      const models = row.models?.length ? ` _Models: ${row.models.join(", ")}._` : "";
+      return `- **${name}** — ${text}${files}${models}`;
     }),
-    result.routes?.length ? `\nRoutes: ${result.routes.join(", ")}` : "",
-  ].filter(Boolean).join("\n");
+    "",
+    "## Next action",
+    "",
+    ...routeBullets(result.routes ?? []),
+  ].join("\n");
 }
 
 async function applyToolRequest(

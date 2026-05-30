@@ -65,8 +65,8 @@ export default async function AdminProvidersPage() {
         </a>
       </div>
 
-      <Card showTrafficLights className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
-        <CardHeader className="border-bg pl-20">
+      <Card className="card-section-plain border-bg bg-transparent shadow-none backdrop-blur-0">
+        <CardHeader className="border-bg">
           <CardTitle>Provider registry ({rows.length})</CardTitle>
         </CardHeader>
         <CardBody>

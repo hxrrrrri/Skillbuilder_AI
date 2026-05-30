@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
-import { TrafficLights } from "@/components/ui/card";
+import { StatusLight } from "@/components/ui/card";
 import { ClientDateTime } from "@/components/ui/client-datetime";
 import { cn } from "@/lib/utils";
 
@@ -135,7 +135,7 @@ function HealthRow({ row, patchRow }: { row: Row; patchRow: (providerId: string,
         {/* ── Card header ── */}
         <div className="flex items-start justify-between gap-3 p-5 pb-3">
           <div className="flex items-center gap-3 min-w-0">
-            <TrafficLights className="flex-shrink-0" />
+            <StatusLight healthy={row.status === "ready"} className="flex-shrink-0" />
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-ink">{row.label}</div>
               <code className="font-mono text-[11px] text-muted">{row.providerId}</code>
