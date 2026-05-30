@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { summarizeTerminalEvidence, hasPassingCommand, hasFailingCommand, getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
 import type {
@@ -197,7 +198,7 @@ Return the JSON now.`;
     state,
     agentName: "profile-gen",
     role: "profile",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 2200,

@@ -12,7 +12,13 @@
 import { prisma } from "@/lib/db";
 import type { FallbackStrategy, ProviderId, ProviderMatrixAgentEntry } from "./types";
 import { REASONING_BUDGETS, isReasoningBudget, type ReasoningBudget } from "./reasoning";
-import { PROVIDER_MODEL_CATALOG, PROVIDER_MODEL_DEFAULTS, LLM_AGENT_NAMES } from "./defaults";
+import {
+  PROVIDER_MODEL_CATALOG,
+  PROVIDER_MODEL_DEFAULTS,
+  LLM_AGENT_NAMES,
+  DETERMINISTIC_AGENT_NAMES,
+  isDeterministicOnlyAgent,
+} from "./defaults";
 import { providerCache, invalidateProviderRegistryCache } from "./cache";
 
 export const PROVIDER_DEFAULTS: Array<{
@@ -192,49 +198,24 @@ export const AGENT_DEFAULTS: AgentDefault[] = [
     qualityTier: "medium",
     enabled: true,
   })),
-  // Evidence-derived stages still execute deterministic code paths, but the admin registry defaults every agent card to Codex.
-  {
-    agentName: "repo-scanner",
-    providerId: "codex_cli",
-    model: "gpt-5.5",
+  // Evidence-derived stages run deterministic code paths — no LLM, 0 tokens, no
+  // provider fallback. The admin registry must reflect that honestly: provider
+  // `deterministic`, model = the stage name, and fail (never silently retry on an
+  // LLM). These agents never call provider.runJson; their functions run directly.
+  ...DETERMINISTIC_AGENT_NAMES.map<AgentDefault>((name) => ({
+    agentName: name,
+    providerId: "deterministic",
+    model: name,
     reasoningBudget: "none",
     temperature: 0,
-    maxTokens: 100,
+    maxTokens: 0,
     jsonMode: true,
-    fallbackProvider: "claude_cli",
-    fallbackStrategy: "retry",
+    fallbackProvider: null,
+    fallbackStrategy: "fail",
     costTier: "low",
-    qualityTier: "low",
+    qualityTier: "high",
     enabled: true,
-  },
-  {
-    agentName: "git-evidence",
-    providerId: "codex_cli",
-    model: "gpt-5.5",
-    reasoningBudget: "none",
-    temperature: 0,
-    maxTokens: 100,
-    jsonMode: true,
-    fallbackProvider: "claude_cli",
-    fallbackStrategy: "retry",
-    costTier: "low",
-    qualityTier: "low",
-    enabled: true,
-  },
-  {
-    agentName: "skill-graph",
-    providerId: "codex_cli",
-    model: "gpt-5.5",
-    reasoningBudget: "none",
-    temperature: 0,
-    maxTokens: 100,
-    jsonMode: true,
-    fallbackProvider: "claude_cli",
-    fallbackStrategy: "retry",
-    costTier: "low",
-    qualityTier: "low",
-    enabled: true,
-  },
+  })),
 ];
 
 // --------------- Provider accessors ---------------
@@ -317,6 +298,22 @@ function isProviderId(value: unknown): value is ProviderId {
 function defaultForAgent(agentName: string): AgentDefault {
   const known = AGENT_DEFAULTS.find((a) => a.agentName === agentName);
   if (known) return known;
+  if (isDeterministicOnlyAgent(agentName)) {
+    return {
+      agentName: agentName as AgentName,
+      providerId: "deterministic",
+      model: agentName,
+      reasoningBudget: "none",
+      temperature: 0,
+      maxTokens: 0,
+      jsonMode: true,
+      fallbackProvider: null,
+      fallbackStrategy: "fail",
+      costTier: "low",
+      qualityTier: "high",
+      enabled: true,
+    };
+  }
   return {
     agentName: agentName as AgentName,
     providerId: "codex_cli",
@@ -407,6 +404,38 @@ export async function resolveAgentConfig(agentName: string): Promise<ResolvedAge
   });
 }
 
+/**
+ * Validate a requested provider for an agent. Two hard rules, fail-closed:
+ *  - `deterministic` is ONLY valid for the evidence-derived stages
+ *    (repo-scanner/git-evidence/skill-graph). Assigning it to an LLM-reviewed
+ *    agent (architecture, security, testing, …) is rejected — deterministic
+ *    evidence cannot score those skills.
+ *  - LLM-reviewed stages may not be downgraded to deterministic.
+ */
+export function validateAgentProvider(agentName: string, providerId: string): { ok: boolean; reason?: string } {
+  if (providerId === "deterministic" && !isDeterministicOnlyAgent(agentName)) {
+    return {
+      ok: false,
+      reason: `Agent '${agentName}' is LLM-reviewed; deterministic evidence cannot score it. Choose a real LLM provider.`,
+    };
+  }
+  if (providerId !== "deterministic" && isDeterministicOnlyAgent(agentName)) {
+    return {
+      ok: false,
+      reason: `Agent '${agentName}' is an evidence-derived deterministic stage; it must stay on the deterministic provider.`,
+    };
+  }
+  return { ok: true };
+}
+
+export class AgentProviderValidationError extends Error {
+  code = "invalid_agent_provider";
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentProviderValidationError";
+  }
+}
+
 export async function updateAgentConfig(
   agentName: string,
   patch: Partial<{
@@ -426,6 +455,10 @@ export async function updateAgentConfig(
     qualityTier: "low" | "medium" | "high";
   }>,
 ) {
+  if (typeof patch.providerId === "string") {
+    const check = validateAgentProvider(agentName, patch.providerId);
+    if (!check.ok) throw new AgentProviderValidationError(check.reason!);
+  }
   const updated = await prisma.agentConfig.update({ where: { agentName }, data: patch });
   invalidateProviderRegistryCache();
   return updated;

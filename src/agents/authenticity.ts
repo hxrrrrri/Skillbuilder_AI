@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 // Authenticity signals — deterministic checks plus optional LLM polish.
 // Not plagiarism detection. Signals only.
 
@@ -92,7 +93,7 @@ Return JSON now.`;
     state,
     agentName: "authenticity",
     role: "worker",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 900,

@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import type { AnswerEvaluation, Handoff, InterviewQuestionT, MissionState } from "./types";
 
@@ -62,7 +63,7 @@ Return the JSON now.`;
     state,
     agentName: "answer-evaluator",
     role: "validator",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 800,

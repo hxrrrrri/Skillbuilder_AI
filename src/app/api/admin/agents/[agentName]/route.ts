@@ -4,6 +4,7 @@ import { requireAdminApi, isNextResponse } from "@/lib/auth/guards-api";
 import {
   getAgentConfig,
   updateAgentConfig,
+  validateAgentProvider,
   REASONING_BUDGETS,
   FALLBACK_STRATEGIES,
   COST_TIERS,
@@ -55,6 +56,15 @@ export async function PATCH(req: Request, { params }: { params: { agentName: str
     }
     if (body.fallbackProvider && !valid.has(body.fallbackProvider)) {
       return NextResponse.json({ error: "unknown_provider", field: "fallbackProvider" }, { status: 400 });
+    }
+  }
+
+  // Deterministic ↔ LLM agent pairing is fail-closed: deterministic stages must
+  // stay deterministic; LLM agents may not be downgraded to deterministic.
+  if (body.providerId) {
+    const check = validateAgentProvider(params.agentName, body.providerId);
+    if (!check.ok) {
+      return NextResponse.json({ error: "invalid_agent_provider", detail: check.reason }, { status: 400 });
     }
   }
 

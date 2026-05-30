@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardBody, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, TextArea } from "@/components/ui/input";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { TARGET_ROLES, CANDIDATE_LEVELS, CUSTOM_ROLE_LABEL, CUSTOM_LEVEL_LABEL, searchRoles } from "@/lib/roles";
 import { cn } from "@/lib/utils";
 
 type WizardUser = {
@@ -485,20 +487,28 @@ export function NewVerificationWizard({ user }: { user: WizardUser }) {
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block space-y-2">
                   <span className="text-sm font-medium text-ink">Target role</span>
-                  <Input value={targetRole} onChange={(e) => setTargetRole(e.target.value)} />
+                  <SearchableCombobox
+                    ariaLabel="Target role"
+                    options={TARGET_ROLES.map((r) => r.label)}
+                    value={targetRole}
+                    onChange={setTargetRole}
+                    searchable
+                    filter={(q) => searchRoles(q).map((r) => r.label)}
+                    customTriggerLabel={CUSTOM_ROLE_LABEL}
+                    placeholder="Search a role…"
+                  />
                 </label>
                 <label className="block space-y-2">
                   <span className="text-sm font-medium text-ink">Candidate level</span>
-                  <select
+                  <SearchableCombobox
+                    ariaLabel="Candidate level"
+                    options={CANDIDATE_LEVELS}
                     value={candidateLevel}
-                    onChange={(e) => setCandidateLevel(e.target.value)}
-                    className="h-11 w-full rounded-md border border-border bg-bg/65 px-3 text-ink"
-                  >
-                    <option>Intern</option>
-                    <option>Junior</option>
-                    <option>Mid-level</option>
-                    <option>Senior</option>
-                  </select>
+                    onChange={setCandidateLevel}
+                    searchable={false}
+                    customTriggerLabel={CUSTOM_LEVEL_LABEL}
+                    placeholder="Select a level…"
+                  />
                 </label>
               </div>
               <label className="block space-y-2">

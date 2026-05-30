@@ -6,6 +6,8 @@ import heroCv from "../../public/hero-cv.png";
 import { Button } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { SearchableCombobox } from "@/components/ui/searchable-combobox";
+import { TARGET_ROLES, CANDIDATE_LEVELS, CUSTOM_ROLE_LABEL, CUSTOM_LEVEL_LABEL, searchRoles } from "@/lib/roles";
 import { SectionPictogram, VerificationChecklist, AuditMagnifying, VerifyBadge } from "@/components/brand/skillproof-mark";
 
 const SAMPLE_REPOS = [
@@ -37,7 +39,7 @@ export default function Landing() {
   const [repoUrl, setRepoUrl] = useState("");
   const [candidateName, setCandidateName] = useState("");
   const [githubUsername, setGithubUsername] = useState("");
-  const [role, setRole] = useState("Full-stack developer");
+  const [role, setRole] = useState("Full-stack Developer");
   const [level, setLevel] = useState("Junior");
   const [jd, setJd] = useState("");
   const [executionMode, setExecutionMode] = useState<Mode>("api");
@@ -323,13 +325,30 @@ export default function Landing() {
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-widest text-muted">
                     Target role
                   </label>
-                  <Input value={role} onChange={(e) => setRole(e.target.value)} />
+                  <SearchableCombobox
+                    ariaLabel="Target role"
+                    options={TARGET_ROLES.map((r) => r.label)}
+                    value={role}
+                    onChange={setRole}
+                    searchable
+                    filter={(q) => searchRoles(q).map((r) => r.label)}
+                    customTriggerLabel={CUSTOM_ROLE_LABEL}
+                    placeholder="Search a role…"
+                  />
                 </div>
                 <div>
                   <label className="mb-2 block text-sm font-semibold uppercase tracking-widest text-muted">
                     Level
                   </label>
-                  <Input value={level} onChange={(e) => setLevel(e.target.value)} />
+                  <SearchableCombobox
+                    ariaLabel="Candidate level"
+                    options={CANDIDATE_LEVELS}
+                    value={level}
+                    onChange={setLevel}
+                    searchable={false}
+                    customTriggerLabel={CUSTOM_LEVEL_LABEL}
+                    placeholder="Select a level…"
+                  />
                 </div>
               </div>
 

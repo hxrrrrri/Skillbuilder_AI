@@ -2,6 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "../src/lib/db";
 import { AGENT_NAMES } from "../src/lib/providers/registry";
+import { composeAgentSystem } from "../src/agents/prompt-policy";
+
+// Agents whose runtime call wraps the base prompt in composeAgentSystem(); seed
+// the DB with the same composed text so the active prompt matches the fallback.
+const POLICY_WIRED_AGENTS = new Set([
+  "security", "code-quality", "validator", "interview-gen", "profile-gen",
+  "improvement-plan", "authenticity", "architecture", "orchestrator",
+  "answer-evaluator", "testing", "documentation", "employer-verifier",
+]);
 
 const PROMPT_SOURCES: Record<string, string> = {
   orchestrator: "src/agents/orchestrator.ts",
@@ -36,7 +45,8 @@ async function main() {
   let skipped = 0;
 
   for (const agentName of AGENT_NAMES) {
-    const system = PROMPT_SOURCES[agentName] ? extractSystemPrompt(PROMPT_SOURCES[agentName]) : "";
+    const base = PROMPT_SOURCES[agentName] ? extractSystemPrompt(PROMPT_SOURCES[agentName]) : "";
+    const system = base && POLICY_WIRED_AGENTS.has(agentName) ? composeAgentSystem(base) : base;
     const existing = await model.findFirst({
       where: { agentName, version: 1 },
     });

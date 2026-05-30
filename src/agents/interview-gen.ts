@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
 import { buildContextBlock } from "./_analysis";
@@ -107,7 +108,7 @@ Generate the JSON now.`;
     state,
     agentName: "interview-gen",
     role: "interview",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1600,

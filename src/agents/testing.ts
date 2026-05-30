@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { buildContextBlock } from "./_analysis";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
@@ -87,7 +88,7 @@ Return the JSON now.`;
     state,
     agentName: "testing",
     role: "worker",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1200,

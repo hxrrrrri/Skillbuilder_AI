@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { hydrateEvidenceFromContext } from "@/lib/evidence";
 import { assertionResultsForDimension } from "./assertions";
@@ -81,7 +82,7 @@ Return the JSON now.`;
     state,
     agentName: "documentation",
     role: "worker",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 800,

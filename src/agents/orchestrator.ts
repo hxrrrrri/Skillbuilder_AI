@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import type { Handoff, MissionState, ValidationAssertion, ValidationContract } from "./types";
 
@@ -118,7 +119,7 @@ Produce the validation contract JSON now.`;
     state,
     agentName: "orchestrator",
     role: "orchestrator",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 2500,

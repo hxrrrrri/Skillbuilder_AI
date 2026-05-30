@@ -165,6 +165,7 @@ function AgentRow({
     [providers, providerId],
   );
   const reasoningSupported = !!currentProvider?.reasoningSupported;
+  const isDeterministic = providerId === "deterministic";
   const models = useMemo(() => {
     const listed = currentProvider?.capabilities?.models ?? [];
     return model && !listed.includes(model) ? [model, ...listed] : listed;
@@ -285,14 +286,24 @@ function AgentRow({
 
         {/* ── Badge strip ── */}
         <div className="flex flex-wrap gap-1.5 px-5 pb-4">
-          <Badge tone="default">{providerId}</Badge>
+          <Badge tone={isDeterministic ? "good" : "default"}>{providerId}</Badge>
           <code className="inline-flex items-center rounded-lg border border-border/60 bg-panel2/60 px-2 py-0.5 font-mono text-[10px] text-muted">
             {model}
           </code>
-          <Badge tone={reasoningTone}>reasoning: {reasoningBudget}</Badge>
-          <Badge tone="default">
-            {costTier} / {qualityTier}
-          </Badge>
+          {isDeterministic ? (
+            <>
+              <Badge tone="good">no LLM</Badge>
+              <Badge tone="good">0 tokens</Badge>
+              <Badge tone="good">evidence-derived</Badge>
+            </>
+          ) : (
+            <>
+              <Badge tone={reasoningTone}>reasoning: {reasoningBudget}</Badge>
+              <Badge tone="default">
+                {costTier} / {qualityTier}
+              </Badge>
+            </>
+          )}
         </div>
 
         {/* ── Metrics grid ── */}

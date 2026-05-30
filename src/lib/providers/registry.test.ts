@@ -9,6 +9,7 @@ import {
   isFallbackStrategy,
   isCostTier,
   isQualityTier,
+  validateAgentProvider,
 } from "./registry";
 import { LLM_AGENT_NAMES, PROVIDER_MODEL_DEFAULTS } from "./defaults";
 import { PROVIDER_MODEL_CATALOG } from "./model-catalog";
@@ -49,22 +50,48 @@ describe("registry defaults shape", () => {
     expect(validator?.reasoningBudget).toBe("high");
   });
 
-  it("evidence-derived stages also default to Codex CLI in the admin registry", () => {
+  it("evidence-derived stages default to the deterministic provider (no LLM, 0 tokens, no fallback)", () => {
     for (const name of ["repo-scanner", "git-evidence", "skill-graph"] as const) {
       const a = AGENT_DEFAULTS.find((x) => x.agentName === name);
-      expect(a?.providerId).toBe("codex_cli");
-      expect(a?.model).toBe("gpt-5.5");
+      expect(a?.providerId).toBe("deterministic");
+      expect(a?.model).toBe(name);
       expect(a?.reasoningBudget).toBe("none");
-      expect(a?.fallbackProvider).toBe("claude_cli");
-      expect(a?.fallbackStrategy).toBe("retry");
+      expect(a?.maxTokens).toBe(0);
+      expect(a?.fallbackProvider).toBeNull();
+      expect(a?.fallbackStrategy).toBe("fail");
     }
   });
 
-  it("agent defaults declare a fallback (or explicit null for deterministic stages)", () => {
+  it("agent defaults never reference the removed mock provider", () => {
     for (const a of AGENT_DEFAULTS) {
       expect(a.fallbackProvider).not.toBe("mock");
-      expect(a.fallbackStrategy).toBe("retry");
+      expect(a.providerId).not.toBe("mock");
     }
+  });
+
+  it("only LLM stages carry an LLM fallback; deterministic stages fail closed", () => {
+    for (const a of AGENT_DEFAULTS) {
+      if (a.providerId === "deterministic") {
+        expect(a.fallbackProvider).toBeNull();
+        expect(a.fallbackStrategy).toBe("fail");
+      } else {
+        expect(a.fallbackStrategy).toBe("retry");
+      }
+    }
+  });
+
+  it("validateAgentProvider fails closed on illegal provider/agent pairings", () => {
+    // deterministic may only be set on the evidence-derived stages
+    for (const name of ["architecture", "security", "testing", "validator"]) {
+      expect(validateAgentProvider(name, "deterministic").ok).toBe(false);
+    }
+    for (const name of ["repo-scanner", "git-evidence", "skill-graph"]) {
+      expect(validateAgentProvider(name, "deterministic").ok).toBe(true);
+      // and an LLM provider may not be assigned to a deterministic stage
+      expect(validateAgentProvider(name, "codex_cli").ok).toBe(false);
+    }
+    // normal LLM agent on an LLM provider is fine
+    expect(validateAgentProvider("architecture", "codex_cli").ok).toBe(true);
   });
 
   it("every agent's providerId points at a known provider", () => {

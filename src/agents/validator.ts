@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 // Creator-verifier separation: this agent runs with FRESH CONTEXT.
 // Truth set = every blob path in the repo tree (filesIndex.all), not just snippet paths.
 
@@ -143,7 +144,7 @@ Return the JSON now.`;
     state,
     agentName: "validator",
     role: "validator",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1800,

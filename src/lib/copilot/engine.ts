@@ -29,11 +29,15 @@ import { resolveChatProvider, runChatTurn, CopilotProviderNotReadyError } from "
 import {
   getTool,
   resolveToolPermission,
-  toolManifest,
   ToolPreconditionError,
   type ToolContext,
   type ToolPlan,
 } from "./tools";
+import {
+  routeCopilotToolIntent,
+  manifestForSelection,
+  COPILOT_BUDGET,
+} from "./tool-router";
 import { confirmationPhraseFor, requiresApproval, requiresTypedConfirmation, type RiskLevel } from "./risk";
 
 const APPROVAL_TTL_MS = 30 * 60 * 1000;
@@ -91,37 +95,69 @@ export async function runCopilotTurn(params: RunTurnParams): Promise<CopilotTurn
     data: { sessionId: params.sessionId, role: "user", content: params.message.slice(0, 8000) },
   });
 
-  const context = await buildCopilotContext(
-    { mode: params.mode, page: params.page, user: params.user },
-    params.mode === "admin" ? CONTEXT_DEPS : undefined,
-  );
-  const knowledge = searchKnowledge(params.message, 4);
-  const manifest = toolManifest(params.mode, params.user?.role ?? "anonymous");
-  const system = buildSystemPrompt({ context, toolManifest: manifest, knowledge });
-
-  const turn = await runChatTurn({ resolved, system, user: params.message.slice(0, 8000) });
+  // Stage A — deterministic routing decides whether we even need the model.
+  const decision = routeCopilotToolIntent({
+    message: params.message,
+    mode: params.mode,
+    role: params.user?.role ?? "anonymous",
+  });
 
   const response: CopilotTurnResponse = {
     sessionId: params.sessionId,
-    reply: turn.envelope.reply,
-    providerId: turn.providerId,
-    model: turn.model,
-    citations: turn.envelope.citations,
+    reply: "",
+    providerId: resolved.providerId,
+    model: resolved.model,
   };
 
-  const req = turn.envelope.tool_request;
-  if (req?.name) {
-    await applyToolRequest(ctx, params.sessionId, req.name, req.input ?? {}, response);
-  } else {
-    const inferred = inferAdminReadToolRequest(params.mode, params.message);
-    if (inferred) {
-      await applyToolRequest(ctx, params.sessionId, inferred.name, inferred.input, response);
+  if (decision.mode === "refuse" && decision.directTool) {
+    // Forbidden intent — record + refuse, no model call.
+    response.reply = "I can't do that — it's a forbidden action on this platform.";
+    await applyToolRequest(ctx, params.sessionId, decision.directTool.name, decision.directTool.input, response);
+  } else if (decision.mode === "direct_execute" && decision.directTool) {
+    // Obvious read-only intent — execute one tool and format. Zero model tokens.
+    await applyToolRequest(ctx, params.sessionId, decision.directTool.name, decision.directTool.input, response);
+    if (response.toolResult) {
+      response.reply =
+        formatReadToolAnswer(params.message, response.toolResult.toolName, response.toolResult.data) ??
+        formatGenericAdminRead(response.toolResult.toolName, response.toolResult.data);
+    } else if (!response.reply) {
+      response.reply = `I couldn't complete the \`${decision.directTool.name}\` lookup.`;
     }
-  }
+  } else if (decision.mode === "clarify") {
+    response.reply = decision.clarifyQuestion ?? "Could you be more specific about what you'd like to see?";
+  } else {
+    // Stage B — focused answer generation. The model sees ONLY the small,
+    // router-selected manifest (≤5 tools), never the full admin registry.
+    const context = await buildCopilotContext(
+      { mode: params.mode, page: params.page, user: params.user },
+      params.mode === "admin" ? CONTEXT_DEPS : undefined,
+    );
+    const knowledge = searchKnowledge(params.message, COPILOT_BUDGET.maxContextDocs);
+    const manifest = manifestForSelection(decision.selectedTools, params.mode, params.user?.role ?? "anonymous");
+    const system = buildSystemPrompt({
+      context,
+      toolManifest: manifest,
+      knowledge,
+      tokenBudget: {
+        maxResponseTokens: COPILOT_BUDGET.maxChatResponseTokens,
+        maxDocChunkChars: COPILOT_BUDGET.maxDocChunkChars,
+      },
+    });
 
-  if (response.toolResult) {
-    const formatted = formatReadToolAnswer(params.message, response.toolResult.toolName, response.toolResult.data);
-    if (formatted) response.reply = formatted;
+    const turn = await runChatTurn({ resolved, system, user: params.message.slice(0, 8000) });
+    response.reply = turn.envelope.reply;
+    response.providerId = turn.providerId;
+    response.model = turn.model;
+    response.citations = turn.envelope.citations;
+
+    const req = turn.envelope.tool_request;
+    if (req?.name) {
+      await applyToolRequest(ctx, params.sessionId, req.name, req.input ?? {}, response);
+    }
+    if (response.toolResult) {
+      const formatted = formatReadToolAnswer(params.message, response.toolResult.toolName, response.toolResult.data);
+      if (formatted) response.reply = formatted;
+    }
   }
 
   await prisma.chatMessage.create({
@@ -142,60 +178,6 @@ export async function runCopilotTurn(params: RunTurnParams): Promise<CopilotTurn
   return response;
 }
 
-function inferAdminReadToolRequest(
-  mode: CopilotMode,
-  message: string,
-): { name: string; input: Record<string, unknown> } | null {
-  if (mode !== "admin") return null;
-  const text = message.toLowerCase();
-
-  if (/\b(\.env|env file|api key|secret|private key|session token|access token)\b/.test(text)) {
-    return { name: "reveal_secrets", input: {} };
-  }
-  if (/\b(arbitrary sql|raw sql|dump users|select \*)\b/.test(text)) {
-    return { name: "run_arbitrary_sql", input: {} };
-  }
-  if (/\b(arbitrary shell|run shell|terminal command|powershell|bash command)\b/.test(text)) {
-    return { name: "run_arbitrary_shell", input: {} };
-  }
-
-  if (/\b(platform overview|overview|health summary|counts)\b/.test(text)) {
-    return { name: "read_platform_overview", input: {} };
-  }
-  if (/\b(where|stored|schema|data model|database model|prisma)\b/.test(text) && /\b(student|candidate|profile|run|score|cohort|tenant|user)\b/.test(text)) {
-    return { name: "explain_data_model", input: { topic: message.slice(0, 200) } };
-  }
-  if (/\b(dataflow|workflow|architecture|verification workflow|public profile|publish)\b/.test(text) && /\b(explain|move|from|to|how)\b/.test(text)) {
-    return { name: "explain_project_architecture", input: { topic: message.slice(0, 200) } };
-  }
-  if (/\b(files?|routes?|implements?|feature|source)\b/.test(text)) {
-    return { name: "explain_route_or_feature", input: { query: message.slice(0, 300) } };
-  }
-  if (/\bstudents?\b/.test(text) && /\bprofiles?\b/.test(text) && /\b(created|have|with|published)\b/.test(text)) {
-    return { name: "list_students_with_profiles", input: { visibility: text.includes("public") ? "public" : text.includes("private") ? "private" : "any" } };
-  }
-  if (/\b(public|private|unlisted)?\s*profiles?\b/.test(text) && /\b(list|show|details|candidate|email|repo|score|link)\b/.test(text)) {
-    const visibility = text.includes("public") ? "public" : text.includes("private") ? "private" : text.includes("unlisted") ? "unlisted" : "any";
-    return { name: "list_profiles_admin", input: { visibility } };
-  }
-  const email = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
-  if (/\b(full details|student details|get student|candidate details)\b/.test(text) && email) {
-    return { name: "get_student_profile_admin", input: { email } };
-  }
-  const minScore = message.match(/\b(?:score|scores?)\s*(?:above|over|>=|greater than)\s*(\d{1,3})\b/i)?.[1];
-  if (/\b(candidates?|students?)\b/.test(text) && minScore) {
-    return { name: "search_candidates_admin", input: { minScore: Math.min(100, Number(minScore)) } };
-  }
-  if (/\b(candidates?|students?)\b/.test(text) && /\b(completed runs?|scores?|repositories?|cohorts?|profile links?)\b/.test(text)) {
-    return { name: "search_candidates_admin", input: { hasCompletedRun: text.includes("completed") || undefined } };
-  }
-  if (/\b(cohorts?)\b/.test(text) && /\b(students?|details|list|read|show)\b/.test(text)) {
-    return { name: "read_cohorts_admin", input: {} };
-  }
-
-  return null;
-}
-
 function formatReadToolAnswer(question: string, toolName: string, data: unknown): string | null {
   const result = data as any;
   if (!result || typeof result !== "object") return null;
@@ -211,6 +193,12 @@ function formatReadToolAnswer(question: string, toolName: string, data: unknown)
       return formatProfiles(result);
     case "read_platform_overview":
       return formatPlatformOverview(result);
+    case "read_provider_health":
+      return formatProviderHealth(result);
+    case "read_agent_configs":
+      return formatAgentConfigs(result);
+    case "read_failed_runs":
+      return formatFailedRuns(result);
     case "explain_data_model":
     case "explain_project_architecture":
     case "explain_route_or_feature":
@@ -471,6 +459,118 @@ export function formatExplanation(toolName: string, result: any): string {
     "",
     ...routeBullets(result.routes ?? []),
   ].join("\n");
+}
+
+export function formatProviderHealth(result: any): string {
+  const rows: any[] = Array.isArray(result) ? result : result?.items ?? [];
+  if (!rows.length) {
+    return noData("Provider health", "No providers are configured.", [
+      "Seed the registry with `npm run db:seed-registry -- --force`, then run a health test.",
+    ]);
+  }
+  const table = [
+    "| Provider | Status | Enabled | Installed | Auth | JSON | Model |",
+    "|---|---|---|---|---|---|---|",
+    ...rows.map((h) =>
+      `| ${mdCell(h.label ?? h.providerId)} | ${mdCell(h.status)} | ${mdCell(h.enabled)} | ${mdCell(h.installed)} | ${mdCell(h.authenticated)} | ${mdCell(h.supportsJson)} | ${mdCell(h.configuredModel)} |`,
+    ),
+  ].join("\n");
+  const notReady = rows.filter((h) => h.status !== "ready");
+  return [
+    "## Provider health",
+    "",
+    `**${rows.filter((h) => h.status === "ready").length}/${rows.length}** providers are ready.`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    ...(notReady.length
+      ? notReady.slice(0, 6).map((h) => `- \`${h.providerId}\`: ${mdCell(h.fix) || "open health and run a test"}`)
+      : ["- All providers ready — you can start verifications."]),
+    "- [/admin/providers/health](/admin/providers/health)",
+  ].join("\n");
+}
+
+export function formatAgentConfigs(result: any): string {
+  const rows: any[] = Array.isArray(result) ? result : result?.items ?? [];
+  if (!rows.length) return noData("Agent configs", "No agent configurations were found.", ["Seed the registry, then revisit Admin → Agents."]);
+  const table = [
+    "| Agent | Provider | Model | Reasoning | Enabled | Fallback |",
+    "|---|---|---|---|---|---|",
+    ...rows.map((a) =>
+      `| ${mdCell(a.agentName)} | ${mdCell(a.providerId)} | ${mdCell(a.model)} | ${mdCell(a.reasoningBudget)} | ${mdCell(a.enabled)} | ${mdCell(a.fallbackProvider ?? "—")} / ${mdCell(a.fallbackStrategy)} |`,
+    ),
+  ].join("\n");
+  const deterministic = rows.filter((a) => a.providerId === "deterministic").length;
+  return [
+    "## Agent configs",
+    "",
+    `**${rows.length}** agents configured (${deterministic} deterministic / no-LLM).`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    "- [/admin/agents](/admin/agents)",
+  ].join("\n");
+}
+
+export function formatFailedRuns(result: any): string {
+  const rows: any[] = Array.isArray(result) ? result : result?.items ?? [];
+  if (!rows.length) {
+    return noData("Failed runs", "No failed runs were found — nothing is broken right now.", [
+      "Check [/admin/runs](/admin/runs) for the full run history.",
+    ]);
+  }
+  const table = [
+    "| Run | Mode | Failure reason |",
+    "|---|---|---|",
+    ...rows.slice(0, 15).map((r) => `| [${mdCell(r.id)}](/admin/runs/${r.id}) | ${mdCell(r.executionMode)} | ${mdCell(r.lastFailureReason ?? r.statusMessage)} |`),
+  ].join("\n");
+  return [
+    "## Failed runs",
+    "",
+    `Found **${rows.length}** failed run(s).`,
+    "",
+    "## Relevant data",
+    "",
+    table,
+    "",
+    "## Next action",
+    "",
+    "- Open a run above to inspect its trace and provider events.",
+  ].join("\n");
+}
+
+/**
+ * Safe fallback for any admin read tool that lacks a bespoke formatter. Renders
+ * a compact summary (never raw JSON as the main answer). Data is already
+ * redacted by the tool layer, so this only shapes it into markdown.
+ */
+export function formatGenericAdminRead(toolName: string, data: unknown): string {
+  const title = prettyToolTitle(toolName);
+  const rows: any[] | null = Array.isArray(data) ? data : Array.isArray((data as any)?.items) ? (data as any).items : null;
+  if (rows) {
+    if (!rows.length) return noData(title, `The \`${toolName}\` lookup returned no records.`, ["Adjust the query and ask again."]);
+    const keys = Array.from(new Set(rows.flatMap((r) => (r && typeof r === "object" ? Object.keys(r) : [])))).slice(0, 5);
+    const table = [
+      `| ${keys.join(" | ")} |`,
+      `|${keys.map(() => "---").join("|")}|`,
+      ...rows.slice(0, 12).map((r) => `| ${keys.map((k) => mdCell(r?.[k])).join(" | ")} |`),
+    ].join("\n");
+    return [`## ${title}`, "", `Found **${rows.length}** record(s).`, "", "## Relevant data", "", table].join("\n");
+  }
+  const obj = (data && typeof data === "object" ? data : {}) as Record<string, unknown>;
+  const bullets = Object.entries(obj)
+    .filter(([, v]) => typeof v !== "object")
+    .slice(0, 12)
+    .map(([k, v]) => `- **${k}:** ${mdCell(v)}`);
+  return [`## ${title}`, "", bullets.length ? bullets.join("\n") : "_Lookup completed; no displayable fields._"].join("\n");
 }
 
 async function applyToolRequest(

@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import type { Handoff, ImprovementPlan, MissionState, SkillGraphOutput } from "./types";
 
@@ -35,7 +36,7 @@ export async function runImprovementPlan(state: MissionState, graph: SkillGraphO
     state,
     agentName: "improvement-plan",
     role: "profile",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user: `Skill graph:\n${JSON.stringify(graph, null, 2)}\n\nRepo files:\n${JSON.stringify(state.context_pack?.filesIndex.important.slice(0, 20) ?? [])}\n\nReturn the improvement-plan JSON now.`,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1200,

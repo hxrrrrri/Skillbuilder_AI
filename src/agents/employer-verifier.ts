@@ -1,3 +1,4 @@
+import { composeAgentSystem } from "./prompt-policy";
 import { runAgentJson } from "@/lib/providers/run-agent";
 import { summarizeTerminalEvidence, getTerminalEvidence } from "@/lib/local-runner/evidence-analysis";
 import type { EmployerVerifier, Handoff, MissionState, SkillGraphOutput } from "./types";
@@ -59,7 +60,7 @@ export async function runEmployerVerifier(state: MissionState, graph: SkillGraph
     state,
     agentName: "employer-verifier",
     role: "profile",
-    system: SYSTEM,
+    system: composeAgentSystem(SYSTEM),
     user: `Skill graph:\n${JSON.stringify(graph, null, 2)}\n\nOwnership:\n${JSON.stringify(state.ownership_status ?? null)}\n\nTerminal summary:\n${JSON.stringify(summarizeTerminalEvidence(getTerminalEvidence(state)))}\n\nReturn the employer-safe JSON now.`,
     schemaHint: SCHEMA_HINT,
     maxTokens: 1300,
