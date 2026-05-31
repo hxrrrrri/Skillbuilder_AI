@@ -177,3 +177,60 @@ describe("runAgentJson token budgets", () => {
     expect(result.runtime?.contextTruncated).toBe(true);
   });
 });
+
+describe("runAgentJson enforces the shared evidence policy at runtime", () => {
+  const MARKER = "— SHARED AGENT CONTRACT (binding) —";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    runWithMatrix.mockImplementation(async (_matrix, _role, prompt) => ({
+      json: { ok: true },
+      raw: '{"ok":true}',
+      provider: "anthropic_api",
+      model: "claude-test",
+      inputTokens: 12,
+      outputTokens: 34,
+      runtime: entry(),
+      prompt,
+    }));
+  });
+
+  function sentSystem(): string {
+    return (runWithMatrix.mock.calls[0][2] as { system: string }).system;
+  }
+
+  async function run() {
+    const { runAgentJson } = await import("./run-agent");
+    return runAgentJson<{ ok: boolean }>({
+      state: state(),
+      agentName: "architecture",
+      role: "worker",
+      system: "FALLBACK SYS",
+      user: "Return JSON now.",
+      schemaHint: '{"ok":boolean}',
+    });
+  }
+
+  it("applies the policy to a fallback prompt (no active DB prompt)", async () => {
+    getActivePrompt.mockResolvedValue(null);
+    await run();
+    const sys = sentSystem();
+    expect(sys).toContain(MARKER);
+    expect(sys).toContain("FALLBACK SYS");
+  });
+
+  it("applies the policy to an active DB prompt that omits it (weak admin prompt)", async () => {
+    getActivePrompt.mockResolvedValue({ system: "ADMIN WEAK PROMPT", instructions: "" });
+    await run();
+    const sys = sentSystem();
+    expect(sys).toContain(MARKER);
+    expect(sys).toContain("ADMIN WEAK PROMPT");
+  });
+
+  it("does not duplicate the policy when the active prompt already carries it", async () => {
+    getActivePrompt.mockResolvedValue({ system: `${MARKER}\nALREADY COMPOSED`, instructions: "" });
+    await run();
+    const occurrences = sentSystem().split(MARKER).length - 1;
+    expect(occurrences).toBe(1);
+  });
+});

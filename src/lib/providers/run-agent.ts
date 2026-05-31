@@ -8,6 +8,7 @@ import { ProviderExecutionError } from "./errors";
 import type { MissionState, ScoreSource } from "@/agents/types";
 import { selectContextForAgent } from "@/lib/agent-context/select-context";
 import { buildRuntimeAccounting, estimateTokensFromText } from "@/lib/token-budget";
+import { composeAgentSystem } from "@/agents/prompt-policy";
 
 export type RunAgentOpts<T> = {
   state: MissionState;
@@ -48,10 +49,15 @@ async function ensureMatrix(state: MissionState): Promise<ProviderMatrix> {
 
 async function resolveSystemPrompt(agentName: string, fallbackSystem: string): Promise<string> {
   const active = await getActivePrompt(agentName);
-  if (!active) return fallbackSystem;
-  return active.instructions?.trim()
-    ? `${active.system}\n\n${active.instructions}`
-    : active.system;
+  const resolved = !active
+    ? fallbackSystem
+    : active.instructions?.trim()
+      ? `${active.system}\n\n${active.instructions}`
+      : active.system;
+  // Always enforce the shared evidence policy at runtime, even if an admin
+  // activated a weak prompt that omits it. Idempotent via the policy marker,
+  // so seed-composed prompts are not duplicated.
+  return composeAgentSystem(resolved);
 }
 
 function fitUserToInputBudget(
